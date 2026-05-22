@@ -1,0 +1,327 @@
+name: Java Backend CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - develop
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      run_integration_tests:
+        description: "Run integration tests with PostgreSQL"
+        required: false
+        type: boolean
+        default: false
+
+env:
+  MAVEN_CLI_OPTS: "--batch-mode -U"
+  APP_CONTEXT_PATH: "/change-me"
+  LOCAL_HEALTH_PATH: "/actuator/health"
+  LOCAL_PROMETHEUS_PATH: "/actuator/prometheus"
+
+jobs:
+  unit-tests:
+    name: Unit tests, Checkstyle and JaCoCo
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+
+      - name: Verify git-commit-id plugin is configured
+        run: |
+          if ! find . -name pom.xml -print0 | xargs -0 grep -l "<artifactId>git-commit-id-maven-plugin</artifactId>" | grep -q .; then
+            echo "git-commit-id-maven-plugin is required in project POMs"
+            exit 1
+          fi
+
+      - name: Verify OpenAPI generator plugin is configured
+        run: |
+          spec_files="$(find . -path "*/src/main/resources/static/api/v1/specs/openapi_3.0.3_spec.yaml" -type f)"
+          if [ -n "${spec_files}" ]; then
+            if ! find . -name pom.xml -print0 | xargs -0 grep -l "<artifactId>openapi-generator-maven-plugin</artifactId>" | grep -q .; then
+              echo "openapi-generator-maven-plugin is required when REST API spec exists"
+              exit 1
+            fi
+            required_openapi_options=(
+              "<interfaceOnly>true</interfaceOnly>"
+              "<useSpringBoot4>true</useSpringBoot4>"
+              "<openApiNullable>false</openApiNullable>"
+              "<skipDefaultInterface>true</skipDefaultInterface>"
+              "<useTags>true</useTags>"
+              "<dateLibrary>java8-localdatetime</dateLibrary>"
+            )
+            for option in "${required_openapi_options[@]}"; do
+              if ! find . -name pom.xml -print0 | xargs -0 grep -l "${option}" | grep -q .; then
+                echo "Missing required OpenAPI generator option: ${option}"
+                exit 1
+              fi
+            done
+          fi
+
+      - name: Verify auth placeholders in .env.example
+        run: |
+          test -f .env.example || { echo ".env.example is required"; exit 1; }
+          required_vars=(
+            AUTH_MODE
+            AUTH_JWKS_URI
+            AUTH_MOCK_USER
+            AUTH_MOCK_JWT_SECRET
+            AUTH_ISSUER_URI
+            AUTH_AUDIENCE
+            CLERK_PUBLISHABLE_KEY
+            CLERK_SECRET_KEY
+            CLERK_SIGN_IN_FORCE_REDIRECT_URL
+            CLERK_SIGN_UP_FORCE_REDIRECT_URL
+          )
+          for v in "${required_vars[@]}"; do
+            grep -Eq "^${v}=" .env.example || { echo "Missing ${v}=... in .env.example"; exit 1; }
+          done
+
+      - name: Verify usage logging placeholders and secret hygiene
+        run: |
+          test -f .env.example || { echo ".env.example is required"; exit 1; }
+          required_usage_vars=(
+            BQ_USAGE_CREDENTIALS_JSON
+            BQ_USAGE_TABLE
+            USAGE_LOG_SERVICE_NAME
+            USAGE_LOG_ENVIRONMENT
+            USAGE_LOGGING_ENABLED
+            USAGE_LOG_LOCAL_FALLBACK_ENABLED
+          )
+          for v in "${required_usage_vars[@]}"; do
+            grep -Eq "^${v}=" .env.example || { echo "Missing ${v}=... in .env.example"; exit 1; }
+          done
+
+          if grep -R --exclude-dir=.git -n '"private_key_id"\|"private_key"\|"type": "service_account"' .; then
+            echo "Service account JSON keys must not be committed"
+            exit 1
+          fi
+
+      - name: Verify usage logging BigQuery dependency
+        run: |
+          if find . -name pom.xml -print0 | xargs -0 grep -l "<artifactId>spring-boot-starter-web</artifactId>" | grep -q .; then
+            if ! find . -name pom.xml -print0 | xargs -0 grep -l "<artifactId>google-cloud-bigquery</artifactId>" | grep -q .; then
+              echo "google-cloud-bigquery dependency is required for backend usage logging"
+              exit 1
+            fi
+          fi
+
+      - name: Verify Logbook dependency
+        run: |
+          if find . -name pom.xml -print0 | xargs -0 grep -l "<artifactId>spring-boot-starter-web</artifactId>" | grep -q .; then
+            if ! find . -name pom.xml -print0 | xargs -0 grep -l "<artifactId>logbook-spring-boot-starter</artifactId>" | grep -q .; then
+              echo "logbook-spring-boot-starter dependency is required for HTTP request/response logging"
+              exit 1
+            fi
+          fi
+
+      - name: Verify static OpenAPI spec exists
+        run: |
+          if find . -name pom.xml -print0 | xargs -0 grep -l "<artifactId>spring-boot-starter-web</artifactId>" | grep -q .; then
+            spec_files="$(find . -path "*/src/main/resources/static/api/v1/specs/openapi_3.0.3_spec.yaml" -type f)"
+            test -n "${spec_files}" || {
+              echo "Static OpenAPI spec is required at */src/main/resources/static/api/v1/specs/openapi_3.0.3_spec.yaml"
+              exit 1
+            }
+          fi
+
+      - name: Verify frontend OpenAPI codegen
+        run: |
+          if [ -f frontend/package.json ]; then
+            grep -q '"generate:api"' frontend/package.json || {
+              echo "frontend/package.json must define generate:api"
+              exit 1
+            }
+            grep -q 'openapi-typescript' frontend/package.json || {
+              echo "frontend must use openapi-typescript"
+              exit 1
+            }
+            grep -q 'openapi-fetch' frontend/package.json || {
+              echo "frontend must use openapi-fetch"
+              exit 1
+            }
+            grep -q '@tanstack/react-query' frontend/package.json || {
+              echo "frontend must use TanStack Query for server state"
+              exit 1
+            }
+          fi
+
+      - name: Verify PostgreSQL service when persistence is used
+        run: |
+          if find . -name pom.xml -print0 | xargs -0 grep -E -l "spring-boot-starter-data-jpa|liquibase-core" | grep -q .; then
+            test -f docker-compose.yml || { echo "docker-compose.yml is required"; exit 1; }
+            grep -Eiq "postgres|postgresql" docker-compose.yml || {
+              echo "PostgreSQL service is required in docker-compose.yml when persistence is used"
+              exit 1
+            }
+            grep -q "POSTGRES_DB" docker-compose.yml || {
+              echo "docker-compose.yml must create DB with POSTGRES_DB"
+              exit 1
+            }
+          fi
+
+      - name: Run unit tests
+        run: mvn ${MAVEN_CLI_OPTS} -T 1C clean test
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-reports
+          path: |
+            **/target/surefire-reports/**
+            **/target/site/jacoco/**
+          if-no-files-found: ignore
+
+  integration-tests:
+    name: Integration tests with PostgreSQL
+    runs-on: ubuntu-latest
+    needs: unit-tests
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_integration_tests == true }}
+
+    env:
+      POSTGRES_DB: app
+      POSTGRES_PORT: "5433"
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      WITH_DOCKER: "true"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: maven
+
+      - name: Start PostgreSQL
+        run: |
+          docker run -d \
+            --name postgres \
+            -e POSTGRES_DB="${POSTGRES_DB}" \
+            -e POSTGRES_USER="${POSTGRES_USER}" \
+            -e POSTGRES_PASSWORD="${POSTGRES_PASSWORD}" \
+            -p "${POSTGRES_PORT}:${POSTGRES_PORT}" \
+            postgres:12.2-alpine postgres -p "${POSTGRES_PORT}"
+
+          for i in {1..30}; do
+            if docker exec postgres pg_isready -U "${POSTGRES_USER}" -p "${POSTGRES_PORT}"; then
+              exit 0
+            fi
+            sleep 2
+          done
+
+          docker logs postgres
+          exit 1
+
+      - name: Run integration tests
+        run: mvn ${MAVEN_CLI_OPTS} clean test failsafe:integration-test failsafe:verify -DskipUTs=true
+
+      - name: Stop PostgreSQL
+        if: always()
+        run: docker rm -f postgres || true
+
+      - name: Upload integration test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-test-reports
+          path: |
+            **/target/failsafe-reports/**
+          if-no-files-found: ignore
+
+  frontend-checks:
+    name: Frontend OpenAPI codegen and build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install, generate API and build frontend
+        run: |
+          if [ ! -f frontend/package.json ]; then
+            echo "No frontend/package.json found; skipping frontend checks"
+            exit 0
+          fi
+
+          cd frontend
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+
+          npm run generate:api
+          npm run typecheck --if-present
+          npm run build
+          npm test --if-present
+
+  docker-local-dry-run:
+    name: Docker Compose local profile dry run
+    runs-on: ubuntu-latest
+    needs: unit-tests
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify docker-compose file exists
+        run: |
+          test -f docker-compose.yml || test -f docker-compose.yaml || test -f compose.yml
+
+      - name: Validate compose config
+        run: docker compose --profile local config
+
+      - name: Start local profile
+        run: docker compose --profile local up --build -d
+
+      - name: Wait for health endpoint
+        run: |
+          if [ "${APP_CONTEXT_PATH}" = "/change-me" ]; then
+            echo "Set APP_CONTEXT_PATH to real server.servlet.context-path in this CI file"
+            exit 1
+          fi
+          HEALTH_URL="http://localhost:8080${APP_CONTEXT_PATH}${LOCAL_HEALTH_PATH}"
+          echo "Checking ${HEALTH_URL}"
+          for i in {1..60}; do
+            if curl -fsS "${HEALTH_URL}"; then
+              exit 0
+            fi
+            sleep 2
+          done
+
+          docker compose --profile local ps
+          docker compose --profile local logs
+          exit 1
+
+      - name: Verify Prometheus endpoint
+        run: |
+          PROMETHEUS_URL="http://localhost:8080${APP_CONTEXT_PATH}${LOCAL_PROMETHEUS_PATH}"
+          curl -fsS "${PROMETHEUS_URL}" > /dev/null
+
+      - name: Show docker compose logs
+        if: always()
+        run: docker compose --profile local logs || true
+
+      - name: Stop local profile
+        if: always()
+        run: docker compose --profile local down -v || true

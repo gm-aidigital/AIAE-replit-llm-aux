@@ -1,0 +1,33 @@
+<plugin>
+    <groupId>org.openapitools</groupId>
+    <artifactId>openapi-generator-maven-plugin</artifactId>
+    <version>${openapi-generator.version}</version>
+    <executions>
+        <execution>
+            <id>generate-openapi-server</id>
+            <phase>generate-sources</phase>
+            <goals>
+                <goal>generate</goal>
+            </goals>
+            <configuration>
+                <generatorName>spring</generatorName>
+                <library>spring-boot</library>
+                <inputSpec>${project.basedir}/src/main/resources/static/api/v1/specs/openapi_3.0.3_spec.yaml</inputSpec>
+                <output>${project.build.directory}/generated-sources/openapi</output>
+                <apiPackage>${openapi.api.package}</apiPackage>
+                <modelPackage>${openapi.model.package}</modelPackage>
+                <invokerPackage>${openapi.invoker.package}</invokerPackage>
+                <generateApiTests>false</generateApiTests>
+                <generateModelTests>false</generateModelTests>
+                <configOptions>
+                    <interfaceOnly>true</interfaceOnly>
+                    <useSpringBoot4>true</useSpringBoot4>
+                    <openApiNullable>false</openApiNullable>
+                    <skipDefaultInterface>true</skipDefaultInterface>
+                    <useTags>true</useTags>
+                    <dateLibrary>java8-localdatetime</dateLibrary>
+                </configOptions>
+            </configuration>
+        </execution>
+    </executions>
+</plugin>

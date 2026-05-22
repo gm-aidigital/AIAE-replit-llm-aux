@@ -1,0 +1,73 @@
+name: Replit Template CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - develop
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  template-integrity:
+    name: Template integrity checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate required template files
+        shell: bash
+        run: |
+          set -euo pipefail
+          required_files=(
+            "replit.md"
+            "custom_instruction/instructions.md"
+            "docs/backend-java-standards.md"
+            "config/check_style_config.xml"
+            "config/check_style_suppressions.xml"
+            ".agents/skills/backend-java-feature/SKILL.md"
+            ".agents/skills/openapi-contract-first/SKILL.md"
+            ".agents/skills/frontend-react-feature/SKILL.md"
+            ".agents/skills/mvp-safety-review/SKILL.md"
+            ".agents/skills/engineering-handoff/SKILL.md"
+            "templates/generated-project/.github/workflows/ci.yml"
+            "templates/generated-project/pom-snippets/git-commit-id-maven-plugin.xml"
+            "templates/generated-project/pom-snippets/openapi-generator-maven-plugin.xml"
+            "templates/generated-project/openapi/openapi-review-checklist.md"
+            "templates/generated-project/openapi/canonical-openapi-rules.md"
+            "templates/generated-project/auth/google-sso-clerk-blueprint.md"
+            "templates/generated-project/frontend/canonical-react-frontend-rules.md"
+            "templates/generated-project/structure/near-production-project-structure.md"
+            "templates/generated-project/generation/token-efficient-generation-rules.md"
+            "templates/generated-project/observability/usage-logging-bigquery-rules.md"
+            "templates/generated-project/observability/logbook-http-logging-rules.md"
+          )
+          for file in "${required_files[@]}"; do
+            test -f "${file}" || { echo "Missing required file: ${file}"; exit 1; }
+          done
+
+      - name: Validate skill references from replit.md
+        shell: bash
+        run: |
+          set -euo pipefail
+          skill_refs="$(grep -oE '\.agents/skills/[A-Za-z0-9._-]+/SKILL\.md' replit.md | sort -u)"
+          test -n "${skill_refs}" || { echo "No skill references found in replit.md"; exit 1; }
+          while IFS= read -r ref; do
+            test -f "${ref}" || { echo "Broken skill reference in replit.md: ${ref}"; exit 1; }
+          done <<< "${skill_refs}"
+
+      - name: Validate generated-project scope wording
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "generated project repository" custom_instruction/instructions.md || {
+            echo "instructions.md must explicitly state generated project repository scope";
+            exit 1;
+          }
+          grep -q "Custom Template configuration repository" replit.md || {
+            echo "replit.md must explicitly state template repository scope";
+            exit 1;
+          }
