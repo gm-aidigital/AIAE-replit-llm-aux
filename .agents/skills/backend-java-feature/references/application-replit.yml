@@ -1,0 +1,29 @@
+# application-replit.yml — Replit profile overrides.
+#
+# This file does NOT configure spring.datasource.url/username/password.
+# Those are set by ReplitDatabaseUrlPostProcessor, which runs as a Spring
+# Boot EnvironmentPostProcessor BEFORE the application context is built and
+# translates DATABASE_URL into standard Spring properties.
+#
+# After the post-processor runs, Spring Boot's auto-configuration builds
+# the HikariDataSource as usual; this YAML just supplies pool sizing.
+#
+# See:
+#   - .agents/skills/backend-java-feature/references/ReplitDatabaseUrlPostProcessor.java
+#   - .agents/skills/backend-java-feature/references/database-url-translation.md
+
+spring:
+  datasource:
+    hikari:
+      maximum-pool-size: 3       # Replit's managed SQL DB has a low conn ceiling
+      minimum-idle: 0
+      idle-timeout: 30000
+      connection-timeout: 5000
+      auto-commit: false
+
+server:
+  port: ${PORT:5000}
+
+app:
+  usage-logging:
+    environment: ${USAGE_LOG_ENVIRONMENT:dev}

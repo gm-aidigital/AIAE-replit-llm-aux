@@ -1,0 +1,120 @@
+# Replit workspace configuration for the Custom Template.
+#
+# STACK LOCK: every generated app is Java 21 LTS + Spring Boot 4.x + Maven
+# backend + React + TypeScript + Vite frontend. No Python, no Node backend,
+# no Flask/Django/Express/Next/etc — see replit.md and custom_instruction/
+# instructions.md for the full forbidden list and the only valid override.
+#
+# This template ships documentation, skills and canonical artifacts only.
+# When the Replit Agent forks it, Agent copies starter files from
+# `templates/generated-project/scaffold/` and fills in the placeholders.
+# Everything below — modules, deployment target, ports, env, workflows — is
+# intended as the default for the forked app.
+
+# NOTE on Java version: the `java-XX` module name in this array is purely a
+# Replit IDE hint (LSP, formatter, etc.) — the actual JDK on PATH comes from
+# `replit.nix`. The current Replit nixpkgs channel ships JDK up to 23; we
+# pin JDK 21 LTS in replit.nix because Spring Boot 4.x supports it and it's
+# the highest stable LTS available today. When Replit's channel bumps to one
+# with JDK 25, switch BOTH this module name AND replit.nix to "25".
+modules = ["java-21", "nodejs-22", "postgresql-16"]
+
+hidden = [".idea", ".vscode", "target", "node_modules", "generated-sources", ".cache"]
+
+[nix]
+channel = "stable-24_11"
+
+# ---------------------------------------------------------------------------
+# Deployment
+#
+# Generated apps use Java + Spring Boot + persistent PostgreSQL. That workload
+# is stateful (JDBC connection pool, JVM warmup) and must NOT be deployed to
+# Autoscale (which Replit's TOML literal calls "cloudrun") because Autoscale
+# scales to zero and cold-starts every request. Use Reserved VM ("gce").
+#
+# Build strategy: the backend's parent POM uses `frontend-maven-plugin` to
+# invoke `npm ci`, `npm run generate:api`, and `npm run build` during the
+# Maven build, copying the frontend `dist/` into the backend's
+# `target/classes/static/` so Spring Boot serves the SPA from the same JAR.
+# Result: a single executable JAR with the entire app inside.
+#
+# If the frontend-maven-plugin isn't wired yet (early scaffold stage), the
+# fallback build below still produces a backend-only JAR — Agent should add
+# the plugin to the parent POM at the first frontend integration step.
+#
+# NOTE: the exact literal for `deploymentTarget` should be verified in the
+# Replit UI. If "gce" is rejected, run a deploy through the UI once and let
+# Replit write the canonical value back into this file.
+# ---------------------------------------------------------------------------
+[deployment]
+deploymentTarget = "gce"
+build = ["sh", "-c", "mvn -f backend/pom.xml -B -DskipTests package"]
+run   = ["sh", "-c", "java -jar $(ls backend/application/target/*.jar | grep -v '\\.original$' | head -n1)"]
+
+# ---------------------------------------------------------------------------
+# Ports
+#
+# IMPORTANT: Replit Deployments expose ONE public port (the one mapped to
+# external 80). In production, only the backend runs and Spring Boot serves
+# the built frontend from /static/. Vite is NOT running in Deployment.
+#
+# The second [[ports]] entry below (5173 → 5173) exists ONLY for the
+# Workspace preview — when you click Run, the Vite dev server binds 5173 and
+# proxies /api/* to the backend on 5000 (see frontend/vite.config.ts).
+# Replit's workspace preview surfaces both ports; Replit's Deployment
+# ignores the non-80 port.
+# ---------------------------------------------------------------------------
+# Backend — the single public port in Deployments. Spring Boot binds PORT=5000.
+[[ports]]
+localPort = 5000
+externalPort = 80
+
+# Vite dev server — workspace preview only. Not used in Deployment.
+[[ports]]
+localPort = 5173
+externalPort = 5173
+
+# ---------------------------------------------------------------------------
+# Workspace env
+#
+# SPRING_PROFILES_ACTIVE drives which application-<profile>.yml is read and
+# whether ReplitDataSourceConfig is active.
+#
+# IMPORTANT: workspace [env] does NOT propagate to Deployments. Before clicking
+# Deploy, copy SPRING_PROFILES_ACTIVE, CLERK_*, AUTH_*, USAGE_LOG_* into the
+# deployment Secrets pane. (DATABASE_URL is provided automatically by the
+# Replit SQL Database in both workspace and deployment — do not override it.)
+# ---------------------------------------------------------------------------
+[env]
+PORT = "5000"
+SPRING_PROFILES_ACTIVE = "replit"
+# JAVA_HOME is intentionally NOT set here. Maven without JAVA_HOME inspects
+# `java` from PATH, and `pkgs.jdk21` in replit.nix puts JDK 21's bin in PATH.
+# If `mvn -version` doesn't report JDK 21 inside the Replit shell, set
+# JAVA_HOME manually with: `export JAVA_HOME=$(dirname $(dirname $(readlink -f $(which java))))`
+
+# ---------------------------------------------------------------------------
+# Workflows
+#
+# The Run button executes the workflow below. Backend and frontend run in
+# parallel: Spring Boot serves the API on 5000; Vite serves the UI on 5173
+# and proxies API calls to the backend via vite.config.ts (`/api/*`).
+#
+# Until Agent generates the application, each task prints a clear "not
+# generated yet" message so the workspace still boots and the user sees what
+# to ask for.
+# ---------------------------------------------------------------------------
+[workflows]
+runButton = "Run"
+
+[[workflows.workflow]]
+name = "Run"
+mode = "parallel"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "if [ -f backend/pom.xml ]; then mvn -f backend/pom.xml -pl application -am spring-boot:run; elif [ -f requirements.txt ] || [ -f Pipfile ] || [ -f pyproject.toml ] || [ -f main.py ] || [ -f uv.lock ]; then echo '[FATAL] Python backend detected. This template forbids non-Java backends. Delete main.py, pyproject.toml, uv.lock, requirements.txt, and ask the Agent to regenerate as Spring Boot per templates/generated-project/scaffold/.'; exit 1; else echo '[backend] Not generated yet — ask the Replit Agent to scaffold the Spring Boot module (NOT Python, NOT Node) into backend/ from templates/generated-project/scaffold/.'; fi"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "if [ -f frontend/package.json ]; then cd frontend && { [ -f package-lock.json ] && npm ci || npm install; } && npm run dev -- --host 0.0.0.0 --port 5173; else echo '[frontend] Not generated yet — ask the Replit Agent to scaffold the Vite/React app (NOT Next.js, NOT Nuxt) from templates/generated-project/scaffold/frontend/.'; fi"

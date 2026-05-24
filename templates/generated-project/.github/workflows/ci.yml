@@ -2,10 +2,7 @@ name: Java Backend CI
 
 on:
   push:
-    branches:
-      - main
-      - master
-      - develop
+    branches: [main, master, develop]
   pull_request:
   workflow_dispatch:
     inputs:
@@ -14,161 +11,252 @@ on:
         required: false
         type: boolean
         default: false
+      run_local_dev_dry_run:
+        description: "Run the local-dev docker-compose dry run"
+        required: false
+        type: boolean
+        default: true
 
 env:
   MAVEN_CLI_OPTS: "--batch-mode -U"
+  # Set this to the generated app's server.servlet.context-path (e.g. /sales-dashboard).
   APP_CONTEXT_PATH: "/change-me"
   LOCAL_HEALTH_PATH: "/actuator/health"
   LOCAL_PROMETHEUS_PATH: "/actuator/prometheus"
 
 jobs:
-  unit-tests:
-    name: Unit tests, Checkstyle and JaCoCo
+  static-checks:
+    name: Static checks
     runs-on: ubuntu-latest
+    outputs:
+      has_backend: ${{ steps.detect.outputs.has_backend }}
+      has_frontend: ${{ steps.detect.outputs.has_frontend }}
+      has_persistence: ${{ steps.detect.outputs.has_persistence }}
+      usage_logging_enabled: ${{ steps.detect.outputs.usage_logging_enabled }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Java 25
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "25"
-          cache: maven
+      - name: Reject template control plane in git
+        run: |
+          set -euo pipefail
+          leaked=""
+          for path in .agents templates custom_instruction AGENTS.md replit.md; do
+            if git ls-files --error-unmatch "${path}" >/dev/null 2>&1; then
+              leaked="${leaked} ${path}"
+            fi
+          done
+          if [ -n "${leaked}" ]; then
+            echo "::error::Template control plane leaked into git:${leaked}"
+            echo "::error::Run: bash templates/generated-project/scaffold/scripts/setup-project.sh"
+            echo "::error::Then redo the commit. Those files belong to the template, not the app."
+            exit 1
+          fi
 
-      - name: Verify git-commit-id plugin is configured
+      - name: Reject forbidden backend stacks
+        run: |
+          set -euo pipefail
+          forbidden=""
+          # Python files at root (Replit auto-injects these even when the template is Java)
+          for f in main.py requirements.txt Pipfile pyproject.toml poetry.lock uv.lock; do
+            [ -f "$f" ] && forbidden="${forbidden} $f"
+          done
+          if find . -maxdepth 3 -name "manage.py" -o -name "wsgi.py" -o -name "asgi.py" 2>/dev/null | head -1 | grep -q .; then
+            forbidden="${forbidden} python-app-files"
+          fi
+          # Node backends (frontend/package.json is fine; root-level isn't)
+          if [ -f package.json ] && [ ! -f frontend/package.json ]; then
+            if grep -Eq '"(express|fastify|koa|@nestjs/core|hapi|next)"' package.json; then
+              forbidden="${forbidden} node-backend-deps"
+            fi
+          fi
+          # Other forbidden backends
+          [ -f go.mod ] && forbidden="${forbidden} go.mod"
+          [ -f Gemfile ] && forbidden="${forbidden} Gemfile"
+          [ -f composer.json ] && forbidden="${forbidden} composer.json"
+          [ -f Cargo.toml ] && forbidden="${forbidden} Cargo.toml"
+          [ -f mix.exs ] && forbidden="${forbidden} mix.exs"
+          # .replit must not declare python-* modules or flask/django integrations
+          if [ -f .replit ]; then
+            if grep -Eq '"python-[0-9]' .replit; then
+              forbidden="${forbidden} python-module-in-.replit"
+            fi
+            if grep -Eq 'integrations.*=.*\[.*"(flask|django|fastapi)[_-]' .replit; then
+              forbidden="${forbidden} python-integration-in-.replit"
+            fi
+          fi
+          if [ -n "${forbidden}" ]; then
+            echo "::error::Forbidden backend stack detected:${forbidden}"
+            echo "::error::This template REQUIRES Java + Spring Boot + Maven."
+            echo "::error::See replit.md STACK LOCK and instructions.md ABSOLUTE STACK LOCK."
+            echo "::error::Delete those files/lines and regenerate the backend per templates/generated-project/scaffold/."
+            exit 1
+          fi
+
+      - name: Detect project shape
+        id: detect
+        run: |
+          set -euo pipefail
+          has_backend=false
+          has_frontend=false
+          has_persistence=false
+          usage_logging_enabled=true
+
+          if find . -name pom.xml -print0 | xargs -0 grep -l "<artifactId>spring-boot-starter-web</artifactId>" | grep -q .; then
+            has_backend=true
+          fi
+          if [ -f frontend/package.json ]; then
+            has_frontend=true
+          fi
+          if find . -name pom.xml -print0 | xargs -0 grep -E -l "spring-boot-starter-data-jpa|liquibase-core" | grep -q .; then
+            has_persistence=true
+          fi
+          if [ -f .env.example ]; then
+            v=$(grep -E '^USAGE_LOGGING_ENABLED=' .env.example | head -n1 | cut -d= -f2- || true)
+            if [ "${v}" = "false" ]; then usage_logging_enabled=false; fi
+          fi
+          {
+            echo "has_backend=${has_backend}"
+            echo "has_frontend=${has_frontend}"
+            echo "has_persistence=${has_persistence}"
+            echo "usage_logging_enabled=${usage_logging_enabled}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Verify auth placeholders in .env.example
+        if: steps.detect.outputs.has_backend == 'true'
+        run: |
+          set -euo pipefail
+          test -f .env.example || { echo ".env.example is required"; exit 1; }
+          required_vars=(
+            AUTH_MODE AUTH_JWKS_URI AUTH_MOCK_USER AUTH_MOCK_JWT_SECRET
+            AUTH_ISSUER_URI AUTH_AUDIENCE
+            CLERK_PUBLISHABLE_KEY CLERK_SECRET_KEY
+            CLERK_SIGN_IN_FORCE_REDIRECT_URL CLERK_SIGN_UP_FORCE_REDIRECT_URL
+          )
+          for v in "${required_vars[@]}"; do
+            grep -Eq "^${v}=" .env.example || { echo "Missing ${v}= in .env.example"; exit 1; }
+          done
+
+      - name: Verify usage logging placeholders and secret hygiene
+        if: steps.detect.outputs.has_backend == 'true'
+        run: |
+          set -euo pipefail
+          required_usage_vars=( USAGE_LOGGING_ENABLED USAGE_LOG_SERVICE_NAME USAGE_LOG_ENVIRONMENT )
+          for v in "${required_usage_vars[@]}"; do
+            grep -Eq "^${v}=" .env.example || { echo "Missing ${v}= in .env.example"; exit 1; }
+          done
+          if grep -R --exclude-dir=.git -n '"private_key_id"\|"private_key"\|"type": "service_account"' .; then
+            echo "Service account JSON keys must not be committed"
+            exit 1
+          fi
+
+      - name: Verify usage_events Liquibase changelog exists
+        if: |
+          steps.detect.outputs.has_backend == 'true' &&
+          steps.detect.outputs.usage_logging_enabled == 'true'
+        run: |
+          set -euo pipefail
+          if ! find . -name pom.xml -print0 | xargs -0 grep -l "<artifactId>spring-boot-starter-data-jpa</artifactId>" | grep -q .; then
+            echo "Usage logging requires spring-boot-starter-data-jpa (writes to Postgres usage_events)"; exit 1
+          fi
+          # Look ONLY inside Liquibase changelog directories so we don't match
+          # documentation or comments elsewhere in the repo.
+          changelog_hits=$(find . -path '*/db/changelog/*' \( -name '*.xml' -o -name '*.yaml' -o -name '*.yml' -o -name '*.sql' -o -name '*.json' \) -exec grep -l -E "usage_events|usage-events" {} + 2>/dev/null || true)
+          if [ -z "${changelog_hits}" ]; then
+            echo "Usage logging requires a Liquibase changelog under */db/changelog/ that creates usage_events"; exit 1
+          fi
+
+      - name: Verify USAGE_LOG_SERVICE_NAME is not the placeholder
+        if: |
+          steps.detect.outputs.has_backend == 'true' &&
+          steps.detect.outputs.usage_logging_enabled == 'true'
+        run: |
+          set -euo pipefail
+          # .env.example may carry the placeholder, but a committed .env (which
+          # we forbid anyway) or an application-*.yml override must not.
+          if grep -RIn -E '^USAGE_LOG_SERVICE_NAME[[:space:]]*[:=][[:space:]]*("?(replit-mvp-template|<stable-service-name>|<service-name>|TODO|change-me)"?)\b' \
+              --include='*.yml' --include='*.yaml' --include='*.properties' \
+              --exclude-dir=.git . >/dev/null; then
+            echo "USAGE_LOG_SERVICE_NAME is set to a placeholder in a non-.env.example file. Set it to the real service identifier before merging."
+            exit 1
+          fi
+
+      - name: Verify git-commit-id plugin
+        if: steps.detect.outputs.has_backend == 'true'
         run: |
           if ! find . -name pom.xml -print0 | xargs -0 grep -l "<artifactId>git-commit-id-maven-plugin</artifactId>" | grep -q .; then
             echo "git-commit-id-maven-plugin is required in project POMs"
             exit 1
           fi
 
-      - name: Verify OpenAPI generator plugin is configured
+      - name: Verify OpenAPI spec and generator plugin
+        if: steps.detect.outputs.has_backend == 'true'
         run: |
-          spec_files="$(find . -path "*/src/main/resources/static/api/v1/specs/openapi_3.0.3_spec.yaml" -type f)"
-          if [ -n "${spec_files}" ]; then
-            if ! find . -name pom.xml -print0 | xargs -0 grep -l "<artifactId>openapi-generator-maven-plugin</artifactId>" | grep -q .; then
-              echo "openapi-generator-maven-plugin is required when REST API spec exists"
-              exit 1
-            fi
-            required_openapi_options=(
-              "<interfaceOnly>true</interfaceOnly>"
-              "<useSpringBoot4>true</useSpringBoot4>"
-              "<openApiNullable>false</openApiNullable>"
-              "<skipDefaultInterface>true</skipDefaultInterface>"
-              "<useTags>true</useTags>"
-              "<dateLibrary>java8-localdatetime</dateLibrary>"
-            )
-            for option in "${required_openapi_options[@]}"; do
-              if ! find . -name pom.xml -print0 | xargs -0 grep -l "${option}" | grep -q .; then
-                echo "Missing required OpenAPI generator option: ${option}"
-                exit 1
-              fi
-            done
-          fi
-
-      - name: Verify auth placeholders in .env.example
-        run: |
-          test -f .env.example || { echo ".env.example is required"; exit 1; }
-          required_vars=(
-            AUTH_MODE
-            AUTH_JWKS_URI
-            AUTH_MOCK_USER
-            AUTH_MOCK_JWT_SECRET
-            AUTH_ISSUER_URI
-            AUTH_AUDIENCE
-            CLERK_PUBLISHABLE_KEY
-            CLERK_SECRET_KEY
-            CLERK_SIGN_IN_FORCE_REDIRECT_URL
-            CLERK_SIGN_UP_FORCE_REDIRECT_URL
-          )
-          for v in "${required_vars[@]}"; do
-            grep -Eq "^${v}=" .env.example || { echo "Missing ${v}=... in .env.example"; exit 1; }
-          done
-
-      - name: Verify usage logging placeholders and secret hygiene
-        run: |
-          test -f .env.example || { echo ".env.example is required"; exit 1; }
-          required_usage_vars=(
-            BQ_USAGE_CREDENTIALS_JSON
-            BQ_USAGE_TABLE
-            USAGE_LOG_SERVICE_NAME
-            USAGE_LOG_ENVIRONMENT
-            USAGE_LOGGING_ENABLED
-            USAGE_LOG_LOCAL_FALLBACK_ENABLED
-          )
-          for v in "${required_usage_vars[@]}"; do
-            grep -Eq "^${v}=" .env.example || { echo "Missing ${v}=... in .env.example"; exit 1; }
-          done
-
-          if grep -R --exclude-dir=.git -n '"private_key_id"\|"private_key"\|"type": "service_account"' .; then
-            echo "Service account JSON keys must not be committed"
+          set -euo pipefail
+          spec="$(find . -path "*/src/main/resources/static/api/v1/specs/openapi.yaml" -type f)"
+          test -n "${spec}" || {
+            echo "Static OpenAPI spec required at */src/main/resources/static/api/v1/specs/openapi.yaml"
+            exit 1
+          }
+          if ! find . -name pom.xml -print0 | xargs -0 grep -l "<artifactId>openapi-generator-maven-plugin</artifactId>" | grep -q .; then
+            echo "openapi-generator-maven-plugin is required when REST API spec exists"
             exit 1
           fi
-
-      - name: Verify usage logging BigQuery dependency
-        run: |
-          if find . -name pom.xml -print0 | xargs -0 grep -l "<artifactId>spring-boot-starter-web</artifactId>" | grep -q .; then
-            if ! find . -name pom.xml -print0 | xargs -0 grep -l "<artifactId>google-cloud-bigquery</artifactId>" | grep -q .; then
-              echo "google-cloud-bigquery dependency is required for backend usage logging"
+          required_openapi_options=(
+            "<interfaceOnly>true</interfaceOnly>"
+            "<useSpringBoot3>true</useSpringBoot3>"
+            "<openApiNullable>false</openApiNullable>"
+            "<skipDefaultInterface>true</skipDefaultInterface>"
+            "<useTags>true</useTags>"
+            "<dateLibrary>java8-localdatetime</dateLibrary>"
+          )
+          for option in "${required_openapi_options[@]}"; do
+            if ! find . -name pom.xml -print0 | xargs -0 grep -l "${option}" | grep -q .; then
+              echo "Missing required OpenAPI generator option: ${option}"
               exit 1
             fi
+          done
+
+      - name: Verify frontend OpenAPI codegen wiring
+        if: steps.detect.outputs.has_frontend == 'true'
+        run: |
+          set -euo pipefail
+          grep -q '"generate:api"' frontend/package.json || { echo "frontend/package.json must define generate:api"; exit 1; }
+          grep -q 'openapi-typescript' frontend/package.json || { echo "frontend must use openapi-typescript"; exit 1; }
+          grep -q 'openapi-fetch'      frontend/package.json || { echo "frontend must use openapi-fetch"; exit 1; }
+          grep -q '@tanstack/react-query' frontend/package.json || { echo "frontend must use TanStack Query"; exit 1; }
+
+      - name: Verify Replit and local-dev runtime files
+        if: steps.detect.outputs.has_backend == 'true'
+        run: |
+          set -euo pipefail
+          test -f .replit    || { echo ".replit is required for the Replit workspace run"; exit 1; }
+          test -f replit.nix || { echo "replit.nix is required for the Replit workspace toolchain"; exit 1; }
+          # docker-compose is for local-dev only; require it when persistence is used.
+          if [ '${{ steps.detect.outputs.has_persistence }}' = 'true' ]; then
+            { test -f docker-compose.yml || test -f docker-compose.yaml || test -f compose.yml; } \
+              || { echo "docker-compose file is required for local-dev when persistence is used"; exit 1; }
+            grep -Eiq "postgres|postgresql" docker-compose.yml || { echo "PostgreSQL service required in docker-compose.yml"; exit 1; }
+            grep -q "POSTGRES_DB" docker-compose.yml || { echo "POSTGRES_DB required in docker-compose.yml"; exit 1; }
           fi
 
-      - name: Verify Logbook dependency
-        run: |
-          if find . -name pom.xml -print0 | xargs -0 grep -l "<artifactId>spring-boot-starter-web</artifactId>" | grep -q .; then
-            if ! find . -name pom.xml -print0 | xargs -0 grep -l "<artifactId>logbook-spring-boot-starter</artifactId>" | grep -q .; then
-              echo "logbook-spring-boot-starter dependency is required for HTTP request/response logging"
-              exit 1
-            fi
-          fi
+  unit-tests:
+    name: Unit tests, Checkstyle, JaCoCo
+    runs-on: ubuntu-latest
+    needs: static-checks
+    if: needs.static-checks.outputs.has_backend == 'true'
 
-      - name: Verify static OpenAPI spec exists
-        run: |
-          if find . -name pom.xml -print0 | xargs -0 grep -l "<artifactId>spring-boot-starter-web</artifactId>" | grep -q .; then
-            spec_files="$(find . -path "*/src/main/resources/static/api/v1/specs/openapi_3.0.3_spec.yaml" -type f)"
-            test -n "${spec_files}" || {
-              echo "Static OpenAPI spec is required at */src/main/resources/static/api/v1/specs/openapi_3.0.3_spec.yaml"
-              exit 1
-            }
-          fi
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Verify frontend OpenAPI codegen
-        run: |
-          if [ -f frontend/package.json ]; then
-            grep -q '"generate:api"' frontend/package.json || {
-              echo "frontend/package.json must define generate:api"
-              exit 1
-            }
-            grep -q 'openapi-typescript' frontend/package.json || {
-              echo "frontend must use openapi-typescript"
-              exit 1
-            }
-            grep -q 'openapi-fetch' frontend/package.json || {
-              echo "frontend must use openapi-fetch"
-              exit 1
-            }
-            grep -q '@tanstack/react-query' frontend/package.json || {
-              echo "frontend must use TanStack Query for server state"
-              exit 1
-            }
-          fi
-
-      - name: Verify PostgreSQL service when persistence is used
-        run: |
-          if find . -name pom.xml -print0 | xargs -0 grep -E -l "spring-boot-starter-data-jpa|liquibase-core" | grep -q .; then
-            test -f docker-compose.yml || { echo "docker-compose.yml is required"; exit 1; }
-            grep -Eiq "postgres|postgresql" docker-compose.yml || {
-              echo "PostgreSQL service is required in docker-compose.yml when persistence is used"
-              exit 1
-            }
-            grep -q "POSTGRES_DB" docker-compose.yml || {
-              echo "docker-compose.yml must create DB with POSTGRES_DB"
-              exit 1
-            }
-          fi
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
 
       - name: Run unit tests
         run: mvn ${MAVEN_CLI_OPTS} -T 1C clean test
@@ -200,30 +288,25 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Java 25
+      - name: Set up Java 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "25"
+          java-version: "21"
           cache: maven
 
       - name: Start PostgreSQL
         run: |
-          docker run -d \
-            --name postgres \
+          docker run -d --name postgres \
             -e POSTGRES_DB="${POSTGRES_DB}" \
             -e POSTGRES_USER="${POSTGRES_USER}" \
             -e POSTGRES_PASSWORD="${POSTGRES_PASSWORD}" \
             -p "${POSTGRES_PORT}:${POSTGRES_PORT}" \
-            postgres:12.2-alpine postgres -p "${POSTGRES_PORT}"
-
+            postgres:16-alpine postgres -p "${POSTGRES_PORT}"
           for i in {1..30}; do
-            if docker exec postgres pg_isready -U "${POSTGRES_USER}" -p "${POSTGRES_PORT}"; then
-              exit 0
-            fi
+            if docker exec postgres pg_isready -U "${POSTGRES_USER}" -p "${POSTGRES_PORT}"; then exit 0; fi
             sleep 2
           done
-
           docker logs postgres
           exit 1
 
@@ -234,7 +317,7 @@ jobs:
         if: always()
         run: docker rm -f postgres || true
 
-      - name: Upload integration test reports
+      - name: Upload IT reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -246,6 +329,8 @@ jobs:
   frontend-checks:
     name: Frontend OpenAPI codegen and build
     runs-on: ubuntu-latest
+    needs: static-checks
+    if: needs.static-checks.outputs.has_frontend == 'true'
 
     steps:
       - name: Checkout
@@ -256,29 +341,24 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Install, generate API and build frontend
+      - name: Install, generate API, build
         run: |
-          if [ ! -f frontend/package.json ]; then
-            echo "No frontend/package.json found; skipping frontend checks"
-            exit 0
-          fi
-
           cd frontend
-          if [ -f package-lock.json ]; then
-            npm ci
-          else
-            npm install
-          fi
-
+          if [ -f package-lock.json ]; then npm ci; else npm install; fi
           npm run generate:api
           npm run typecheck --if-present
           npm run build
           npm test --if-present
 
-  docker-local-dry-run:
-    name: Docker Compose local profile dry run
+  local-dev-dry-run:
+    name: Local-dev docker-compose dry run
     runs-on: ubuntu-latest
-    needs: unit-tests
+    # Both deps are required: static-checks supplies the `has_backend` flag,
+    # unit-tests must pass before we spin docker-compose.
+    needs: [static-checks, unit-tests]
+    if: |
+      needs.static-checks.outputs.has_backend == 'true' &&
+      (github.event_name != 'workflow_dispatch' || inputs.run_local_dev_dry_run == true)
 
     steps:
       - name: Checkout
@@ -297,18 +377,15 @@ jobs:
       - name: Wait for health endpoint
         run: |
           if [ "${APP_CONTEXT_PATH}" = "/change-me" ]; then
-            echo "Set APP_CONTEXT_PATH to real server.servlet.context-path in this CI file"
+            echo "Set APP_CONTEXT_PATH to the real server.servlet.context-path in this CI file"
             exit 1
           fi
           HEALTH_URL="http://localhost:8080${APP_CONTEXT_PATH}${LOCAL_HEALTH_PATH}"
           echo "Checking ${HEALTH_URL}"
           for i in {1..60}; do
-            if curl -fsS "${HEALTH_URL}"; then
-              exit 0
-            fi
+            if curl -fsS "${HEALTH_URL}"; then exit 0; fi
             sleep 2
           done
-
           docker compose --profile local ps
           docker compose --profile local logs
           exit 1

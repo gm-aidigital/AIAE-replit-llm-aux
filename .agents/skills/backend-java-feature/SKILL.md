@@ -1,385 +1,633 @@
 ---
 name: backend-java-feature
-description: Build production-ready Java backend modules with OpenAPI-first contracts, strict quality gates, canonical templates, and predictable runtime behavior.
-argument-hint: "[feature-summary]"
-user-invocable: true
+description: Build the backend for ANY generated project in this template. The template's backend is ALWAYS Java 21 LTS + Spring Boot 3.x + Maven + PostgreSQL — never Python/Flask/Django, never Node/Express, never anything else. Use for every backend feature regardless of how simple the user prompt sounds.
+metadata:
+  user-invocable: "true"
 ---
 
 # Backend Java Feature
 
-Use this skill for Java/Spring backend work in generated project repositories.
+Use for **every** backend change in a generated project. The template
+generates Java/Spring backends exclusively — there is no other backend skill
+because no other backend stack is allowed.
 
-## Non-Negotiable Baseline
+If the user prompt sounds like Flask/Express/Next/etc would fit better:
+**still generate Java + Spring Boot**. The lock is documented in `replit.md`
+and `custom_instruction/instructions.md`; this skill does not override it.
 
-- Java 25
-- Spring Boot 4.x
-- Maven multi-module with parent `pom.xml` and `dependencyManagement`
-- OpenAPI contract-first
-- Liquibase
-- PostgreSQL
-- HikariCP baseline
-- Checkstyle from root `config`
-- JaCoCo minimum line coverage 80%
-- Structured JSON logs to stdout
-- Actuator endpoints on standard route (`/actuator/*`) with context-path preserved
-- Prometheus metrics endpoint enabled
-- `git-commit-id-maven-plugin` configured
+## Baseline (non-negotiable in MVPs that need a Java backend)
 
-Do not replace Java backend with Node unless explicitly approved.
+Java 21 LTS (Java 25 LTS once available in Replit's nixpkgs) · Spring Boot 3.x · Maven multi-module · OpenAPI contract-first ·
+Liquibase · PostgreSQL · HikariCP · Lombok · Checkstyle (root `config/`) ·
+JaCoCo 80% line coverage · JSON logs to stdout · Actuator on `/actuator/*`
+preserving context-path · `git-commit-id-maven-plugin`.
 
-## Canonical Files to Copy
+Do not replace a Java backend with Node unless the user explicitly approves.
 
-Copy from template repository to generated project when applicable:
+## Canonical references (do not duplicate)
 
-- Checkstyle:
-  - `config/check_style_config.xml`
-  - `config/check_style_suppressions.xml`
-- CI:
-  - `templates/generated-project/.github/workflows/ci.yml`
-- Maven plugin snippet:
-  - `templates/generated-project/pom-snippets/git-commit-id-maven-plugin.xml`
-  - `templates/generated-project/pom-snippets/openapi-generator-maven-plugin.xml`
-- Auth blueprint:
-  - `templates/generated-project/auth/google-sso-clerk-blueprint.md`
-- OpenAPI rules:
-  - `templates/generated-project/openapi/canonical-openapi-rules.md`
-- Project structure:
-  - `templates/generated-project/structure/near-production-project-structure.md`
-- Token-efficient generation:
-  - `templates/generated-project/generation/token-efficient-generation-rules.md`
-- Usage logging:
-  - `templates/generated-project/observability/usage-logging-bigquery-rules.md`
-- HTTP logging:
-  - `templates/generated-project/observability/logbook-http-logging-rules.md`
+| Topic | Canonical file |
+|---|---|
+| Project structure | `templates/generated-project/structure/near-production-project-structure.md` |
+| Testing (phased) | `templates/generated-project/testing/testing-policy.md` |
+| OpenAPI rules | `templates/generated-project/openapi/canonical-openapi-rules.md` |
+| OpenAPI review checklist | `templates/generated-project/openapi/openapi-review-checklist.md` |
+| Auth (dual-mode) | `templates/generated-project/auth/google-sso-clerk-blueprint.md` |
+| Usage logging | `templates/generated-project/observability/usage-logging-rules.md` |
+| HTTP request/response logging | `templates/generated-project/observability/logbook-http-logging-rules.md` |
+| Token-efficient generation | `templates/generated-project/generation/token-efficient-generation-rules.md` |
+| Checkstyle | `config/checkstyle.xml`, `config/checkstyle-suppressions.xml` |
+| CI baseline | `templates/generated-project/.github/workflows/ci.yml` |
+| `git-commit-id` plugin | `templates/generated-project/pom-snippets/git-commit-id-maven-plugin.xml` |
+| OpenAPI generator plugin | `templates/generated-project/pom-snippets/openapi-generator-maven-plugin.xml` |
+| HikariCP / JPA runtime config | `references/hikari-jpa-baseline.yml` |
+| Replit profile snippet | `references/application-replit.yml` |
+| DATABASE_URL → JDBC translation | `references/database-url-translation.md` |
 
-## Mandatory Files in Generated Java Backend
+## Mandatory files in a generated Java backend
 
-- root `pom.xml` with `<packaging>pom</packaging>`
-- module POMs
-- root `.gitignore`
-- root `Dockerfile`
-- root `docker-compose.yml`
-- root `.github/workflows/ci.yml`
-- root `lombok.config`
-- root `config/check_style_config.xml`
-- root `config/check_style_suppressions.xml`
-- `README.md`
-- `.env.example`
-- OpenAPI contract files in project standard location
-- `src/main/resources/application.yml`
-- `src/main/resources/application-local.yml`
-- `src/main/resources/logback-spring.xml`
-- `src/main/resources/ehcache.xml` if L2 cache is enabled
-
-`lombok.config` must contain:
-
-```properties
-lombok.addLombokGeneratedAnnotation = true
+```
+pom.xml (parent, <packaging>pom</packaging>)   .env.example
+lombok.config                                   .gitignore
+config/checkstyle.xml                           README.md
+config/checkstyle-suppressions.xml              Dockerfile           (local-dev only)
+.github/workflows/ci.yml                        docker-compose.yml   (local-dev only)
+.replit                                         replit.nix
+src/main/resources/application.yml
+src/main/resources/application-replit.yml       src/main/resources/application-local.yml
+src/main/resources/logback-spring.xml
+src/main/resources/ehcache.xml (when L2 cache is used)
+src/main/resources/static/api/v1/specs/openapi.yaml
 ```
 
-## Maven Parent POM Requirements
+`lombok.config` must contain `lombok.addLombokGeneratedAnnotation = true`.
 
-- Centralized versions in `<properties>`
-- Centralized dependencies in `<dependencyManagement>`
-- Centralized plugins in `<pluginManagement>` where useful
-- Java:
-  - `<java.version>25</java.version>`
-  - `<maven.compiler.release>25</maven.compiler.release>`
-- Spring Boot 4.x dependency management
-- Lombok and MapStruct version management
-- Checkstyle plugin bound to root `config`
-- JaCoCo coverage check with threshold 0.80
-- Surefire/Failsafe split for UT/IT
-- `git-commit-id-maven-plugin` in `validate` phase
+## Maven parent POM
 
-## `git-commit-id` Plugin (Mandatory)
+- Centralized versions in `<properties>`, deps in `<dependencyManagement>`,
+  plugins in `<pluginManagement>` where useful.
+- `<java.version>25</java.version>`, `<maven.compiler.release>25</maven.compiler.release>`.
+- Spring Boot 3.x dependency management; Lombok + MapStruct versions managed.
+- Checkstyle plugin → root `config/checkstyle.xml`.
+- JaCoCo with 0.80 line-coverage check.
+- Surefire (UT) + Failsafe (IT with `IT` suffix).
+- `git-commit-id-maven-plugin` in the `validate` phase
+  (see `pom-snippets/git-commit-id-maven-plugin.xml`).
+- `openapi-generator-maven-plugin` in `generate-sources`
+  (see `pom-snippets/openapi-generator-maven-plugin.xml`).
 
-Use canonical snippet from:
-- `templates/generated-project/pom-snippets/git-commit-id-maven-plugin.xml`
+## Architecture (layering — strict, 5 modules)
 
-Minimum expected behavior:
-- groupId: `io.github.git-commit-id`
-- artifactId: `git-commit-id-maven-plugin`
-- goal: `revision`
-- phase: `validate`
-- `offline=true`
-- `skipPoms=false`
-- `gitDescribe.skip=false`
+```
+backend/
+  application/         REST controllers, OpenAPI-generated interfaces,
+                       MapStruct mappers (ServiceRecord ↔ ApiDto), security
+                       (SecurityConfig, MockJwtDecoder), GlobalExceptionHandler.
+                       Controllers are THIN — see below.
 
-## Architecture and Layering
+  service/             Business orchestration, validation, workflow,
+                       transaction boundaries (@Transactional lives here).
+                       Owns service records (immutable value objects).
+                       MapStruct mappers (Entity ↔ ServiceRecord).
 
-- `application`: controllers, generated API interfaces, API mappers, auth/user context boundary
-- `service`: orchestration and business logic
-- `domain`: entities, repositories, domain enums/exceptions
-- `db`: Liquibase migrations
-- `external-services`: adapters/clients (BigQuery, external APIs)
-- `common`: shared helpers/utilities/errors
+  domain/              JPA entities, repositories, domain enums.
+                       AppException family lives under domain/common/error/
+                       (AppException, AppErrorReason, ValidationMessage,
+                       ValidationParameter, ValidationMessageType, CommonErrorCodes).
+                       Entities NEVER appear in REST.
 
-Rules:
-- Controllers are thin.
-- No business logic in controllers.
-- Do not expose JPA entities as API models.
-- Generated projects must follow `templates/generated-project/structure/near-production-project-structure.md`.
+  db/                  Liquibase changelogs ONLY. NO Java code.
 
-## OpenAPI-First Delivery
-
-Before code changes for API behavior:
-
-1. Update OpenAPI contract first.
-2. Ensure every operation has:
-   - unique `operationId`
-   - request/response schemas
-   - validation constraints
-   - status codes
-   - security requirements
-   - examples for main flows and errors
-3. Regenerate/reuse API interfaces and DTOs.
-4. Implement generated interfaces.
-5. Add/adjust tests for contract compliance.
-
-Do not manually duplicate generated DTOs.
-
-Mandatory OpenAPI generator contract:
-- use static spec at `src/main/resources/static/api/v1/specs/openapi_3.0.3_spec.yaml` relative to the backend application module
-- use `openapi-generator-maven-plugin`
-- use generator `spring` with library `spring-boot`
-- use `interfaceOnly=true`
-- use `useSpringBoot4=true`
-- use `openApiNullable=false`
-- use `skipDefaultInterface=true`
-- use `useTags=true`
-- use `dateLibrary=java8-localdatetime`
-- generate into `${project.build.directory}/generated-sources/openapi`
-- keep generated code in dedicated generated packages
-
-## Runtime Configuration Baseline
-
-Use this baseline in local profile (adapt only app-specific values):
-
-```yaml
-spring:
-  datasource:
-    hikari:
-      idle-timeout: 60000
-      maximum-pool-size: 50
-      connection-timeout: 2000
-      minimum-idle: 1
-      auto-commit: false
-  jpa:
-    hibernate:
-      ddl-auto: validate
-    open-in-view: false
-    database: postgresql
-    properties:
-      hibernate:
-        cache:
-          use_second_level_cache: true
-          use_query_cache: true
-          region_prefix: hibernate-cache
-          region:
-            factory_class: org.hibernate.cache.jcache.JCacheRegionFactory
-        javax:
-          cache:
-            uri: ehcache.xml
-            missing_cache_strategy: fail
-            provider: org.ehcache.jsr107.EhcacheCachingProvider
-        query:
-          in_clause_parameter_padding: true
-          mutation_strategy:
-            global_temporary:
-              create_tables: false
-              drop_tables: false
-          immutable_entity_update_query_handling_mode: exception
-        criteria:
-          literal_handling_mode: bind
-        default_batch_fetch_size: 300
-      jakarta:
-        persistence:
-          sharedCache:
-            mode: ENABLE_SELECTIVE
-
-management:
-  endpoints:
-    web:
-      exposure:
-        include: "health,prometheus,env,configprops"
-  endpoint:
-    env:
-      show-values: always
-    configprops:
-      show-values: always
-
-server:
-  servlet:
-    context-path: /some-path-by-app-name
+  external-services/   External API / queue / message-broker clients.
+                       NO database access. NO JPA dependency on this module.
+                       Only the service layer calls into here.
 ```
 
-Important:
-- Replace `/some-path-by-app-name`.
-- Keep standard actuator base path (`/actuator`) unless explicitly requested.
-- Expected URLs:
-  - `/<app-context-path>/actuator/health`
-  - `/<app-context-path>/actuator/prometheus`
+**There is no separate `common` Maven module.** The AppException family lives
+inside `domain` under the `.domain.common.error` package — matches CLS layout
+(`ru.mos.emias.laboratory.domain.common`). Drop a `common` module if Agent
+generates it.
 
-## Auth Policy (Dual-Mode, Mandatory)
+### Dependency matrix (Maven-level, enforced via module poms)
 
-For generated MVPs, auth must be implementation-ready:
+| From ↓ depends on → | application | service | domain | db | external-services |
+|---|---|---|---|---|---|
+| `application` | — | ✓ | ✗ (transitive via service is fine) | ✗ | ✗ |
+| `service` | ✗ | — | ✓ | ✗ | ✓ |
+| `domain` | ✗ | ✗ | — | ✗ | ✗ |
+| `db` | ✗ | ✗ | ✗ | — | ✗ |
+| `external-services` | ✗ | ✗ | ✗ | ✗ | — |
 
-- Primary mode: real Google SSO (Clerk preferred, equivalent Google OIDC allowed if project standards require it).
-- Fallback mode: mock local user flow when SSO keys are absent.
+Reading the table:
+- `application` (controllers/MapStruct) calls **only** `service`.
+- `service` calls **only** `domain` repositories OR `external-services` clients.
+- `domain` is a leaf: entities + repos + AppException family. No imports of
+  service, application, db, or external-services types.
+- `external-services` is a leaf for HTTP/queue clients. **No JPA, no
+  repository injections.** If an external client needs to persist something,
+  it returns the data to its caller (`service`) which then writes via
+  repositories.
+- `db` is a leaf with no Java.
 
-Requirements:
-- Auth selection must be config-driven, no code rewrites required.
-- UI must include login form/screen that works in fallback mode.
-- With valid SSO keys provided, same flow must switch to real SSO.
-- All keys must be read from properties/env (never hardcoded).
-- `AUTH_MODE=auto|sso|mock` must be supported:
-  - `auto`: if required SSO settings exist, use real SSO; otherwise fallback to mock.
-  - `sso`: fail fast on startup when required SSO settings are missing.
-  - `mock`: run without external IdP and expose only mock login flow.
+The matrix is enforced by Maven `<dependencies>` in each module's pom —
+Maven won't compile a module that imports something it doesn't declare.
 
-Google SSO flow contract:
-1. Frontend obtains JWT through Google SSO provider (Clerk preferred).
-2. Frontend sends `Authorization: Bearer <jwt>` for every protected backend API.
-3. Backend is source of truth for auth status (`/api/v1/auth/me`), never frontend state alone.
-4. `401` clears frontend auth state and returns to login; `403` shows access-denied state.
+If a service method needs a DB row AND an external call:
+```java
+@Service
+@RequiredArgsConstructor
+public class <Domain>Service {
+    private final <Domain>Repository repo;          // domain module
+    private final <External>Client externalClient;   // external-services module
+    private final <Domain>Mapper mapper;
 
-Backend validation is mandatory in real SSO mode:
-- every protected backend endpoint validates Bearer JWT
-- verify JWT signature with IdP JWKS
-- validate `iss`, `aud`, `exp`, and `nbf` when present
-- return `401` for missing/invalid token
-- return `403` for authenticated but unauthorized principal
-- never treat frontend session/UI login state as proof of authentication
-- map trusted claims (`sub`, `email`, roles/groups) to backend principal and authorities
-- keep issuer/audience provider-correct:
-  - Clerk: issuer from Clerk domain, audience from Clerk token template
-  - direct Google OIDC: Google issuer + audience equal to `GOOGLE_CLIENT_ID`
+    @Transactional
+    public <Domain>Record syncFromExternal(Long id) {
+        <Domain>Entity entity = repo.findById(id)
+            .orElseThrow(() -> new AppException(<Domain>ErrorReason.E001, id));
+        <External>Data fresh = externalClient.fetch(entity.getExternalId());
+        entity.applyFresh(fresh);
+        return mapper.toRecord(repo.save(entity));   // domain again
+    }
+}
+```
 
-Recommended Spring implementation:
-- `spring-boot-starter-oauth2-resource-server`
-- configure `spring.security.oauth2.resourceserver.jwt.issuer-uri`
-- optionally set `spring.security.oauth2.resourceserver.jwt.jwk-set-uri`
-- set `spring.security.oauth2.resourceserver.jwt.audiences`
-- map trusted claims (`sub`, `email`, groups/roles) into app user context
+The external client (external-services module) does NOT inject any
+repository. If it needs to record the external response in DB, it returns
+the data to service, and service writes via the repository.
 
-Mock fallback contract:
-- expose mock login endpoint in mock mode
-- issue backend-signed short-lived mock JWT
-- keep Bearer JWT contract identical between mock and real SSO modes
-- protect mock login endpoint behind `AUTH_MODE=mock` (or `auto` without keys)
+### Thin controllers (hard rule)
 
-Recommended config placeholders in `.env.example` / properties:
-- `AUTH_MODE` (for example: `auto|sso|mock`)
-- `AUTH_MOCK_USER` (demo fallback user id/login)
-- `AUTH_ISSUER_URI`
-- `AUTH_JWKS_URI`
-- `AUTH_AUDIENCE`
-- `AUTH_MOCK_JWT_SECRET`
-- `CLERK_PUBLISHABLE_KEY` and `CLERK_SECRET_KEY` (if Clerk is used)
-- `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` (if direct Google OIDC is used)
+Controllers do **only** four things:
 
-Clarification:
-- preferred flow is `Google -> Clerk -> application`
-- in that flow, Google OAuth client credentials are configured in Clerk, not used as normal application runtime properties
+1. Receive the generated API interface call (the OpenAPI-generated method).
+2. Resolve the authenticated user from `SecurityContext` (one line).
+3. Call exactly **one** service method.
+4. Run the result through a MapStruct mapper into the generated DTO and return.
 
-Canonical auth blueprint:
-- `templates/generated-project/auth/google-sso-clerk-blueprint.md`
+That's it. No `if`/`switch` on input, no DB calls, no business validation,
+no error wrapping (the `@RestControllerAdvice` handles all errors), no
+manual DTO construction with `new ApiEmployeeDto(...)`.
 
-## BigQuery Policy
+**`@Transactional` lives on the controller, not the service** (see the
+"LazyInitializationException — single rule" gotcha below for the full
+reasoning). The minimal change: declare the transaction at class level on
+every controller as `@Transactional(readOnly = true)` (the read default),
+then mark write methods with method-level `@Transactional` to override.
 
-If use case requires BigQuery:
-- Add backend dependency and backend integration only.
-- Keep frontend isolated from direct BigQuery access.
-- Read all BigQuery credentials/config from properties/env.
-- Never commit real credentials.
+```java
+@RestController
+@RequestMapping("/api/v1/<resources>")
+@RequiredArgsConstructor
+@Transactional(readOnly = true)                  // ← class default: read tx
+class <Domain>Controller implements <Domain>Api {
+    private final <Domain>Service service;
+    private final <Domain>ApiMapper mapper;
 
-Recommended config placeholders:
-- `BIGQUERY_PROJECT_ID`
-- `BIGQUERY_DATASET`
-- credential source key(s) used by your runtime profile
+    @Override                                     // GET — inherits readOnly tx
+    public ResponseEntity<<Domain>V1> get<Domain>(Long id) { ... }
 
-## L2 Cache Policy
+    @Override
+    @Transactional                                // ← override: writable tx
+    public ResponseEntity<<Domain>V1> update<Domain>(Long id, Update<Domain>RequestV1 req) { ... }
+}
+```
 
-Enable Ehcache only for explicit candidates:
-- read-mostly dictionaries
-- stable lookup tables
-- expensive high-read low-write queries
+This single annotation makes lazy crashes structurally impossible: the
+controller's transaction stays open through the MapStruct call AND through
+Spring MVC's response serialisation. Services can still add their own
+`@Transactional` if they need a different propagation (REQUIRES_NEW for
+outbox patterns, etc.), but it's not required by default.
 
-Rules:
-- Do not cache everything.
-- Define cache regions explicitly in `ehcache.xml`.
-- Use `hibernate-cache` prefix and `missing_cache_strategy: fail`.
+Anti-pattern (DO NOT do this):
+```java
+@RestController
+class <Domain>Controller implements <Domain>Api {
+    public ResponseEntity<<Domain>V1> get<Domain>(Long id) {
+        var entity = repo.findById(id).orElseThrow(...);   // ✗ repository in controller
+        if (entity.getOwnerId() != currentUser.getId() &&  // ✗ business logic
+            !currentUser.isAdmin()) {
+            throw new ResponseStatusException(FORBIDDEN);  // ✗ wrong exception type
+        }
+        var dto = new <Domain>V1();                        // ✗ manual DTO build
+        dto.setId(entity.getId());
+        dto.setName(entity.getName());
+        return ResponseEntity.ok(dto);
+    }
+}
+```
 
-## Database Types (Mandatory)
+Canonical version:
+```java
+@RestController
+@RequiredArgsConstructor
+class <Domain>Controller implements <Domain>Api {
+    private final <Domain>Service service;
+    private final <Domain>ApiMapper mapper;
 
-- IDs: Java `Long`, PostgreSQL `BIGINT`
-- Strings: PostgreSQL `TEXT`
-- Long text: PostgreSQL `TEXT`
-- Do not use `VARCHAR`
+    @Override
+    public ResponseEntity<<Domain>V1> get<Domain>(Long id) {
+        var caller = SecurityContextHolder.getContext().getAuthentication();
+        <Domain>Record record = service.findById(id, AppUser.from(caller));
+        return ResponseEntity.ok(mapper.toDto(record));
+    }
+}
+```
 
-## Database and Docker Compose Policy
+The service does the business work (department check, status validation,
+etc.) and throws `AppException` on any failure. The mapper does the
+shape translation only.
 
-If persistence is required, Replit must add PostgreSQL automatically.
+### Service layer convention: `XxxService` interface + `XxxServiceImpl`
 
-DB is required when there is any:
-- JPA entity
-- repository
-- Liquibase changelog
-- SQL migration
-- saved user data
-- audit state
-- metadata that survives process restart
+Every service is **two types**, not one. The contract is an interface,
+the behaviour is an implementation. Both live in the same package inside
+`backend/service/`:
 
-When DB is required:
-- add PostgreSQL service to `docker-compose.yml`
-- use compose profile `local`
-- configure `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`
-- use named PostgreSQL volume
-- add PostgreSQL healthcheck
-- wire backend datasource env vars to the PostgreSQL service
-- add Liquibase changelog skeleton before JPA entities
-- local dry run must not require manual DB creation
+```
+backend/service/src/main/java/<base>/service/<domain>/
+  ResourceService.java          ← public interface, what callers depend on
+  ResourceServiceImpl.java       ← @Service implementation
+  ResourceMapper.java            ← MapStruct Entity ↔ Record (in the same package)
+```
 
-## Logging and Observability
+```java
+// ResourceService.java — interface
+public interface ResourceService {
+    ResourceRecord findById(Long id);
+    ResourceRecord update(Long id, ResourceUpdate update, AppUser caller);
+    Page<ResourceRecord> search(ResourceQuery query, Pageable pageable);
+}
 
-- Logs must be structured JSON to stdout.
-- Plain text logs are not acceptable unless explicitly approved.
-- Include request/correlation IDs where available.
-- Do not log secrets/tokens/raw sensitive payloads.
+// ResourceServiceImpl.java — implementation, ONLY type carrying @Service
+@Service
+@RequiredArgsConstructor
+public class ResourceServiceImpl implements ResourceService {
 
-HTTP request/response logging is mandatory:
-- follow `templates/generated-project/observability/logbook-http-logging-rules.md`
-- add `org.zalando:logbook-spring-boot-starter`
-- log request and response bodies for application endpoints after filtering
-- output Logbook logs as JSON
-- mask sensitive headers and JSON body fields
-- skip health, actuator, swagger, OpenAPI specs, static, OPTIONS, prefetch, and probe traffic
+    private final ResourceRepository repo;
+    private final ResourceMapper mapper;
 
-Usage logging is mandatory for generated backend services:
-- follow `templates/generated-project/observability/usage-logging-bigquery-rules.md`
-- add `com.google.cloud:google-cloud-bigquery`
-- read credentials from `BQ_USAGE_CREDENTIALS_JSON`
-- write to `BQ_USAGE_TABLE` when credentials exist
-- use local PostgreSQL `usage_log_events` fallback in local/dev when credentials are absent and fallback is enabled
-- set service name through `USAGE_LOG_SERVICE_NAME`
-- set environment through `USAGE_LOG_ENVIRONMENT`
-- no-op only when usage logging is disabled or tests intentionally disable it
-- fire-and-forget; never block or fail user requests because usage logging failed
-- skip health, actuator, static, OPTIONS, prefetch, and probe traffic
-- log success and error paths for the same action
+    @Override
+    public ResourceRecord findById(Long id) {
+        return repo.findById(id)
+            .map(mapper::toRecord)
+            .orElseThrow(() -> new AppException(ResourceErrorReason.E001, id));
+    }
+    // ...
+}
+```
 
-## Testing and Quality Gates
+Hard rules:
 
-- JUnit 5 + Mockito + AssertJ + Spring Boot test tooling
-- Given/When/Then naming and structure
-- Integration tests with `IT` suffix
-- REST tests for success, validation, auth, and error format
-- JaCoCo line coverage gate: 80%
+- The interface is what controllers and other services inject by type
+  (`private final ResourceService service;`). Never inject `ResourceServiceImpl`.
+- Only the `*Impl` class carries `@Service`. The interface has no Spring
+  annotations.
+- One file per type. Don't put interface + impl in the same `.java` file.
+- The interface lives in the same package as the impl — no separate `api`
+  sub-package for "service contracts". The package boundary
+  (`backend/service/`) is the abstraction; an extra `api` sub-folder is
+  noise.
+- `@LogUsage`, `@Transactional` (when explicitly needed), and other
+  annotations go on the **impl** methods, not on the interface. They are
+  behaviour, not contract.
 
-## Docker and Dry Run
+Why interface + impl rather than just the impl class:
 
-Required commands:
+1. **Testability** — controllers in unit tests mock `ResourceService`, not
+   `ResourceServiceImpl`. Mockito handles both, but the typed boundary
+   makes intent obvious.
+2. **Refactor safety** — adding a second implementation (a `MockResourceService`
+   for a feature flag, a `CachingResourceServiceImpl` decorator) doesn't
+   require ripping out all the `ResourceServiceImpl` references at call
+   sites.
+3. **Self-invocation + AOP** — Spring AOP proxies must be applied at the
+   interface seam. If a caller injects the impl class directly, certain
+   proxy modes degrade. Interfaces sidestep the issue.
+
+### MapStruct between layers (hard rule)
+
+Two MapStruct mappers per resource:
+
+| Direction | Location | Purpose |
+|---|---|---|
+| `Entity ↔ ServiceRecord` | `service/` module | Hide JPA, return immutable records to controllers/other services |
+| `ServiceRecord ↔ ApiDto` (generated by openapi-generator) | `application/` module | Convert between business records and wire format |
+
+```java
+// service/.../mapper/<Domain>Mapper.java
+@Mapper(componentModel = "spring")
+public interface <Domain>Mapper {
+    <Domain>Record toRecord(<Domain>Entity entity);
+    <Domain>Entity toEntity(<Domain>Record record);
+    List<<Domain>Record> toRecords(List<<Domain>Entity> entities);
+}
+
+// application/.../mapper/<Domain>ApiMapper.java
+@Mapper(componentModel = "spring")
+public interface <Domain>ApiMapper {
+    <Domain>V1            toDto(<Domain>Record record);                 // V1 DTO from openapi-generator
+    <Domain>Record        toRecord(Create<Domain>RequestV1 req);        // V1 request from openapi-generator
+}
+```
+
+Do **not** handwrite `new <Domain>V1(); dto.setX(...)` chains. MapStruct
+generates that code; you get a compile error if a field doesn't match,
+which is what we want.
+
+Entities never escape the `domain` module — they're not arguments or
+return types of any controller, mapper-to-DTO, or external-service call.
+
+## OpenAPI-first delivery
+
+1. Update `openapi.yaml` first.
+2. Make each changed operation tick the `openapi-review-checklist.md`.
+3. Regenerate via `openapi-generator-maven-plugin`; implement generated interfaces.
+4. Regenerate frontend types via `npm run generate:api` when a frontend exists.
+5. Add tests for contract compliance.
+
+Never handwrite DTOs that duplicate generated schemas.
+
+## Runtime: Replit vs local-dev
+
+| | Replit | Local-dev |
+|---|---|---|
+| Spring profile | `replit` (set via `.replit` `[env]`) | `local` |
+| PostgreSQL | Replit SQL Database via `DATABASE_URL` (libpq URL, `sslmode=require`); convert to JDBC + set Hikari `max-pool-size: 2–3` | docker-compose service, named volume, healthcheck, Hikari `max-pool-size: 50` |
+| Server port | `5000` (Replit maps to external `80`) | `8080` |
+| Build | Maven directly (Replit Run workflow) | Maven or `docker compose --profile local up --build` |
+| Deployment | Reserved VM (`deploymentTarget = "gce"`) | n/a |
+
+Docker assets exist for local-dev only and are not invoked on Replit.
+
+Baseline runtime config snippet lives in `references/hikari-jpa-baseline.yml`.
+Copy it into `application.yml` and override only context-path and profile-specific
+data source vars.
+
+Important: replace `/some-path-by-app-name` with the real context-path.
+
+## Auth, usage logging, L2 cache
+
+See the canonical files in the table above. Do not restate the contracts here.
+The skill enforces only that:
+
+- backend depends on `spring-boot-starter-oauth2-resource-server` in SSO/auto modes
+- backend depends on `spring-boot-starter-aop` (drives the usage-logging aspect)
+- usage logging writes to the app's `usage_events` Postgres table via the
+  bundled Liquibase changelog; `NoOpUsageLogger` binds when
+  `USAGE_LOGGING_ENABLED=false`
+- **`@LogUsage(action = "<dotted.lowercase>")` is on EVERY service-impl public
+  method that represents a user action**. The aspect (`UsageLoggingAspect`)
+  records each call automatically; manual `logger.record(...)` calls in
+  business code are forbidden. The plumbing is auto-wired
+  (`spring-boot-starter-aop` enables AspectJ proxies), but the **coverage**
+  (which methods are annotated) is the developer's discipline — see
+  `SampleServiceImpl` in scaffold for the canonical shape.
+- L2 cache is opt-in per entity/region in `ehcache.xml` with
+  `missing_cache_strategy: fail`
+
+## Database types (mandatory)
+
+IDs: Java `Long`, PostgreSQL `BIGINT`. Strings: PostgreSQL `TEXT`. No `VARCHAR`,
+no MySQL `LONGTEXT`.
+
+Dictionary / lookup data lives in its own table with `BIGINT id` + `TEXT code` +
+`TEXT name` and foreign-key references. NO `CREATE TYPE … AS ENUM`. See the
+"Database policy" section in `custom_instruction/instructions.md`.
+
+## No magic values (mandatory)
+
+Every string/number literal that has business meaning must come from ONE of:
+
+1. **`public static final` constant** in a dedicated class (e.g.
+   `AuthConstants.AUTH_MODE_SSO = "sso"`), used both in annotation parameters
+   (`@Profile`, `@ConditionalOnProperty`) and runtime checks.
+2. **`@ConfigurationProperties`** bean reading from `application.yml`
+   (e.g. `app.usage-logging.service-name`). Constants for the property
+   *names* go in a `*Constants` class so annotation parameters match.
+3. **OpenAPI YAML** for HTTP status codes (decoded by Spring) and error
+   response shapes.
+
+Forbidden:
+- Inline string literals like `if (mode.equals("sso"))` — use `AuthConstants.AUTH_MODE_SSO`.
+- Inline numeric literals for HTTP status — use `HttpStatus.NOT_FOUND`,
+  not `404`.
+- Magic table/column names in `@Table(name = "employees")` — define
+  `static final String TABLE = "employees"` on the entity and reference it.
+- Magic timeout/limit numbers in service code — externalise via `@Value` or
+  a properties bean, never `Thread.sleep(5000)`.
+
+When refactoring discovers a literal, the fix is always: lift it into the
+nearest constants class or properties bean, replace all callsites, commit.
+
+## Testing and quality (PHASED — see testing-policy.md)
+
+Canonical: `templates/generated-project/testing/testing-policy.md`.
+
+Stack: JUnit 5 + Mockito + AssertJ + Spring Boot Test. Given/When/Then.
+`IT` suffix for integration tests. REST tests use `@WebMvcTest` or
+`@SpringBootTest` with a mock JWT.
+
+**Tests are PHASED so token budget isn't burned on tests that the next
+implementation iteration throws away.** Three phases:
+
+1. **Phase 1 — Building**: no tests required, `-DskipTests` allowed,
+   JaCoCo gate at `0.00`. Get the app running end-to-end first.
+2. **Phase 2 — Post-working**: Agent **switches into test-writing mode**
+   the moment Phase 1's exit criteria are met. Best-effort but mandatory
+   — every endpoint gets at least one happy-path test + 401/403 +
+   error-mapping test. Coverage ratchet (gate set to whatever the suite
+   delivers, never decreases).
+3. **Phase 3 — Engineering handoff**: `mvn -Phandoff verify` enforces
+   `0.80` line coverage + integration tests with Testcontainers Postgres.
+
+### Phase 1 → Phase 2 trigger (Agent stops adding features and writes tests)
+
+ALL of these must be true:
+- [ ] `mvn -f backend/pom.xml -DskipTests package` succeeds.
+- [ ] Replit Run boots without unhandled exceptions in logs.
+- [ ] `curl /api/v1/auth/me` with a mock JWT returns 200.
+- [ ] At least one feature endpoint reads from the DB and returns data.
+- [ ] Frontend renders without console errors.
+
+When all five are green, **Agent's next batch of actions is writing
+tests**. No new features until tests catch up to the existing endpoints.
+
+### Phase 2 — what to write (per endpoint, minimum)
+
+- Service happy-path + main negative `AppException` branch (unit, with
+  Mockito-stubbed repository).
+- Controller success + 401 (no token) + 403 (wrong role) + 400
+  (validation) — `@WebMvcTest` with `MockMvc`.
+- Liquibase smoke (`@DataJpaTest` or Testcontainers) that runs the master
+  changelog cleanly.
+
+Same-class non-trivial method calls get dedicated tests; use Mockito
+`spy` only to isolate caller branching.
+
+## Spring Boot common gotchas (real failures from past generations)
+
+These are the issues that caused the most wasted iterations in prior Agent
+runs. Read this section **before** writing controllers, security config, or
+any DataSource hook.
+
+### `EnvironmentPostProcessor` runs before profiles are resolved
+
+`postProcessEnvironment()` is called BEFORE Spring resolves
+`SPRING_PROFILES_ACTIVE`. `env.getActiveProfiles()` is empty at this point.
+Any `if (!profiles.contains("replit")) return;` check silently no-ops in
+every environment.
+
+→ Gate on env-var presence (`DATABASE_URL`), not on profile. The provided
+`ReplitDatabaseUrlPostProcessor` already does this; do not "improve" it
+back into a profile check.
+
+### OAuth2 Resource Server auto-config triggers on empty properties
+
+As soon as `spring-boot-starter-oauth2-resource-server` is on the
+classpath, Spring Boot's auto-config triggers — even if
+`spring.security.oauth2.resourceserver.jwt.issuer-uri` is **the empty
+string**. It will try to fetch JWKS from an empty URL and crash at startup.
+
+Two-part fix (both required):
+1. Always provide a `@Bean JwtDecoder`. The scaffolded `SecurityConfig`
+   has a hard-fallback branch that fires when no other `@ConditionalOnProperty`
+   match — guarantees a decoder always exists.
+2. Do NOT put `spring.security.oauth2.resourceserver.jwt.*` in
+   `application.yml`. The scaffolded `application.yml` already omits them.
+   Don't add them back "for completeness".
+
+### Spring Security `requestMatchers` does NOT include the context path
+
+`server.servlet.context-path: /my-app` + `requestMatchers("/my-app/api/v1/...")`
+→ matches nothing. Spring Security strips the context path **before**
+matching. `requestMatchers` is application-relative, not server-relative.
+
+→ Path literals in `requestMatchers` look like `/api/v1/auth/me`, never
+`/<context-path>/api/v1/auth/me`. The scaffolded `AuthConstants.PUBLIC_PATHS`
+follows this convention.
+
+### OpenAPI `servers: [{ url: /api/v1 }]` is NOT applied to controllers
+
+Servers URL in `openapi.yaml` documents where clients should send requests,
+but the OpenAPI generator does **not** prepend it to the `@RequestMapping`
+paths it emits on the generated API interfaces. The interface declares
+`/auth/me`, not `/api/v1/auth/me`. The frontend's generated client uses the
+servers URL and sends to `/api/v1/auth/me`. Spring MVC then 404s because
+its mapping is `/auth/me`.
+
+Pick ONE of three remedies (the scaffold uses #1):
+
+1. **Class-level `@RequestMapping("/api/v1")` on every controller** that
+   implements a generated interface. Verbose but explicit. Required if you
+   want `/api/v1` to remain the wire URL without changing `application.yml`.
+2. **`server.servlet.context-path: /api/v1`** — then strip `/api/v1` from
+   `servers` in `openapi.yaml`. Cleanest if you have only one API base path.
+3. **Put `/api/v1` inline in every path in `openapi.yaml`** (`/api/v1/auth/me`)
+   and remove the `servers` entry. Verbose YAML but no Java-side trickery.
+
+The scaffolded controllers use option #1. Stay consistent across the project.
+
+### `LazyInitializationException` — single rule that ends it forever
+
+JPA closes the session at the end of `@Transactional`. Lazy fields touched
+after that throw `LazyInitializationException`. Past Agent runs hit this
+crashing on `mapper.toDto(entity)` after a service returned an entity.
+
+**Single canonical rule**: put `@Transactional` on the **controller**, not
+the service.
+
+Mechanically:
+- Every controller class carries class-level `@Transactional(readOnly = true)`
+  as the read default.
+- Write methods (POST / PUT / PATCH / DELETE) override with method-level
+  `@Transactional`.
+- Services do **not** carry `@Transactional` by default. They run inside the
+  controller's transaction (default propagation `REQUIRED` joins it). Add
+  service-level `@Transactional` only when a service needs different
+  propagation (e.g. `REQUIRES_NEW` for outbox writes, `NEVER` for guards).
+
+```java
+@RestController
+@RequestMapping("/api/v1/<resources>")
+@RequiredArgsConstructor
+@Transactional(readOnly = true)                       // ← single switch
+class <Domain>Controller implements <Domain>Api {
+
+    private final <Domain>Service service;
+    private final <Domain>ApiMapper mapper;
+
+    @Override                                          // GET — read tx
+    public ResponseEntity<<Domain>V1> get<Domain>(Long id) {
+        return ResponseEntity.ok(mapper.toDto(service.findById(id)));
+    }
+
+    @Override
+    @Transactional                                     // ← write tx overrides
+    public ResponseEntity<<Domain>V1> update<Domain>(Long id, Update<Domain>RequestV1 req) {
+        return ResponseEntity.ok(mapper.toDto(service.update(id, req)));
+    }
+}
+```
+
+Why this works. The tx spans:
+- the service call (lazy fields load freely),
+- the MapStruct mapping (whether it's in the service or the controller),
+- Spring MVC's response serialisation (no more lazy access after this — the DTO is plain Java).
+
+The whole controller method including HTTP response writing happens inside
+the same `@Transactional` proxy invocation. `LazyInitializationException`
+is structurally impossible.
+
+Why we don't put it on the service. We tried; it forces Agent to remember
+three things at once (annotate service, call mapper inside service, return
+Record not Entity), and screenshot 21 of a real generation shows Agent
+fails to keep all three consistent — entity escapes, lazy crash. One
+annotation on the controller class is harder to forget.
+
+`@EntityGraph` / `JOIN FETCH` / `EAGER` are **performance** tools (kill
+N+1 when the mapper realises many associations at once). They are NOT
+fixes for `LazyInitializationException` — the rule above already prevents
+that. Reach for them only when profiling shows N+1 traffic.
+
+### Services still return Records, not Entities (architectural, not lazy-safety)
+
+Independent of where `@Transactional` lives: service signatures still
+return `ServiceRecord` (immutable Java records / DTOs), never JPA entities.
+The reason is no longer lazy safety (the controller transaction handles
+that) — it's **module boundaries**. Entities leaking out of `service/` would
+let `application/` import JPA-aware types, breaking the dependency matrix
+in the Architecture section above. Keep the convention; it costs one
+MapStruct call inside the service.
+
+### JPQL `LOWER(CONCAT('%', :search, '%'))` Postgres `bytea` crash
+
+When `:search` is `null` or untyped, Hibernate's parameter binder may pick
+`bytea` and Postgres rejects the concat. Build the search pattern in Java
+and pass it as a single `String`:
+
+```java
+String pattern = (search == null || search.isBlank()) ? "%" : "%" + search.toLowerCase() + "%";
+return repo.findByNameLike(pattern);
+```
+
+JPQL becomes `WHERE LOWER(e.name) LIKE :pattern`.
+
+### Don't mix `JdbcTemplate` with JPA
+
+The whole stack uses JPA. Reaching for `JdbcTemplate` for "fast inserts" is
+a smell — two persistence paths to maintain. Use `JpaRepository.save` from
+an `@Async` method (with a bounded thread-pool `TaskExecutor`) when you
+need fire-and-forget writes. See `observability/usage-logging-rules.md`.
+
+### Don't keep `git-commit-id-maven-plugin` blocking in Replit shell
+
+Replit workspaces don't always have `.git`. The plugin will fail
+`mvn package` in that environment. The scaffolded parent pom sets
+`git-commit-id.skip=true` AND `failOnNoGitDirectory=false` — keep both.
+Re-enable the skip only in CI where the checkout is a real git repo.
+
+## Local-dev dry run
 
 ```bash
 docker compose --profile local config
@@ -389,4 +637,5 @@ curl -f http://localhost:8080/<app-context-path>/actuator/prometheus
 docker compose --profile local down -v
 ```
 
-If dry run cannot execute in current environment, document reason and exact commands in `README.md`.
+Skip on Replit. If execution is blocked in the current environment, document
+exact reason and exact commands in the project README.

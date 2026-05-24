@@ -12,20 +12,23 @@
             <configuration>
                 <generatorName>spring</generatorName>
                 <library>spring-boot</library>
-                <inputSpec>${project.basedir}/src/main/resources/static/api/v1/specs/openapi_3.0.3_spec.yaml</inputSpec>
+                <inputSpec>${project.basedir}/src/main/resources/static/api/v1/specs/openapi.yaml</inputSpec>
                 <output>${project.build.directory}/generated-sources/openapi</output>
                 <apiPackage>${openapi.api.package}</apiPackage>
                 <modelPackage>${openapi.model.package}</modelPackage>
                 <invokerPackage>${openapi.invoker.package}</invokerPackage>
+                <!-- modelNameSuffix intentionally omitted — schemas carry the
+                     V1/V2 suffix explicitly in openapi.yaml. -->
                 <generateApiTests>false</generateApiTests>
                 <generateModelTests>false</generateModelTests>
                 <configOptions>
                     <interfaceOnly>true</interfaceOnly>
-                    <useSpringBoot4>true</useSpringBoot4>
+                    <useSpringBoot3>true</useSpringBoot3>
                     <openApiNullable>false</openApiNullable>
                     <skipDefaultInterface>true</skipDefaultInterface>
                     <useTags>true</useTags>
                     <dateLibrary>java8-localdatetime</dateLibrary>
+                    <additionalModelTypeAnnotations>@lombok.Generated</additionalModelTypeAnnotations>
                 </configOptions>
             </configuration>
         </execution>

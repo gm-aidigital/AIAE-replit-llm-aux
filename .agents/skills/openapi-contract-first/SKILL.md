@@ -1,96 +1,47 @@
 ---
 name: openapi-contract-first
-description: Contract-first OpenAPI workflow for Java backend features, including validation, compatibility checks, and generation handoff.
-argument-hint: "[feature-or-endpoint]"
-user-invocable: true
+description: Contract-first OpenAPI workflow for any backend API change in a generated project. Use whenever adding, changing, deprecating or removing a REST endpoint. Drives backend interface and frontend type regeneration.
+metadata:
+  user-invocable: "true"
 ---
 
 # OpenAPI Contract First
 
-Use this skill whenever backend API behavior is added, changed, deprecated, or removed.
+OpenAPI YAML is the source of truth. Implementation follows the spec, never the
+reverse.
 
-Canonical checklist file:
-- `templates/generated-project/openapi/openapi-review-checklist.md`
+## Canonical references
 
-Canonical rules file:
-- `templates/generated-project/openapi/canonical-openapi-rules.md`
+- Rules: `templates/generated-project/openapi/canonical-openapi-rules.md`
+- Review checklist: `templates/generated-project/openapi/openapi-review-checklist.md`
+- Generator plugin snippet: `templates/generated-project/pom-snippets/openapi-generator-maven-plugin.xml`
+- Frontend rules: `templates/generated-project/frontend/canonical-react-frontend-rules.md`
+- Auth contract: `templates/generated-project/auth/google-sso-clerk-blueprint.md`
 
-Canonical generator snippet:
-- `templates/generated-project/pom-snippets/openapi-generator-maven-plugin.xml`
-
-Canonical frontend API generation rules:
-- `templates/generated-project/frontend/canonical-react-frontend-rules.md`
-
-## Goal
-
-Ensure OpenAPI contract is the source of truth and implementation follows it, not the opposite.
-
-## Required Workflow
+## Workflow
 
 1. Identify affected operations/resources.
-2. Update OpenAPI contract first.
-3. Validate operation semantics and compatibility.
-4. Regenerate/reuse DTOs/interfaces through the canonical OpenAPI generator setup.
-5. Implement backend changes.
-6. Add/update tests for contract compliance.
+2. Update `openapi.yaml` first.
+3. Run the review checklist (every operation must pass).
+4. Regenerate backend interfaces via `openapi-generator-maven-plugin`.
+5. Regenerate frontend types via `npm run generate:api` (when frontend exists).
+6. Implement generated interfaces; add/adjust tests for contract compliance.
 
-## Operation Checklist (Each Changed Endpoint)
+## Auth addendum
 
-- unique `operationId`
-- clear summary/description
-- correct HTTP method and path
-- request schema + validation constraints
-- response schemas for each status code
-- error schema for failure cases
-- security requirements
-- examples for success and error responses
+When the endpoint is protected: bearer JWT scheme declared,
+operation has `security:`, `401`/`403` documented with payload examples,
+auth bootstrap endpoints (`/api/v1/auth/me`, optionally
+`/api/v1/auth/mock/login`) present.
 
-Static spec/layout rules:
-- spec location: `src/main/resources/static/api/v1/specs/openapi_3.0.3_spec.yaml` relative to the backend application module
-- top-level `servers`, `tags`, `components.securitySchemes`, `components.schemas` are mandatory
-- use reusable shared error schemas
+## Compatibility
 
-## Auth Contract Addendum (When Endpoint Is Protected)
+No silent breaking changes. Deprecate explicitly. Removals/breaks need a
+migration note in the contract and a version bump.
 
-- bearer JWT security scheme exists in `components.securitySchemes`
-- protected operations explicitly reference security requirements
-- `401` and `403` responses are documented with payload examples
-- token expectations are documented (issuer/audience semantics at API level)
-- auth bootstrap endpoint(s) are described (`/api/v1/auth/me`, plus mock login endpoint when mock mode is supported)
+## Definition of done
 
-## Compatibility Rules
-
-- No breaking path/method changes without explicit versioning/migration note.
-- Keep response contracts backward-compatible unless breaking change is approved.
-- Deprecations must be documented in the contract.
-- Do not remove fields silently.
-
-## Implementation Binding Rules
-
-- Generated or contract-bound API interfaces should be implemented directly.
-- Do not handcraft duplicate DTOs that mirror generated contract types.
-- Mapping between API models and domain models must be explicit and testable.
-- Use canonical Maven generator options:
-  - `interfaceOnly=true`
-  - `useSpringBoot4=true`
-  - `openApiNullable=false`
-  - `skipDefaultInterface=true`
-  - `useTags=true`
-  - `dateLibrary=java8-localdatetime`
-
-## Validation and Tests
-
-Add/adjust tests for:
-- required request fields and validation errors
-- status codes and response payload shape
-- security/access constraints
-- edge cases explicitly represented in OpenAPI examples
-
-## Delivery
-
-A backend feature is not done until:
-- OpenAPI is updated
-- implementation matches OpenAPI
-- backend interfaces are regenerated from OpenAPI
-- frontend API types are regenerated from the same OpenAPI YAML when frontend exists
-- tests cover changed contract behavior
+- OpenAPI updated and review checklist passes.
+- Backend interfaces regenerated and implemented.
+- Frontend types regenerated when frontend exists.
+- Tests cover changed contract behavior (success, validation, auth, error shape).

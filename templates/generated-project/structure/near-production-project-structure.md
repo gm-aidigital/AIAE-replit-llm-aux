@@ -1,76 +1,127 @@
 # Near-Production Project Structure
 
-Generated full-stack projects must be structured for handoff, not as throwaway demos.
+Generated full-stack projects are structured for engineering handoff, not as
+throwaway demos. The same generated project must run in two environments:
 
-## Root
+1. **Replit workspace** (demo / preview / deploy) — uses Replit-native services:
+   the `postgresql-16` SQL Database module injects a single `DATABASE_URL`
+   env var, backend binds port 5000 mapped to external 80, secrets come from
+   the Replit Secrets pane.
+2. **Local developer machine** (handoff) — uses `docker-compose --profile local`
+   to bring up PostgreSQL alongside the backend.
 
-Required root files:
+Docker and docker-compose exist *only* for the local-dev path. The Replit run
+does not invoke Docker.
 
-- `README.md`
-- `.env.example`
-- `.gitignore`
-- `Dockerfile`
-- `docker-compose.yml`
-- `.github/workflows/ci.yml`
+## Root layout
 
-When Java backend exists:
+```
+<project-root>/
+├── README.md
+├── .env.example
+├── .gitignore                            # excludes template control plane + Python files
+├── .replit                               # Replit workspace config (run, ports, modules)
+├── replit.nix                            # Replit Nix package deps
+├── docker-compose.yml                    # local-dev only; orchestrates backend + frontend + postgres
+├── .github/workflows/ci.yml
+├── backend/                              # ALL Java/Maven artifacts live here
+│   ├── pom.xml                           # parent POM, <packaging>pom</packaging>
+│   ├── Dockerfile                        # backend image (local-dev only)
+│   ├── lombok.config
+│   ├── config/                           # Checkstyle config referenced by parent pom
+│   │   ├── checkstyle.xml
+│   │   └── checkstyle-suppressions.xml
+│   ├── application/                      # REST + security + GlobalExceptionHandler
+│   ├── service/                          # Business logic + MapStruct Entity↔Record
+│   ├── domain/                           # JPA entities + repos + AppException family
+│   ├── db/                               # Liquibase changelogs only
+│   └── external-services/                # External clients, no DB
+└── frontend/                             # React + TypeScript + Vite
+    ├── package.json
+    ├── vite.config.ts
+    ├── tsconfig.json
+    ├── Dockerfile                        # frontend image (local-dev only)
+    ├── nginx.conf                        # SPA routing + /api proxy for nginx runtime
+    └── src/
+```
 
-- root `pom.xml` with `<packaging>pom</packaging>`
-- root `lombok.config`
-- root `config/check_style_config.xml`
-- root `config/check_style_suppressions.xml`
+**Hard rules** (the principle: every artifact lives in the folder of the
+thing it serves; root is reserved for project-level concerns):
 
-## Backend Layout
+- Parent `pom.xml` lives at `backend/pom.xml`, NOT at project root.
+- `lombok.config` lives at `backend/lombok.config`, NOT at root.
+- `config/checkstyle*.xml` live at `backend/config/`, NOT at root.
+- `Dockerfile` is split: `backend/Dockerfile` for the backend image,
+  `frontend/Dockerfile` for the frontend image. No monolithic root Dockerfile.
+- `docker-compose.yml` stays at root because it orchestrates both services
+  plus PostgreSQL — that's the one Docker-related file that's project-level.
 
-Use Maven parent + modules. Keep generated, application, business, persistence and integration code separated.
+Build invocation: `mvn -f backend/pom.xml ...` from root, or
+`cd backend && mvn ...`.
 
-Recommended Java modules:
+## Backend modules
 
-- `backend/application`: Spring Boot entrypoint, REST controllers, generated API implementations, security, request mapping
-- `backend/service`: business use cases, validation, orchestration
-- `backend/domain`: JPA entities, repositories, domain enums, domain exceptions
-- `backend/db`: Liquibase changelogs and DB seed/demo data
-- `backend/external-services`: BigQuery and external API adapters
-- `backend/common`: shared errors, paging, logging helpers, utility classes
-- `backend/application/src/main/java/.../observability`: usage logging configuration and request/action logging adapters
+Maven parent + modules. Keep generated, application, business, persistence and
+integration code separated:
+
+- `backend/application` — Spring Boot entrypoint, REST controllers, generated
+  API implementations, security, request mapping, observability glue
+- `backend/service` — business use cases, validation, orchestration
+- `backend/domain` — JPA entities, repositories, domain enums/exceptions
+- `backend/db` — Liquibase changelogs and seed/demo data
+- `backend/external-services` — external API adapters (and any future remote sinks)
+- `backend/common` — shared errors, paging, logging helpers
 
 Rules:
+- Controllers implement generated OpenAPI interfaces and stay thin.
+- Services own business decisions.
+- Entities and repositories do not appear in REST contracts.
+- DB schema changes go through Liquibase.
+- Usage logging follows
+  `templates/generated-project/observability/usage-logging-rules.md`.
 
-- controllers implement generated OpenAPI interfaces
-- controllers stay thin
-- services own business decisions
-- repositories and entities stay out of REST API contracts
-- DB schema changes go through Liquibase
-- usage logging follows `templates/generated-project/observability/usage-logging-bigquery-rules.md`
+## Frontend layout
 
-## Frontend Layout
+Feature-first React (Bulletproof React shape, see
+`templates/generated-project/frontend/canonical-react-frontend-rules.md`):
 
-Use feature-first React structure inspired by the Bulletproof React architecture.
+```
+frontend/src/app          # providers, router, global error boundary, shell
+frontend/src/pages        # route-level composition only
+frontend/src/features     # feature modules (UI + hooks + feature API)
+frontend/src/entities     # reusable domain UI/models
+frontend/src/shared/api   # generated OpenAPI types + auth-aware fetcher
+frontend/src/shared/ui    # reusable design-system components
+frontend/src/shared/lib   # framework-agnostic helpers
+frontend/src/shared/config
+```
 
-Recommended structure:
+## Runtime: Replit vs local-dev
 
-- `frontend/src/app`: app providers, router, global error boundary, app shell
-- `frontend/src/pages`: route-level composition only
-- `frontend/src/features`: feature modules with UI, hooks and feature-local API orchestration
-- `frontend/src/entities`: reusable domain UI/models when shared across features
-- `frontend/src/shared/api`: generated OpenAPI types, API client, auth-aware fetcher
-- `frontend/src/shared/ui`: reusable design-system-like components
-- `frontend/src/shared/lib`: framework-agnostic helpers
-- `frontend/src/shared/config`: runtime config reader and validation
+| Aspect | Replit run | Local-dev run |
+|---|---|---|
+| PostgreSQL | Replit SQL Database via `DATABASE_URL` (libpq URL with `sslmode=require`); `ReplitDatabaseUrlPostProcessor` parses it into a `HikariDataSource` | `docker-compose --profile local` PostgreSQL service |
+| Backend port | `5000` (Replit maps to external `80`) | `8080` (mapped to host) |
+| Frontend dev | Vite on `5173` mapped 1:1 (workspace preview only) | Vite on `5173` |
+| Frontend in **Deployment** | Spring Boot serves the built `frontend/dist/` from `src/main/resources/static/` (single public process on external 80). Vite is not running. | n/a |
+| Secrets | Replit Secrets pane | `.env` (gitignored) |
+| Build | Maven + Vite via `.replit` workflow (workspace) or single `mvn package` (deployment, frontend-maven-plugin runs npm) | `mvn package`, `npm run build`, or `docker compose up` |
 
-Rules:
+Spring profile naming:
+- Replit: profile `replit` (set via `.replit` `[env]`, reads `DATABASE_URL`, Hikari pool `2–3`).
+- Local docker-compose: profile `local` (Hikari pool `50`).
 
-- no backend calls directly from page components
-- server state is handled through TanStack Query
-- generated OpenAPI types are the source of truth for API payloads
-- frontend never reaches DB, BigQuery, service-account keys or secrets
+Both profiles share `application.yml` as the base and override only what differs.
+See `.agents/skills/backend-java-feature/references/database-url-translation.md`.
 
-## Local Environment
+## Local-dev dry-run (handoff requirement only)
 
-Local environment must be reproducible through Docker Compose:
+```bash
+docker compose --profile local config
+docker compose --profile local up --build -d
+curl -f http://localhost:8080/<app-context-path>/actuator/health
+curl -f http://localhost:8080/<app-context-path>/actuator/prometheus
+docker compose --profile local down -v
+```
 
-- `docker compose --profile local config`
-- `docker compose --profile local up --build -d`
-- `docker compose --profile local down -v`
-
-No undocumented manual infrastructure is allowed for a local demo.
+Skip this on Replit — it does not provide Docker.

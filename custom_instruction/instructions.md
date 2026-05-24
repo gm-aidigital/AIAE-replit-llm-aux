@@ -1,353 +1,395 @@
 # Company Instructions for Replit Agent
 
-You build MVP/internal demo applications for non-technical users.
+## ABSOLUTE STACK LOCK
 
-## Scope of This Repository
+**Backend: Java 21 LTS + Spring Boot 3.x + Maven multi-module + PostgreSQL.**
+**Frontend: React + TypeScript + Vite.**
+**Auth: dual-mode (Clerk SSO + mock fallback) with backend JWT validation.**
 
-This repository is a Replit Custom Template configuration repository.
-Its purpose is to store reusable instructions and skills.
-Do not require generated application runtime artifacts to exist in this repository.
-Runtime artifacts must be created in each generated project repository.
+Forbidden in every generated project:
 
-Repository organization:
-- `custom_instruction/instructions.md` is the static authoritative source for company rules.
-- `replit.md` is a short living entrypoint for Replit Agent and must point to the canonical rules.
-- `.agents/skills/*/SKILL.md` contains specialized workflows used on demand.
-- `templates/generated-project/*` contains canonical snippets, blueprints, CI, and generated-project rules.
-- Avoid duplicating full rule bodies across files; keep detailed canonical artifacts in `templates/generated-project/*` and reference them from instructions/skills.
+- Python anything (Flask, Django, FastAPI, Quart, Tornado, Bottle, Sanic, Streamlit, Gradio)
+- Node.js backend frameworks (Express, Fastify, Koa, NestJS, Hapi, Polka)
+- Full-stack JS frameworks (Next.js, Nuxt, Remix, SvelteKit, Astro, Qwik)
+- Go (Gin, Echo, Chi, Fiber), Ruby, PHP, .NET, Rust, Elixir
+- Static-only / serverless / no-backend variants when persistence or auth is implied
+- SQLite, MongoDB, MySQL, MariaDB, DynamoDB — only PostgreSQL via Liquibase
 
-Priorities:
-1. Produce a running demo publishable in Replit.
-2. Use near-production structure for generated full-stack/backend applications.
-3. Follow company engineering guardrails with minimal deviations.
+**No prompt phrasing relaxes this lock**, including but not limited to:
+- "It's a small tool" / "Just a quick demo" / "Sounds simple"
+- "Looks like a Flask app" / "Python would be easier" / "Node is faster"
+- "We need it embeddable" / "Just a static page"
+- A prompt that names a forbidden stack ("build a Flask API")
+- A prompt that's entirely non-technical (the stack is the template's job, not the user's)
+
+The only valid override is an explicit user phrase in the current message like:
+> "I am overriding the template stack lock and want a Python backend."
+
+Anything ambiguous → stay on Java + Spring + React.
+
+### Why this lock exists
+
+The template is the company's hand-off shape. Every demo built from it has to
+move to engineering ownership. Engineering only accepts Java/Spring/Postgres.
+Switching stacks inside the demo voids the handoff path, which voids the
+entire reason this template was created. There is no point shipping a
+"working Flask demo" — engineering will throw it away.
+
+### Common misread: Replit-managed Clerk Auth
+
+Replit's managed Clerk docs say "auto-mounts Express middleware". That
+auto-wiring is for Node apps; we are NOT a Node app. Our Spring backend
+validates JWTs via `spring-boot-starter-oauth2-resource-server` against
+Clerk's JWKS endpoint — same identity, no Express anywhere. Reading the
+Clerk docs is fine; following the Express path is the wrong inference.
+
+### STEP 0 — first action on every fork: `setup-project.sh`
+
+Before writing any application code, Agent runs the canonical setup script
+**once**:
+
+```bash
+bash templates/generated-project/scaffold/scripts/setup-project.sh
+```
+
+This script (idempotent, safe to re-run):
+
+1. Installs the canonical `.gitignore` at project root (overwrites the
+   template's gitignore). This is **the** mechanism that keeps the
+   template control plane (`.agents/`, `templates/`, `custom_instruction/`,
+   `AGENTS.md`, `replit.md`) **out** of git pushes — those files stay in
+   the Replit workspace because Agent reads them every conversation, but
+   they never reach the company's git repo.
+2. Deletes Replit's auto-injected Python files (`main.py`, `pyproject.toml`,
+   `uv.lock`, `requirements.txt`, `Pipfile*`, `poetry.lock`, `__pycache__/`,
+   `.venv/`).
+3. `git rm --cached` any of the above if git already grabbed them.
+4. Strips `python-3.11` from `.replit` `modules`.
+5. Strips `[agent] integrations = ["flask_*" | "django_*" | "fastapi_*"]`
+   from `.replit`.
+
+If any of those survive into the generated project, the safety review
+(`mvp-safety-review/SKILL.md`) and the generated-project CI hard-fail.
+
+#### Why a script and not "Agent does it manually"
+
+Past generation attempts (see `templates/generated-project/scaffold/scripts/setup-project.sh`'s
+companion notes in commits) showed Agent skipped one or two cleanup steps
+under token pressure. The script removes the choice — one command, all
+five steps, can't be partially done.
+
+---
+
+You build MVP / internal-demo applications for non-technical product users.
+
+This repository is a Replit Custom Template configuration repository. It
+stores reusable rules, skills, and canonical generated-project artifacts.
+**Runtime artifacts (`pom.xml`, `Dockerfile`, `docker-compose.yml`, etc.)
+belong in each generated project repository, not here.**
+
+Each rule below has a single canonical source file. Treat the canonical file
+as authoritative; never restate its content in another file.
+
+## Priorities
+
+1. Produce a demo that runs and publishes on Replit out of the box.
+2. Use the near-production structure so the demo can be handed off later.
+3. Follow company guardrails (auth, observability, OpenAPI) with minimal deviation.
 4. Keep code exportable to company Git.
-5. Never use production secrets or production data in MVPs.
+5. Never use production secrets or production data.
 6. Prefer simple, maintainable code over clever abstractions.
 
-## MVP Policy
+## Runtime model (Replit + local-dev)
 
-By default:
-- Use dual-mode authentication:
-  - real Google SSO path (Clerk preferred or project-standard OIDC)
-  - mock local-user fallback when keys are missing
-- Use demo CSV/JSON fixtures, approved demo APIs, or approved BigQuery backend integration.
-- Do not connect to production BigQuery without explicit approval.
-- Do not use production service accounts without explicit approval.
-- Do not use production Google SSO secrets.
-- Do not store real secrets in generated code.
-- Do not use raw sensitive/customer data.
-- Frontend must never access DB, BigQuery, service-account keys, or secrets directly.
+Generated projects must run in two environments without code changes:
 
-If real/internal data is required, use an approved backend API. If none exists, clearly state that engineers must provide one.
-All keys must be read from properties/env variables.
+- **Replit workspace** — Spring profile `replit`, port `5000`, Replit SQL
+  Database via `DATABASE_URL` (the only env var the managed DB injects;
+  PG* are legacy Neon-only and not provided). Workspace `[env]` in `.replit`
+  sets `SPRING_PROFILES_ACTIVE=replit`. Secrets come from the Replit Secrets pane.
+- **Local-dev machine** — Spring profile `local`, port `8080`,
+  `docker-compose --profile local` for Postgres, `.env` (gitignored).
 
-## Mandatory Project Artifacts
+Docker and `docker-compose.yml` are generated **only for the local-dev path**.
+They are not invoked on Replit.
 
-For every generated full-stack or backend MVP, create these files in the generated project repository:
+Deployment: when persistence is used, the deployment target is **Reserved VM**
+(`deploymentTarget = "gce"` in `.replit`). Autoscale is unsuitable for Java +
+JDBC + JVM warmup.
 
-- `README.md`
-- `.env.example`
-- `.gitignore`
-- `Dockerfile`
-- `docker-compose.yml`
-- `.github/workflows/ci.yml`
-- root Maven parent `pom.xml` if Java backend exists
-- root `lombok.config`
-- root `config/check_style_config.xml`
-- root `config/check_style_suppressions.xml`
+`DATABASE_URL` → JDBC translation, SSL handling and pool sizing:
+`.agents/skills/backend-java-feature/references/database-url-translation.md`.
 
-Do not skip Dockerfile, docker-compose, README, `.env.example`, `.gitignore`, CI, Checkstyle, Lombok config, or parent POM for Java backend generated projects.
+Canonical structure: `templates/generated-project/structure/near-production-project-structure.md`.
+
+## Stack policy
+
+For fast Replit MVPs choose the simplest stack that runs and publishes on
+Replit. If the user requests a Java backend, or engineering handoff requires
+one, use the Java baseline:
+
+- Java 21 LTS · Spring Boot 3.x · Maven multi-module
+  (Java 25 LTS is the long-term target; switch when Replit's pinned
+  nixpkgs channel adds `pkgs.jdk25`)
+- REST APIs, OpenAPI contract-first
+- Liquibase, PostgreSQL, HikariCP
+- JUnit 5 + Mockito + AssertJ + Spring Boot Test
+- Lombok (root `lombok.config`)
+- Checkstyle (root `config/checkstyle.xml`, `config/checkstyle-suppressions.xml`)
+- JaCoCo with phased coverage gate:
+  - Phase 1 (initial build) / Phase 2 (post-working MVP): `0.00` default —
+    Agent writes tests AFTER the app runs end-to-end, then ratchets the
+    gate to whatever the suite delivers.
+  - Phase 3 (handoff): `0.80` enforced via `mvn -Phandoff verify`.
+  - Full policy: `templates/generated-project/testing/testing-policy.md`
+- Structured JSON logs to stdout
+
+Do not replace a requested Java/Spring backend with Node.js/Express without
+explicit user approval.
+
+## Mandatory generated-project artifacts
+
+For every generated full-stack or backend MVP, the project repository must contain:
+
+```
+# project root — project-level concerns only
+README.md                .env.example                .gitignore
+.replit                  replit.nix
+docker-compose.yml       # local-dev only; orchestrates everything
+.github/workflows/ci.yml
+
+# backend/ — ALL Java/Maven artifacts (parent pom, configs, modules, Dockerfile)
+backend/pom.xml                                # parent, <packaging>pom</packaging>
+backend/lombok.config
+backend/config/checkstyle.xml
+backend/config/checkstyle-suppressions.xml
+backend/Dockerfile                             # backend image (local-dev only)
+backend/application/src/main/resources/static/api/v1/specs/openapi.yaml
+backend/application/src/main/resources/application.yml
+backend/application/src/main/resources/application-replit.yml
+backend/application/src/main/resources/application-local.yml
+backend/db/src/main/resources/db/changelog/db.changelog-master.xml
+backend/db/src/main/resources/db/changelog/changes/0001-usage-events.xml
+
+# frontend/ — ALL JS/TS artifacts
+frontend/package.json    frontend/vite.config.ts    frontend/tsconfig.json
+frontend/Dockerfile      frontend/nginx.conf        # local-dev only
+```
+
+**Layout principle**: everything that serves the backend lives in
+`backend/`; everything that serves the frontend lives in `frontend/`.
+Root only holds files that orchestrate both (docker-compose) or that
+Replit requires at root (.replit, replit.nix).
 
 `lombok.config` must contain:
-
 ```properties
 lombok.addLombokGeneratedAnnotation = true
 ```
 
-Checkstyle files must be copied from this template repository:
-- `config/check_style_config.xml`
-- `config/check_style_suppressions.xml`
+Canonical files to copy from this template (all live under
+`templates/generated-project/`):
+- Checkstyle:
+  `scaffold/backend/config/checkstyle.xml`,
+  `scaffold/backend/config/checkstyle-suppressions.xml`
+  → copy into generated `backend/config/`.
+- Lombok:
+  `scaffold/backend/lombok.config` → copy into generated `backend/`.
+- CI: `.github/workflows/ci.yml` → copy into generated `.github/workflows/`.
+- Maven plugin snippets: `pom-snippets/*.xml` (referenced from parent pom).
+- Dockerfiles: `scaffold/backend/Dockerfile`, `scaffold/frontend/Dockerfile`,
+  `scaffold/frontend/nginx.conf`, `scaffold/docker-compose.yml`.
+- **Starter files (most-recently-canonical shape of each mandatory file):**
+  `templates/generated-project/scaffold/` — parent `pom.xml`, `Application.java`,
+  `ReplitDatabaseUrlPostProcessor.java`, `application*.yml`, `logback-spring.xml`,
+  `lombok.config`, Liquibase master + `usage_events` changelog,
+  `.env.example`, `Dockerfile`, `docker-compose.yml`, `frontend/`
+  (package.json, vite.config.ts, tsconfig.json, runtime.ts, client.ts),
+  `README.md.template`. Replace `PACKAGE_REPLACE_ME` and
+  `/some-path-by-app-name` placeholders.
 
-`git-commit-id-maven-plugin` is mandatory for Java backend projects.
-Use canonical snippet from this template repository:
-- `templates/generated-project/pom-snippets/git-commit-id-maven-plugin.xml`
+## Authoritative references
 
-`openapi-generator-maven-plugin` is mandatory for Java backend projects with REST APIs.
-Use canonical snippet from this template repository:
-- `templates/generated-project/pom-snippets/openapi-generator-maven-plugin.xml`
+Each topic has one canonical file. Read it before generating; do not duplicate.
 
-Generated project structure must follow:
-- `templates/generated-project/structure/near-production-project-structure.md`
+| Topic | Canonical file |
+|---|---|
+| Project structure | `templates/generated-project/structure/near-production-project-structure.md` |
+| OpenAPI rules | `templates/generated-project/openapi/canonical-openapi-rules.md` |
+| OpenAPI review checklist | `templates/generated-project/openapi/openapi-review-checklist.md` |
+| Frontend rules | `templates/generated-project/frontend/canonical-react-frontend-rules.md` |
+| Auth (dual-mode) | `templates/generated-project/auth/google-sso-clerk-blueprint.md` |
+| Usage logging | `templates/generated-project/observability/usage-logging-rules.md` |
+| HTTP request/response logging | `templates/generated-project/observability/logbook-http-logging-rules.md` |
+| Error handling (AppException + GlobalExceptionHandler) | `templates/generated-project/errors/error-handling-pattern.md` |
+| Token-efficient generation | `templates/generated-project/generation/token-efficient-generation-rules.md` |
+| Testing policy (phased) | `templates/generated-project/testing/testing-policy.md` |
+| HikariCP / JPA runtime baseline | `.agents/skills/backend-java-feature/references/hikari-jpa-baseline.yml` |
+| Java backend workflow | `.agents/skills/backend-java-feature/SKILL.md` |
+| OpenAPI workflow | `.agents/skills/openapi-contract-first/SKILL.md` |
+| Frontend workflow | `.agents/skills/frontend-react-feature/SKILL.md` |
+| Safety review (pre-publish) | `.agents/skills/mvp-safety-review/SKILL.md` |
+| Engineering handoff | `.agents/skills/engineering-handoff/SKILL.md` |
+| Replit DataSource Java config | `.agents/skills/backend-java-feature/references/ReplitDatabaseUrlPostProcessor.java` |
+| Replit profile YAML snippet | `.agents/skills/backend-java-feature/references/application-replit.yml` |
+| Starter scaffold (copy into generated app) | `templates/generated-project/scaffold/` |
 
-Token-efficient generation must follow:
-- `templates/generated-project/generation/token-efficient-generation-rules.md`
+## Auth (mandatory dual-mode)
 
-Usage logging must follow:
-- `templates/generated-project/observability/usage-logging-bigquery-rules.md`
+Generated projects must support `AUTH_MODE=auto|sso|mock` and run in both
+modes without code changes.
 
-HTTP request/response logging must follow:
-- `templates/generated-project/observability/logbook-http-logging-rules.md`
+- `auto` (default): use Clerk SSO when its keys exist; otherwise mock.
+- `sso`: fail fast if Clerk keys are missing.
+- `mock`: skip external IdP, expose local mock login.
 
-## Stack Policy
+Backend validates Bearer JWT (signature via IdP JWKS; `iss`, `aud`, `exp`,
+`nbf` when present). `401` for missing/invalid token; `403` for unauthorized.
+Frontend never proves auth on its own state; backend is source of truth.
 
-For fast Replit MVPs, choose the simplest stack that runs and publishes reliably in Replit.
+Full contract and env placeholders:
+`templates/generated-project/auth/google-sso-clerk-blueprint.md`.
 
-If the user explicitly requests Java backend or engineering handoff backend, Java baseline is Java 25 and Spring Boot baseline is Spring Boot 4.x:
+## Database policy
 
-- Use Java 25.
-- Use Spring Boot 4.x.
-- Use Maven.
-- Use REST APIs.
-- Use OpenAPI contract-first.
-- Use Liquibase for DB migrations.
-- Use JUnit 5, Mockito, AssertJ, Spring Boot Test.
-- Use Lombok with root `lombok.config`.
-- Use Checkstyle from root `config` folder.
-- Use JaCoCo with 80% minimum line coverage.
-- Use JSON structured logs to stdout.
+PostgreSQL only. IDs: Java `Long`, PostgreSQL `BIGINT`. Strings: PostgreSQL
+`TEXT`. No `VARCHAR`, no MySQL `LONGTEXT`. DDL through Liquibase.
 
-Do not replace a requested Java/Spring backend with Node.js/Express unless explicitly approved.
+### No PostgreSQL `CREATE TYPE … AS ENUM`
 
-## Docker and Local Dry Run
+Dictionary / lookup data (statuses, roles, departments, kinds, categories,
+etc.) **must** live in a dedicated table with `BIGINT id` primary key and
+`TEXT code`/`TEXT name` columns. Other tables reference the dictionary by
+`*_id BIGINT` foreign key.
 
-Every Java/backend generated project must include:
+Reasons we forbid Postgres enums:
+- Adding a new value requires `ALTER TYPE … ADD VALUE` which is fragile
+  inside Liquibase changesets (cannot run in a transaction in older PG;
+  irreversible).
+- Removing or reordering values requires recreating the type — every
+  dependent column has to be migrated.
+- Java side either hardcodes Java enum (mirror drift) or uses `String` with
+  no DB-level constraint.
+- Dictionary tables let you carry localised labels, `display_order`,
+  `is_active`, `valid_from`/`valid_to`, etc. — features that Postgres enums
+  cannot express.
 
-- root `Dockerfile`
-- root `docker-compose.yml`
-- local Spring profile, normally `local`
-- docker-compose profile named `local`
-- PostgreSQL service for local run if DB is needed
-- healthcheck for backend where possible
+Canonical shape (using a generic `<entity>_<dimension>` naming — replace
+`resource` / `kind` with the actual domain term):
 
-DB is needed when the project contains any persistence requirement, JPA entity, repository, Liquibase changelog, SQL migration, audit table, saved user data, uploaded metadata, or backend cache/state that must survive a process restart.
+```xml
+<changeSet id="0010-resource-kind-dict" author="agent">
+  <createTable tableName="resource_kind">
+    <column name="id"   type="BIGINT" autoIncrement="true">
+      <constraints primaryKey="true" nullable="false"/>
+    </column>
+    <column name="code" type="TEXT">
+      <constraints nullable="false" unique="true"/>
+    </column>
+    <column name="name" type="TEXT"><constraints nullable="false"/></column>
+    <column name="display_order" type="INT" defaultValueNumeric="0"/>
+    <column name="is_active" type="BOOLEAN" defaultValueBoolean="true"/>
+  </createTable>
+  <insert tableName="resource_kind"><column name="code" value="KIND_A"/><column name="name" value="Kind A"/></insert>
+  <insert tableName="resource_kind"><column name="code" value="KIND_B"/><column name="name" value="Kind B"/></insert>
+</changeSet>
 
-When DB is needed, Replit must create local DB wiring automatically:
-- add PostgreSQL service to `docker-compose.yml`
-- use `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`
-- add a named volume for PostgreSQL data
-- add PostgreSQL healthcheck
-- configure backend datasource env vars in compose
-- wire backend `depends_on` to PostgreSQL health where compose version supports it
-- add Liquibase changelog skeleton before adding JPA entities
-- local demo must not require a manually created external database
+<changeSet id="0011-resource" author="agent">
+  <createTable tableName="resource">
+    <column name="id" type="BIGINT" autoIncrement="true">
+      <constraints primaryKey="true" nullable="false"/>
+    </column>
+    <!-- ... -->
+    <column name="kind_id" type="BIGINT">
+      <constraints nullable="false" foreignKeyName="fk_resource_kind"
+                   references="resource_kind(id)"/>
+    </column>
+  </createTable>
+</changeSet>
+```
 
-After generation or significant backend changes, run dry run:
+Java side: a small `ResourceKind` JPA entity
+(`@Entity @Table(name = "resource_kind")`) + `ResourceKindRepository`. Java
+code references kinds by **code string** (constants in `ResourceKindCode`)
+and looks up the id once at startup or per call. The DB column is
+`kind_id BIGINT FK` — never `kind TEXT`, never `kind resource_kind_enum`.
 
-1. `docker compose --profile local config`
-2. `docker compose --profile local up --build -d`
-3. Check health endpoint: `curl -f http://localhost:8080/<app-context-path>/actuator/health`
-4. Check Prometheus endpoint: `curl -f http://localhost:8080/<app-context-path>/actuator/prometheus`
-5. `docker compose --profile local down -v`
+PostgreSQL is required whenever the project has any JPA entity, repository,
+Liquibase changelog, audit state, or persisted user/upload data. When required:
+- **Replit run** uses Replit's SQL Database via the `postgresql-16` module
+  declared in `.replit`. Replit injects one env var, `DATABASE_URL`
+  (libpq format, `sslmode=require`). The Java backend converts it to JDBC
+  at startup and sets HikariCP `maximum-pool-size: 2–3` on the `replit`
+  profile. See `.agents/skills/backend-java-feature/references/database-url-translation.md`
+  and `application-replit.yml`.
+- **Local-dev run** adds a PostgreSQL service to `docker-compose.yml` under
+  profile `local`, with named volume, healthcheck, and backend `depends_on`.
 
-If execution is impossible in the current environment, document the exact reason and exact commands in README of the generated project.
+Liquibase changelog skeleton must exist before any JPA entity is added.
 
-## GitHub Actions CI Policy
+## Usage logging policy
 
-For generated Java backend projects, create `.github/workflows/ci.yml` with this mandatory baseline:
-- unit tests + Checkstyle + JaCoCo coverage gate (80%)
-- optional/manual integration tests with PostgreSQL
-- docker-compose local profile dry run
-- Java 25 setup and Maven cache
-- upload test artifacts where useful
-- verify `git-commit-id-maven-plugin` is configured in project POMs
-- verify `openapi-generator-maven-plugin` is configured in project POMs when REST API exists
-- if React frontend exists, generate API types from OpenAPI and run frontend typecheck/build/tests
-- verify usage logging env placeholders exist and service account keys are not committed
+One event per meaningful user action → the app's own PostgreSQL `usage_events`
+table. Manager runs SQL for estimation. `PostgresUsageLogger` is bound by
+default; `NoOpUsageLogger` takes over when `USAGE_LOGGING_ENABLED=false` or
+required settings are missing.
 
-Use the canonical template CI file from this repository and copy it into generated projects:
-- `templates/generated-project/.github/workflows/ci.yml`
+Full contract, schema, and Liquibase changelog:
+`templates/generated-project/observability/usage-logging-rules.md`.
 
-OpenAPI structure and generation rules must follow:
-- `templates/generated-project/openapi/canonical-openapi-rules.md`
+Never:
+- log health, actuator, static, OPTIONS, prefetch, probe traffic,
+- log secrets, JWTs, raw request bodies, raw documents, third-party PII.
 
-## Java Backend Configuration
+## Logging policy
 
-For Java backend projects, generate local/application configuration with:
+Backend emits structured JSON logs to stdout. Plain text is not acceptable
+unless explicitly approved. Include request/correlation IDs where available.
 
-- HikariCP config exactly according to company defaults.
-- `spring.jpa.hibernate.ddl-auto: validate`
-- `spring.jpa.open-in-view: false`
-- PostgreSQL database type.
-- Hibernate safe query settings.
-- Actuator endpoints exposed for local/MVP profile.
-- Do not override actuator base path unless explicitly requested.
-- Health endpoint must be exposed as `GET /<app-context-path>/actuator/health`.
-- Prometheus metrics endpoint must be exposed as `GET /<app-context-path>/actuator/prometheus`.
-- `server.servlet.context-path` based on app name, for example `/sales-dashboard`.
+Inbound and outbound HTTP traffic is logged via Zalando Logbook with masking
+applied. Full contract:
+`templates/generated-project/observability/logbook-http-logging-rules.md`.
 
-Do not leave `/some-path-by-app-name` placeholder in generated code.
+## L2 cache policy
 
-## L2 Cache Policy
+Ehcache via `ehcache.xml` only for explicit candidates (read-mostly
+dictionaries, stable lookup tables, expensive low-write queries). Define
+regions explicitly. Use `hibernate-cache` prefix and
+`missing_cache_strategy: fail`. Never enable cache blindly.
 
-If L2 cache candidates exist, use Ehcache configured through `ehcache.xml`.
+## CI policy (generated Java backend)
 
-Good candidates:
-- read-mostly reference/dictionary entities
-- stable lookup tables
-- high-read/low-write entities
-- expensive repeated DB lookups
+Copy `templates/generated-project/.github/workflows/ci.yml` into each
+generated project and set `APP_CONTEXT_PATH`. Baseline checks:
+- unit tests + Checkstyle + JaCoCo 0.80 gate
+- optional integration tests with PostgreSQL
+- local-dev docker-compose dry run (skipped on Replit)
+- Java 21 setup + Maven cache
+- `git-commit-id-maven-plugin` configured
+- `openapi-generator-maven-plugin` configured with canonical options when
+  REST API exists
+- frontend OpenAPI codegen + build/typecheck when frontend exists
+- service account JSON not committed
+- usage logging env placeholders present in `.env.example`
 
-Rules:
-- Do not enable L2 cache blindly.
-- Add cache only for explicit candidates.
-- Use `ehcache.xml` under `src/main/resources`.
-- Define every entity/query cache region explicitly.
-- Use Hibernate region prefix `hibernate-cache`.
-- Use `missing_cache_strategy: fail`.
-- Default query-results region must not silently cache everything.
+## Frontend policy
 
-## PostgreSQL Data Types
+React + TypeScript + Vite. Pages stay thin; API calls and business logic
+live in feature hooks/services. Always handle loading / empty / error /
+success. Accessible UI. Frontend never accesses the DB or secrets directly.
+Use the typed `openapi-typescript` + `openapi-fetch` client and TanStack Query.
 
-Database IDs must be Java `Long` and PostgreSQL `BIGINT`.
+Full rules: `templates/generated-project/frontend/canonical-react-frontend-rules.md`.
 
-For PostgreSQL string columns:
-- Use `TEXT` by default.
-- Use `TEXT` for long text.
-- Do not use `VARCHAR`.
-- Do not use MySQL-specific `LONGTEXT`.
+## Code ownership
 
-## Frontend Policy
-
-- Use React + TypeScript.
-- Follow canonical frontend rules from `templates/generated-project/frontend/canonical-react-frontend-rules.md`.
-- Keep pages thin.
-- Move API calls and business logic into hooks/services.
-- Always handle loading, empty, error, and success states.
-- Use accessible UI.
-- Do not put secrets in frontend env vars.
-- Treat all frontend code as public.
-- Frontend must never access DB/BigQuery/secrets directly.
-- Frontend must communicate with backend through generated types from the committed OpenAPI YAML.
-- Use `openapi-typescript` + `openapi-fetch` for a small generated-typed client.
-- Use TanStack Query for server state.
-- Do not handwrite frontend DTOs that duplicate OpenAPI schemas.
-
-Canonical frontend OpenAPI source:
-- `src/main/resources/static/api/v1/specs/openapi_3.0.3_spec.yaml` relative to the backend application module
-
-## Authentication Policy (Mandatory)
-
-Generated projects must support dual-mode auth:
-- real Google SSO flow (Clerk preferred, or equivalent OIDC integration if project standards require it)
-- mock local-user fallback mode when SSO keys are missing
-
-Auth mode contract:
-- auth mode must be selected through configuration/properties/env
-- no hardcoded secrets
-- login UI must exist and work in fallback mode
-- when keys are provided, same project should switch to real SSO without code rewrite
-- `AUTH_MODE=auto|sso|mock` must be supported
-- `auto`: choose real SSO only when required keys are present; otherwise use mock mode
-- `sso`: fail fast on startup if required SSO settings are missing
-- `mock`: start without external IdP and use local mock login flow
-
-Google SSO flow contract (must be explicit in generated projects):
-1. Frontend starts Google sign-in (Clerk preferred) and obtains JWT token.
-2. Frontend sends `Authorization: Bearer <jwt>` to backend on every protected API call.
-3. Backend is the source of truth for auth status; frontend session state alone is never trusted.
-4. Frontend must process auth errors consistently:
-   - `401`: clear local auth state and redirect to login
-   - `403`: show access denied state
-
-Backend JWT validation requirements (real SSO mode, mandatory):
-- configure backend as OAuth2 Resource Server (`spring-boot-starter-oauth2-resource-server`)
-- verify JWT signature against IdP JWKS (`issuer-uri` discovery or explicit `jwk-set-uri`)
-- validate token `iss` (issuer), `aud` (audience/client), `exp`, and `nbf` when present
-- reject invalid/missing token with `401`
-- reject authenticated user without required permission/role with `403`
-- map trusted claims (`sub`, `email`, roles/groups claim) to backend principal and authorities
-- do not trust frontend-only auth state without backend token validation
-- issuer/audience must be provider-correct:
-  - Clerk path: issuer is Clerk issuer URL; audience is configured Clerk token audience
-  - direct Google OIDC path: issuer is Google issuer; audience is `GOOGLE_CLIENT_ID`
-
-Mock fallback contract (mandatory):
-- provide mock login endpoint and visible login form for local/demo use
-- mock mode must still use Bearer JWT for protected APIs (same API contract as SSO mode)
-- mock JWT signing key and default mock user must come from properties/env
-- generated projects should include `GET /api/v1/auth/me` endpoint that returns current user in both modes
-
-OpenAPI contract requirements for auth-protected APIs:
-- define bearer JWT security scheme
-- mark protected operations with security requirements
-- include explicit `401` and `403` responses with examples
-- document auth bootstrap endpoint(s), including mock login endpoint if mock mode exists
-
-The canonical auth implementation contract is defined in:
-- `templates/generated-project/auth/google-sso-clerk-blueprint.md`
-
-Recommended properties/env placeholders:
-- `AUTH_MODE` (`auto|sso|mock`)
-- `AUTH_ISSUER_URI`
-- `AUTH_JWKS_URI` (if issuer discovery is not used)
-- `AUTH_AUDIENCE`
-- `CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY` (if Clerk is used)
-- `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` (if direct Google OIDC is used)
-- `AUTH_MOCK_USER` (fallback demo user)
-- `AUTH_MOCK_JWT_SECRET` (fallback mock JWT signing secret)
-
-Runtime config clarification:
-- preferred flow is `Google -> Clerk -> application`
-- in that preferred flow, Google OAuth client credentials are configured in Clerk, not consumed as normal application runtime secrets
-- do not expose Google client secret to frontend code
-
-## BigQuery Policy
-
-If business requirements need BigQuery:
-- add backend integration and dependency
-- keep frontend isolated from direct BigQuery access
-- read all BigQuery credentials/configuration from properties/env
-- never commit real credentials
-
-## Usage Logging Policy (Mandatory)
-
-Generated backend services must implement fire-and-forget usage logging to the shared BigQuery usage table:
-- `aiae-493511.usage_logging_ai_services.usage_logging_ai_services_table`
-
-Rules:
-- follow `templates/generated-project/observability/usage-logging-bigquery-rules.md`
-- do not commit service account JSON keys
-- read credentials from `BQ_USAGE_CREDENTIALS_JSON`
-- include `.env.example` placeholders for `BQ_USAGE_CREDENTIALS_JSON`, `BQ_USAGE_TABLE`, `USAGE_LOG_SERVICE_NAME`, `USAGE_LOG_ENVIRONMENT`, `USAGE_LOGGING_ENABLED`, `USAGE_LOG_LOCAL_FALLBACK_ENABLED`
-- if credentials exist, write to BigQuery
-- if credentials are missing in local/dev and fallback is enabled, write to local PostgreSQL table `usage_log_events`
-- logger must no-op only when usage logging is disabled or tests intentionally disable it
-- logger must never break or delay a user request
-- log meaningful user actions, auth actions, errors, and custom domain events
-- do not log health, actuator, static, OPTIONS, prefetch, or probe traffic
-- do not log secrets, JWTs, raw request bodies, raw documents, service account JSON, or third-party PII
-
-## Logging Policy (Critical)
-
-Backend services must emit structured logs in JSON format to stdout for centralized monitoring compatibility.
-Plain text backend logs are not acceptable unless explicitly approved.
-
-Backend services must log inbound/outbound HTTP request and response metadata and bodies with Zalando Logbook:
-- follow `templates/generated-project/observability/logbook-http-logging-rules.md`
-- add `org.zalando:logbook-spring-boot-starter`
-- log request and response bodies for application endpoints after filtering
-- mask sensitive headers and JSON fields
-- skip health, actuator, swagger, OpenAPI spec, static, OPTIONS, prefetch, and probe traffic
-
-## Code Ownership
-
-Every generated MVP repository must include:
-- README with purpose, owner, data sources, env vars, run/deploy steps, and MVP limitations.
-- `.env.example` with required variables but no real values.
+Every generated MVP includes:
+- README with purpose, owner, data sources, env vars, run/deploy steps,
+  MVP limitations.
+- `.env.example` with placeholders only.
 - Clear folder structure.
 - Git-friendly code exportable to company repositories.
-- GitHub Actions CI file in `.github/workflows/ci.yml`.
+- GitHub Actions CI in `.github/workflows/ci.yml`.
 
-When auth/BigQuery are used, `.env.example` must contain placeholders for:
-- Google SSO / Clerk keys (as applicable)
-- mock-auth toggle/user placeholders
-- BigQuery project and credential-related keys
-
-## Skills
-
-Use these skills when relevant:
-- Backend Java: `.agents/skills/backend-java-feature/SKILL.md`
-- OpenAPI Contract First: `.agents/skills/openapi-contract-first/SKILL.md`
-- Frontend React: `.agents/skills/frontend-react-feature/SKILL.md`
-- MVP safety: `.agents/skills/mvp-safety-review/SKILL.md`
-- Handoff: `.agents/skills/engineering-handoff/SKILL.md`
+`.env.example` always carries the auth placeholders and the three
+usage-logging vars; see the canonical auth and usage-logging files for the
+exact list.

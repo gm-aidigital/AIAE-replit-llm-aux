@@ -1,0 +1,44 @@
+/*
+ * Design tokens — CSS custom properties consumed by every block.
+ * No global element selectors here, only the :root variable scope.
+ * Override per-theme by re-declaring :root.theme-dark, :root.theme-light, etc.
+ */
+
+:root {
+    /* Spacing scale (4px step) */
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-6: 24px;
+    --space-8: 32px;
+
+    /* Radii */
+    --radius-sm: 4px;
+    --radius-md: 8px;
+    --radius-lg: 16px;
+
+    /* Text sizes */
+    --text-sm: 13px;
+    --text-base: 15px;
+    --text-lg: 18px;
+    --text-xl: 22px;
+
+    /* Surfaces */
+    --surface-default: #ffffff;
+    --surface-muted: #f5f6f7;
+    --surface-elevated: #ffffff;
+
+    /* Text colours */
+    --text-default: #1a1f2c;
+    --text-muted: #6b7280;
+    --text-on-accent: #ffffff;
+
+    /* Accent */
+    --accent-primary: #2f6fed;
+    --accent-primary-hover: #2558c4;
+    --accent-danger: #d23a3a;
+
+    /* Borders */
+    --border-default: #e4e7eb;
+}

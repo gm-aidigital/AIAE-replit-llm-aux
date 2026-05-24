@@ -1,0 +1,22 @@
+# application-replit.yml
+#
+# Replit-specific overrides. The actual datasource URL/username/password are
+# derived from DATABASE_URL by ReplitDatabaseUrlPostProcessor BEFORE Spring
+# builds the application context — so we don't need to set them here. We
+# only declare Hikari pool sizing and any other Replit-only tuning.
+
+spring:
+  datasource:
+    hikari:
+      maximum-pool-size: 3       # Replit's managed SQL DB has a low conn ceiling
+      minimum-idle: 0
+      idle-timeout: 30000
+      connection-timeout: 5000
+      auto-commit: false
+
+server:
+  port: ${PORT:5000}
+
+app:
+  usage-logging:
+    environment: ${USAGE_LOG_ENVIRONMENT:dev}

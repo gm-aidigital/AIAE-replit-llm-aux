@@ -1,0 +1,69 @@
+# Base application config. Profile-specific overrides:
+#   - application-replit.yml  → Replit workspace + Reserved VM deploy
+#   - application-local.yml   → docker-compose / local-dev
+#
+# REPLACE before use:
+#   - server.servlet.context-path → /<app-name>
+#
+# !!! DO NOT add `spring.security.oauth2.resourceserver.jwt.*` properties here !!!
+# Spring Boot's OAuth2 auto-config triggers on ANY of those properties (even
+# empty strings) and tries to fetch JWKS from the empty URL at startup.
+# SecurityConfig provides the JwtDecoder bean directly; that's enough to
+# satisfy the resource-server chain without poking auto-config.
+
+spring:
+  application:
+    name: replit-mvp-template
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    database: postgresql
+    properties:
+      hibernate:
+        query.in_clause_parameter_padding: true
+        criteria.literal_handling_mode: bind
+        default_batch_fetch_size: 300
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.xml
+
+server:
+  port: ${PORT:8080}
+  servlet:
+    context-path: /some-path-by-app-name   # REPLACE with /<your-app-name>
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "health,prometheus,info"
+  endpoint:
+    health:
+      show-details: when-authorized
+
+springdoc:
+  swagger-ui:
+    url: /api/v1/specs/openapi.yaml
+
+logging:
+  level:
+    root: INFO
+
+# App-specific config — these become AuthProperties / UsageLoggingProperties
+# via @ConfigurationProperties("app.auth") and ("app.usage-logging").
+app:
+  auth:
+    mode: ${AUTH_MODE:auto}
+    sso:
+      # Only set issuer-uri when AUTH_MODE=sso. SecurityConfig's SSO branch
+      # is gated on AUTH_MODE itself, not on these values being present.
+      issuer-uri: ${AUTH_ISSUER_URI:}
+      jwk-set-uri: ${AUTH_JWKS_URI:}
+      audience:   ${AUTH_AUDIENCE:}
+    mock:
+      default-user: ${AUTH_MOCK_USER:demo-user@example.com}
+      jwt-secret:   ${AUTH_MOCK_JWT_SECRET:}
+  usage-logging:
+    enabled:      ${USAGE_LOGGING_ENABLED:true}
+    service-name: ${USAGE_LOG_SERVICE_NAME:}
+    environment:  ${USAGE_LOG_ENVIRONMENT:dev}

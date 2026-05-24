@@ -1,104 +1,76 @@
 # Canonical React Frontend Rules
 
-Generated React frontends must be maintainable, typed and connected to backend APIs through OpenAPI generation.
-
-The architecture is based on the practical feature-first approach popularized by Bulletproof React, adapted for MVPs that must be handed off to engineering teams.
+Single source of truth for the React frontend of generated projects.
+Bulletproof-React-inspired, adapted for MVP→handoff.
 
 ## Stack
 
-- React
-- TypeScript
-- Vite unless the user explicitly requests another framework
-- TanStack Query for server state
-- `openapi-typescript` for API types
-- `openapi-fetch` for the small typed HTTP client
-- Clerk React SDK when Google SSO is enabled
+- React + TypeScript (strict).
+- Vite (use another framework only if user explicitly asks).
+- `openapi-typescript` (types) + `openapi-fetch` (HTTP client).
+- TanStack Query for server state.
+- Clerk React SDK when SSO is enabled (see
+  `templates/generated-project/auth/google-sso-clerk-blueprint.md`).
+- **Plain CSS files with BEM naming** for styling — NOT CSS Modules,
+  Tailwind, styled-components, Emotion, or CSS-in-JS. See
+  `templates/generated-project/frontend/bem-naming-rules.md`.
 
-## Structure
+## Folder layout
 
-Use this layout:
+```
+src/app          src/pages        src/features
+src/entities     src/shared/api   src/shared/ui
+src/shared/lib   src/shared/config
+```
 
-- `src/app`
-- `src/pages`
-- `src/features`
-- `src/entities`
-- `src/shared/api`
-- `src/shared/ui`
-- `src/shared/lib`
-- `src/shared/config`
+## OpenAPI client generation
 
-## OpenAPI Client Generation
+Source: `../backend/application/src/main/resources/static/api/v1/specs/openapi.yaml`
+(adapt path when backend module differs and document it in README).
 
-Frontend must consume the existing backend OpenAPI YAML. Do not handwrite DTOs that duplicate backend schemas.
-
-Canonical source spec:
-
-- `../backend/application/src/main/resources/static/api/v1/specs/openapi_3.0.3_spec.yaml`
-
-If the generated project uses a different backend module path, keep the spec path explicit in `package.json` scripts and document it in `README.md`.
-
-Required packages:
-
-- `openapi-typescript`
-- `openapi-fetch`
-- `@tanstack/react-query`
-
-Required scripts:
+Required scripts in `frontend/package.json`:
 
 ```json
 {
   "scripts": {
-    "generate:api": "openapi-typescript ../backend/application/src/main/resources/static/api/v1/specs/openapi_3.0.3_spec.yaml -o src/shared/api/generated/schema.d.ts",
+    "generate:api": "openapi-typescript ../backend/application/src/main/resources/static/api/v1/specs/openapi.yaml -o src/shared/api/generated/schema.d.ts",
     "check:api": "npm run generate:api && tsc --noEmit"
   }
 }
 ```
 
-Generated API artifacts:
+Generated artifacts:
+- `src/shared/api/generated/schema.d.ts` (never edited by hand)
+- `src/shared/api/client.ts` (auth-aware fetcher built on `openapi-fetch`)
 
-- `src/shared/api/generated/schema.d.ts`
-- `src/shared/api/client.ts`
+## Rules
 
-Rules:
+- No handwritten DTOs duplicating OpenAPI schemas.
+- No raw `fetch` calls or hardcoded backend URLs in components.
+- Components do not build URLs; the typed client owns paths.
+- TanStack Query for all backend reads/writes; no ad-hoc global state for server data.
+- Every async surface renders loading / empty / error / success.
+- Strict TypeScript; `any` only with isolation + justification.
+- Semantic HTML and keyboard accessibility.
+- **BEM class names** for all styles (`block`, `block__element`, `block--modifier`).
+  Plain CSS only; no CSS Modules / Tailwind / styled-components.
+  See `bem-naming-rules.md` for the full convention and examples.
+- One block per directory: `<block-name>.tsx` + `<block-name>.css` + optional `components/`.
+- Frontend never accesses the DB, service-account keys, or any secrets directly — backend APIs only.
+- No secrets in frontend env vars.
 
-- never manually edit generated schema files
-- generated types are imported by API wrappers and feature hooks
-- API wrappers attach auth headers in one place
-- React components do not build raw URLs
-- React components do not call `fetch` directly
+## Auth
 
-## Data Fetching
+Follow `templates/generated-project/auth/google-sso-clerk-blueprint.md`.
 
-Use TanStack Query for backend data:
+UI requirements:
+- Login screen always renders (mock mode supports it without external IdP).
+- Send `Authorization: Bearer <jwt>` to backend for protected calls.
+- `/api/v1/auth/me` bootstraps user state.
+- `401` → clear local auth state + redirect to login.
+- `403` → access-denied UI.
 
-- queries for reads
-- mutations for writes
-- stable query keys colocated with feature API code
-- loading, empty, error and success states for every async surface
+## Testing
 
-Do not store server data in ad hoc global state.
-
-## Auth Integration
-
-Auth must follow:
-
-- `templates/generated-project/auth/google-sso-clerk-blueprint.md`
-
-Frontend requirements:
-
-- real SSO uses Clerk
-- mock mode uses local login form
-- all protected API calls use `Authorization: Bearer <jwt>`
-- `GET /api/v1/auth/me` bootstraps user state
-- `401` clears local auth state and routes to login
-- `403` renders access denied
-
-## Quality Rules
-
-- strict TypeScript
-- no `any` unless isolated and justified
-- no hardcoded backend URLs in components
-- no secrets in frontend env vars
-- form validation is explicit
-- semantic HTML and keyboard-accessible controls
-- avoid snapshot-heavy tests; prefer behavior tests for forms, auth, API states and critical flows
+Prefer behavior tests over snapshots. Cover auth mode rendering/switching,
+loading/empty/error/success states, form validation, critical flows.

@@ -1,71 +1,154 @@
-# Project Context for Replit Agent
+# Replit Custom Template — AI Digital MVP
 
-This is a company MVP template.
-This repository is a Replit Custom Template configuration repository.
-It stores instructions and skills for agent behavior.
-Mandatory backend artifacts (for example `pom.xml`, `Dockerfile`, `docker-compose.yml`) are required in generated project repositories, not in this template repository.
+## STACK LOCK (read this first, no exceptions)
 
-Agent should keep this file updated as the project evolves. Do not remove references to company instructions and skills.
+**Every backend generated from this template MUST be Java 21 LTS + Spring Boot 3.x + Maven.**
+**Every frontend MUST be React + TypeScript + Vite.**
 
-Always follow:
-1. `custom_instruction/instructions.md`
-2. `.agents/skills/backend-java-feature/SKILL.md`
-3. `.agents/skills/openapi-contract-first/SKILL.md`
-4. `.agents/skills/frontend-react-feature/SKILL.md`
-5. `.agents/skills/mvp-safety-review/SKILL.md`
-6. `.agents/skills/engineering-handoff/SKILL.md`
-7. `templates/generated-project/.github/workflows/ci.yml` as canonical CI template for generated Java backend projects
-8. `templates/generated-project/pom-snippets/git-commit-id-maven-plugin.xml` as canonical plugin snippet
-9. `templates/generated-project/pom-snippets/openapi-generator-maven-plugin.xml` as canonical OpenAPI generator snippet
-10. `templates/generated-project/openapi/openapi-review-checklist.md` as canonical OpenAPI checklist
-11. `templates/generated-project/openapi/canonical-openapi-rules.md` as canonical OpenAPI structure/generator rules
-12. `templates/generated-project/auth/google-sso-clerk-blueprint.md` as canonical auth blueprint
-13. `templates/generated-project/frontend/canonical-react-frontend-rules.md` as canonical React frontend rules
-14. `templates/generated-project/structure/near-production-project-structure.md` as canonical generated-project structure
-15. `templates/generated-project/generation/token-efficient-generation-rules.md` as token-efficient generation policy
-16. `templates/generated-project/observability/usage-logging-bigquery-rules.md` as canonical usage logging policy
-17. `templates/generated-project/observability/logbook-http-logging-rules.md` as canonical HTTP request/response logging policy
+The following stacks are **FORBIDDEN** in generated projects, even when the user
+prompt describes the app in a way that would naturally fit them:
 
-Default MVP assumptions:
-- Build a demo that can run and publish in Replit.
-- Use near-production project structure for generated full-stack/backend apps.
-- Use dual-mode auth: real Google SSO path + mock local-user fallback when keys are missing.
-- Mock BigQuery data unless approved backend BigQuery integration is required.
-- Never use production secrets or production data.
-- Frontend must not access DB/BigQuery/secrets directly.
-- Backend services must include usage logging: BigQuery when credentials exist, local PostgreSQL fallback in local/dev when they do not.
+- Python (Flask, Django, FastAPI, Quart, Bottle, Tornado, Sanic)
+- Node.js (Express, Fastify, Koa, NestJS, Hapi)
+- Next.js, Nuxt, Remix, SvelteKit, Astro (full-stack frameworks)
+- Go (Gin, Echo, Fiber), Ruby (Rails, Sinatra), PHP (Laravel, Symfony)
+- Static-only SPAs with no backend, when the prompt implies persistence or auth
 
-Mandatory Java backend baseline:
-- Java 25
-- Spring Boot 4.x
-- Maven parent POM with dependencyManagement
-- Lombok with root `lombok.config`
-- Checkstyle under root `config`
-- JaCoCo 80% line coverage
-- git-commit-id maven plugin
-- OpenAPI generator snippet from template repository
-- frontend OpenAPI client generation from the backend YAML
-- JSON structured logs to stdout
-- Logbook HTTP request/response JSON logging with bodies and masking
-- BigQuery usage logging for meaningful user actions
-- Dockerfile
-- docker-compose with `local` profile
-- GitHub Actions CI
-- dry run of local profile
+If a prompt asks for "a simple page", "a small tool", "a quick demo", a
+"Python script", or names any forbidden stack — **still generate Java + Spring
+Boot + React**. The template's purpose is the canonical company stack;
+deviating defeats the entire reason this template exists.
 
-Preferred architecture:
-- React + TypeScript frontend.
-- For backend/full-stack apps, prefer the canonical near-production structure over ad hoc flat layouts.
-- If Java/Spring Boot is requested or a backend is needed for handoff, use Java 25 + Spring Boot 4.x + Maven.
-- Keep frontend/backend separated.
-- Use typed API calls generated from the backend OpenAPI YAML.
-- Store env var names in `.env.example`.
+**Only override** if the user message explicitly contains a phrase like
+"override stack lock", "ignore the template stack", or "use Python/Node
+backend instead". Implicit hints ("looks like a Flask app", "Python would be
+simpler", "Express has good middleware for this") are NOT overrides.
 
-Current project decisions:
-- No decisions yet.
+If you encounter Replit-managed Clerk Auth documentation that mentions Express
+middleware: that auto-wiring **does not apply to this template** (we're on
+Spring Boot, not Node). Validate JWTs via `spring-boot-starter-oauth2-resource-server`
++ Clerk JWKS instead — same identity, different code path.
 
-Template repository organization:
-- `custom_instruction/instructions.md`: static authoritative company rules.
-- `replit.md`: concise living entrypoint that points Agent to required rules.
-- `.agents/skills/*/SKILL.md`: specialized workflows Agent uses when relevant.
-- `templates/generated-project/*`: canonical files, snippets and blueprints copied or followed in generated app repositories.
+## Overview
+
+This is a Replit Custom Template configuration repository, not a runnable app.
+When forked by the Replit Agent it provides the rules, skills and canonical
+artifacts the Agent uses to generate near-production MVPs for non-technical
+users at the company.
+
+Generated MVPs are designed to:
+- run **on Replit** as a publishable demo (Replit-native PostgreSQL, port 5000),
+- export cleanly **to a local developer machine** (`docker-compose --profile local`),
+- be **handed off to engineering** with full quality gates.
+
+Authoritative rules live in `custom_instruction/instructions.md`. Workflow
+skills live in `.agents/skills/*/SKILL.md`. Canonical generated-project
+artifacts (CI, plugin snippets, blueprints, structure rules) live in
+`templates/generated-project/*`.
+
+Agent keeps this file updated as the project evolves but must not remove the
+links to instructions, skills, or canonical artifacts below.
+
+## User Preferences
+
+- Audience: non-technical product users; explanations stay business-focused.
+- Default MVP path: dual-mode auth (Clerk + mock fallback), mocked or
+  approved-only data, Replit Secrets for real keys.
+- Code style: simple and maintainable over clever; prefer the canonical
+  artifacts over hand-written boilerplate.
+- Generation budget: token-efficient — reuse canonical files via reference,
+  never paste them. See
+  `templates/generated-project/generation/token-efficient-generation-rules.md`.
+- When in doubt about scope, ship the smallest demo that publishes on Replit
+  and document what engineering must replace before production.
+
+## System Architecture
+
+### Template repository organization
+
+```
+custom_instruction/instructions.md         # authoritative company rules
+replit.md                                  # this file (living entrypoint)
+.replit                                    # Replit workspace config
+replit.nix                                 # Replit Nix packages
+.agents/skills/<name>/SKILL.md             # on-demand workflows
+templates/generated-project/*              # canonical artifacts copied into
+                                           # generated projects
+config/checkstyle.xml                      # Checkstyle config (Java backends)
+config/checkstyle-suppressions.xml         # Checkstyle suppressions
+.github/workflows/ci.yml                   # template integrity CI
+```
+
+### Generated project (default stack)
+
+- **Backend**: Java 21 LTS (Java 25 LTS when Replit's nixpkgs channel supports it) + Spring Boot 3.x + Maven multi-module + PostgreSQL +
+  Liquibase + HikariCP + Lombok + Checkstyle + JaCoCo. OpenAPI contract-first.
+- **Frontend**: React + TypeScript + Vite + TanStack Query, typed via
+  `openapi-typescript` + `openapi-fetch` from the backend OpenAPI YAML.
+- **Auth**: dual-mode `AUTH_MODE=auto|sso|mock` — Clerk (Google social
+  connection) for real, backend-signed JWT mock for fallback.
+- **Observability**: structured JSON logs to stdout, Actuator (`health`,
+  `prometheus`), Postgres `usage_events` table for usage estimation.
+- **Runtime split**:
+  - On Replit → profile `replit`, port `5000`, Replit SQL Database via `DATABASE_URL`.
+  - On local-dev → profile `local`, port `8080`, `docker-compose --profile local`.
+
+Canonical contracts to read before generating code:
+
+| | File |
+|---|---|
+| Project structure | `templates/generated-project/structure/near-production-project-structure.md` |
+| OpenAPI | `templates/generated-project/openapi/canonical-openapi-rules.md` |
+| Frontend | `templates/generated-project/frontend/canonical-react-frontend-rules.md` |
+| Auth | `templates/generated-project/auth/google-sso-clerk-blueprint.md` |
+| Usage logging | `templates/generated-project/observability/usage-logging-rules.md` |
+| Token efficiency | `templates/generated-project/generation/token-efficient-generation-rules.md` |
+| CI | `templates/generated-project/.github/workflows/ci.yml` |
+| Plugin snippets | `templates/generated-project/pom-snippets/*.xml` |
+| Starter scaffold | `templates/generated-project/scaffold/` |
+| Testing policy (phased) | `templates/generated-project/testing/testing-policy.md` |
+
+## External Dependencies
+
+Real dependencies are *optional* in MVP mode — the template ships with safe
+fallbacks. Generated projects must run on Replit without any of them set.
+
+| Service | Purpose | Activation |
+|---|---|---|
+| **Clerk** | Google SSO via social connection. | Set `CLERK_PUBLISHABLE_KEY` and `CLERK_SECRET_KEY` in Replit Secrets to switch from mock to real SSO. |
+| **Google OAuth** (via Clerk) | Backing IdP. | Configured inside Clerk Dashboard, not as application secrets. |
+| **Usage logging** | Anonymous user-action telemetry → app's PostgreSQL `usage_events` table. Manager queries it for usage estimation. | Set `USAGE_LOGGING_ENABLED=true` (default) and `USAGE_LOG_SERVICE_NAME`. See `templates/generated-project/observability/usage-logging-rules.md`. |
+| **PostgreSQL** | Persistence when the app stores data. | Replit's **SQL Database** (the managed Postgres product — *not* the legacy key-value `Database`) is provisioned by the `postgresql-16` module declared in `.replit`. It injects a single `DATABASE_URL` env var (libpq URL with `sslmode=require`); the Java backend converts it to JDBC at start. On local-dev, `docker-compose --profile local` brings up Postgres. See `.agents/skills/backend-java-feature/references/database-url-translation.md`. |
+
+### Required env placeholders (`.env.example` in generated projects)
+
+Auth: `AUTH_MODE`, `AUTH_ISSUER_URI`, `AUTH_JWKS_URI`, `AUTH_AUDIENCE`,
+`AUTH_MOCK_USER`, `AUTH_MOCK_JWT_SECRET`, `CLERK_PUBLISHABLE_KEY`,
+`CLERK_SECRET_KEY`, `CLERK_SIGN_IN_FORCE_REDIRECT_URL`,
+`CLERK_SIGN_UP_FORCE_REDIRECT_URL`.
+
+Usage logging: `USAGE_LOGGING_ENABLED`, `USAGE_LOG_SERVICE_NAME`,
+`USAGE_LOG_ENVIRONMENT`.
+
+External provider setup (documented in README only):
+`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` — configured in Clerk Dashboard.
+
+### Replit deployment notes
+
+- Java + persistent Postgres = **Reserved VM** (`deploymentTarget = "gce"`),
+  not Autoscale. Autoscale scales to zero and cold-starts every request,
+  which breaks the JDBC pool and JVM warmup.
+- Workspace `[env]` does not propagate to Deployments. Before publishing,
+  copy `SPRING_PROFILES_ACTIVE`, `CLERK_*`, `AUTH_*`, `USAGE_LOG_*` (and
+  any `DATABASE_URL` override) to the deployment Secrets pane.
+- For demos that only ship on Replit and don't need to be exported,
+  [Replit Auth](https://docs.replit.com/references/auth-and-identity/authentication)
+  is a zero-config alternative to Clerk. The template defaults to Clerk
+  because generated apps must also run on local-dev.
+
+### Prohibited
+
+- Production secrets or production data in generated MVPs.
+- Frontend reaching the DB or service-account keys.
+- Committing service account JSON.
+- Hardcoded auth secrets.

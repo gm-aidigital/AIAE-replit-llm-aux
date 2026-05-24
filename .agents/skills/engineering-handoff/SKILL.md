@@ -1,81 +1,48 @@
 ---
 name: engineering-handoff
-description: Final handoff checklist for moving MVP code to long-term engineering ownership.
-argument-hint: "[project-or-branch]"
-user-invocable: true
+description: Final handoff checklist when transferring an accepted MVP to an engineering team for long-term ownership. Use when the user says the project is being shipped to engineering, handed off, or moved out of the Replit MVP phase. Builds on top of mvp-safety-review and only adds migration-to-production delta.
+metadata:
+  user-invocable: "true"
 ---
 
 # Engineering Handoff
 
-Use when MVP is accepted and must be transferred for long-term ownership.
+Use when the MVP is accepted and must move to long-term engineering ownership.
+Runs *after* `mvp-safety-review`; does not duplicate its checks.
 
-## Handoff Package
+## Prerequisite
 
-Prepare:
-- README with purpose, owner, run/deploy steps, known limitations
-- `.env.example` with safe placeholders
-- architecture summary
-- list of mocked components and required replacements
-- data source list (including BigQuery usage if any)
-- usage logging configuration and validation notes
+Run `.agents/skills/mvp-safety-review/SKILL.md` first. All of its checks must
+pass before this skill applies.
 
-## Mandatory Java Backend Files
+## Handoff package
 
-- `Dockerfile`
-- `docker-compose.yml`
-- `.github/workflows/ci.yml`
-- root `pom.xml`
-- root `lombok.config`
-- `config/check_style_config.xml`
-- `config/check_style_suppressions.xml`
-- `README.md`
-- `.env.example`
-- OpenAPI contract files
-- `src/main/resources/application.yml`
-- `src/main/resources/application-local.yml`
-- `src/main/resources/logback-spring.xml`
-- `src/main/resources/ehcache.xml` when L2 cache is used
+- [ ] README: purpose, owner, run/deploy steps for both Replit and local-dev,
+      known limitations.
+- [ ] `.env.example` with safe placeholders for every consumed variable.
+- [ ] Architecture summary (one page).
+- [ ] List of mocked components and what must replace each one.
+- [ ] Data source inventory (incl. `usage_events` table and any external APIs).
+- [ ] Usage logging configuration and validation notes.
 
-## Required Quality Checks
+## Build / quality (Phase 3 — strict)
 
-- frontend build passes
-- backend build passes
-- tests pass
-- JaCoCo 80% gate exists
-- Checkstyle config is root-based
-- `git-commit-id-maven-plugin` configured
-- OpenAPI contract exists and matches implementation
-- OpenAPI generator plugin exists and follows canonical template settings
-- React frontend generates API types from the backend OpenAPI YAML when frontend exists
-- docker-compose creates PostgreSQL automatically when persistence is used
-- backend logs are JSON structured
-- Logbook HTTP request/response body logging is configured with masking
-- usage logging is implemented through BigQuery with local/dev PostgreSQL fallback
-- PostgreSQL types follow BIGINT/TEXT policy
+Canonical: `templates/generated-project/testing/testing-policy.md`.
 
-## Auth and Data Checks
+- [ ] All Maven module POMs build clean: `mvn -f backend/pom.xml -Phandoff -T 1C verify`.
+- [ ] `-Phandoff` activates the `0.80` JaCoCo line-coverage gate; the suite
+      must clear it.
+- [ ] Integration tests with Testcontainers Postgres present and green
+      (`*IT.java`, run via Failsafe).
+- [ ] Frontend builds clean (`npm run check:api && npm run build`).
+- [ ] Checkstyle gate enforced.
+- [ ] `git-commit-id-maven-plugin` present in all module POMs.
+- [ ] OpenAPI generator plugin configured per canonical rules.
+- [ ] PostgreSQL types follow `BIGINT` / `TEXT` policy.
+- [ ] No `<excludes><exclude>**</exclude></excludes>` or coverage-disabling
+      tricks were added just to clear the 0.80 gate.
 
-Confirm dual-mode auth:
-- real Google SSO integration path exists (Clerk preferred or project-standard OIDC)
-- mock local fallback works when keys are missing
-- mode controlled by config/env only
-- backend JWT validation exists for protected endpoints (JWKS signature + `iss`/`aud`/`exp`/`nbf`)
-- `401`/`403` behavior is documented and tested
-
-Confirm BigQuery policy:
-- backend integration only
-- keys/config via properties/env
-- no credentials in source control
-- `.env.example` contains placeholders for auth and BigQuery keys when those features are enabled
-
-Confirm usage logging:
-- `BQ_USAGE_CREDENTIALS_JSON`, `BQ_USAGE_TABLE`, `USAGE_LOG_SERVICE_NAME`, `USAGE_LOG_ENVIRONMENT`, `USAGE_LOGGING_ENABLED` are documented
-- service account JSON is not committed
-- user action success/error paths are logged
-
-## Required Dry Run
-
-Run or document:
+## Local-dev dry run (must succeed on a clean machine)
 
 ```bash
 docker compose --profile local config
@@ -85,12 +52,35 @@ curl -f http://localhost:8080/<app-context-path>/actuator/prometheus
 docker compose --profile local down -v
 ```
 
-If execution is not possible, document exact reason and commands in README.
+If the dry run cannot run in the current environment, document the reason and
+exact commands in README.
 
-## Migration Notes for Engineering
+## Post-acceptance cleanup (after engineering accepts the codebase)
 
-Document what to replace:
-- demo/mock auth defaults -> production SSO configuration values
-- demo datasets -> approved production data APIs/pipelines
-- Replit secrets -> company secret manager
-- MVP deployment -> target infrastructure
+Once the suite reliably clears `0.80` and engineering owns the project,
+the phased-testing plumbing becomes dead weight. Final cleanup commit:
+
+- [ ] In `backend/pom.xml`, set
+      `<jacoco.line.coverage>0.80</jacoco.line.coverage>` as the default
+      (was `0.00` for MVP / `Phase 1-2`).
+- [ ] Delete the `<profiles><profile><id>handoff</id>...</profile></profiles>`
+      block — redundant once the default is already `0.80`.
+- [ ] Update README to drop `-Phandoff` references; the build command
+      becomes `mvn -f backend/pom.xml verify`.
+- [ ] Engineering CI workflow drops `-Phandoff` flags.
+- [ ] (Optional) Remove `templates/generated-project/testing/testing-policy.md`
+      from the project — its rules no longer apply once company standards
+      take over.
+
+## Migration notes for engineering
+
+Document the replacement plan for each item:
+
+| From (MVP) | To (production) |
+|---|---|
+| Mock auth defaults | Real Clerk/Google SSO config values |
+| Demo datasets / fixtures | Approved production data APIs/pipelines |
+| Replit Secrets | Company secret manager |
+| Replit-native PostgreSQL module | Managed PostgreSQL (RDS / CloudSQL / equivalent) |
+| Replit Reserved VM (`deploymentTarget = "gce"`) | Target infrastructure (k8s / ECS / managed app platform) |
+| `usage_events` in app DB | Production analytics sink (e.g. dedicated DB or BigQuery) if cross-service aggregation is needed |

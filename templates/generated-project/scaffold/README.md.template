@@ -1,0 +1,73 @@
+# <APP-NAME>
+
+<one-line summary of the MVP — who uses it, what it does, replaces what>
+
+## Owner
+- Product owner: <name / Slack>
+- Tech contact:  <name / Slack>
+
+## What this is
+
+This is an MVP demo. It is NOT production-grade. See "MVP limitations" below.
+
+## How to run
+
+### On Replit (recommended for demos)
+1. Fork from the Custom Template.
+2. Open the workspace; the `postgresql-16` module provisions a Postgres
+   database and Replit injects `DATABASE_URL` as a Secret.
+3. (Optional) Set `CLERK_SECRET_KEY` + `VITE_CLERK_PUBLISHABLE_KEY` in
+   Secrets to enable real Google SSO; otherwise the app runs in mock-auth
+   mode with a local login form.
+4. Click **Run**. Backend on port 5000, Vite dev server on 5173.
+5. To deploy: click **Deploy** → choose **Reserved VM** (not Autoscale).
+
+### On a local developer machine
+1. `cp .env.example .env` and fill in values.
+2. `docker compose --profile local up --build -d`
+3. Backend at `http://localhost:8080/<context-path>/`, frontend at
+   `http://localhost:5173/` (dev) or under the backend in built mode.
+4. `docker compose --profile local down -v` to clean up.
+
+## Data sources
+
+- <e.g. PostgreSQL `usage_events` table — usage telemetry>
+- <e.g. mocked CSV fixture for product data>
+- <e.g. BigQuery `<project>.<dataset>.<table>` — when applicable>
+
+## Required env vars
+
+See `.env.example`. Real values live in Replit Secrets / local `.env` (gitignored).
+
+## MVP limitations
+
+- <e.g. mock auth by default; flip `AUTH_MODE` to `sso` for real Clerk SSO>
+- <e.g. usage events written to the app's own DB; switch to BigQuery sink
+   when cross-service aggregation is required>
+- <e.g. demo dataset only; no real customer data>
+- <e.g. no rate limiting, no per-tenant scoping>
+
+## What engineering must replace before production
+
+- Mock auth defaults → real Clerk/Google SSO production keys.
+- Replit-managed DB → company-managed Postgres (RDS / CloudSQL).
+- Replit Secrets → company secret manager.
+- `.replit` Reserved VM target → company infrastructure.
+- README placeholders and `<context-path>` strings.
+
+## CI
+
+`.github/workflows/ci.yml` runs unit tests + Checkstyle + JaCoCo (0.80 line
+coverage gate), the OpenAPI generator check, frontend build, secret hygiene
+and the docker-compose local-dev dry run.
+
+Integration tests run on `workflow_dispatch` with `run_integration_tests=true`.
+
+## Architecture
+
+- Backend: Java 25 + Spring Boot 4.x, multi-module Maven.
+- Frontend: React + TypeScript + Vite, typed via `openapi-typescript`.
+- Auth: dual-mode (`AUTH_MODE=auto|sso|mock`), real path via Clerk + Google.
+- Persistence: PostgreSQL (Replit SQL Database on workspace, docker-compose locally).
+- Observability: JSON logs to stdout, Actuator (`health`, `prometheus`),
+  Logbook HTTP request/response logs with masking, Postgres `usage_events` table.

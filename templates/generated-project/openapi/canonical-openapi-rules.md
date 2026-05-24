@@ -1,51 +1,24 @@
 # Canonical OpenAPI Rules
 
-These rules are mandatory for generated Java backend projects.
+Single source of truth for OpenAPI in generated Java backend projects.
+Other files reference this one; do not duplicate its content.
 
-## Spec Placement
+## Spec file
 
-Canonical spec location:
+- Path: `src/main/resources/static/api/v1/specs/openapi.yaml`
+  (relative to the backend application module — for example
+  `backend/application/src/main/resources/static/api/v1/specs/openapi.yaml`).
+- Committed as a static file.
+- OpenAPI is the source of truth; controller annotations are not.
 
-- `src/main/resources/static/api/v1/specs/openapi_3.0.3_spec.yaml`
+## Required top-level keys
 
-In a multi-module backend, this path is relative to the backend application module, for example:
+`openapi: 3.0.3`, `info.title`, `info.version`, `servers`, `tags`, `paths`,
+`components.securitySchemes`, `components.schemas`.
 
-- `backend/application/src/main/resources/static/api/v1/specs/openapi_3.0.3_spec.yaml`
+Server base path is `/api/v1`. Tag-driven grouping (code generation uses tags).
 
-Rules:
-
-- keep the spec as a committed static file
-- OpenAPI is the source of truth
-- implementation follows the spec, never the reverse
-- Swagger UI must render this static spec file
-
-## Top-Level Structure
-
-Spec must define:
-
-- `openapi: 3.0.3`
-- `info.title`
-- `info.version`
-- `servers`
-- `tags`
-- `paths`
-- `components.securitySchemes`
-- `components.schemas`
-
-Preferred versioning and layout:
-
-- server base path under `/api/v1`
-- tag-driven grouping of endpoints
-- reusable shared error schemas
-
-## Security
-
-Protected APIs must declare:
-
-- `security:`
-- `bearerAuth` security scheme
-
-Canonical bearer scheme:
+## Security scheme (canonical)
 
 ```yaml
 components:
@@ -56,98 +29,97 @@ components:
       bearerFormat: JWT
 ```
 
-## Response Discipline
+Protected operations must declare `security: [{ bearerAuth: [] }]` and document
+`401` and `403` responses with examples.
 
-Each protected operation should explicitly define:
+## Response discipline
 
-- `200` or other success code
-- `400` for validation/input errors when relevant
-- `401` for missing/expired token
-- `403` for invalid/insufficient authorization
-- `500` for unhandled/internal failure
+Every protected operation explicitly declares:
+`200`/success, `400` when validation applies, `401`, `403`, `500`.
 
-Shared schemas are mandatory for non-trivial APIs:
+Shared schemas under `components.schemas`:
+- common API error
+- validation error
+- multistatus when `207` is used
 
-- validation error schema
-- common API error schema
-- multistatus schema when `207` is used
+Error payload fields: machine-readable code, human message, timestamp, correlation ID.
 
-Error payloads should include:
+## Schema discipline
 
-- machine-readable code
-- human-readable message
-- timestamp
-- correlation ID
+- Every field has `type` and uses `format` where relevant (`date`, `date-time`, numeric sizes).
+- `required` is explicit.
+- Reuse schemas from `components.schemas`.
+- Document enums with descriptions.
+- Unique, stable `operationId` per operation.
 
-## Operation Naming and Grouping
+## Generator (Maven)
 
-- use tags consistently because code generation groups APIs by tags
-- every operation must have a unique `operationId`
-- `operationId` must be stable and explicit
+Use the canonical snippet:
+`templates/generated-project/pom-snippets/openapi-generator-maven-plugin.xml`.
 
-## Schema Discipline
+Mandatory options:
+`generatorName=spring`, `library=spring-boot`, `interfaceOnly=true`,
+`useSpringBoot3=true`, `openApiNullable=false`, `skipDefaultInterface=true`,
+`useTags=true`, `dateLibrary=java8-localdatetime`,
+`additionalModelTypeAnnotations=@lombok.Generated` (exempts generated DTOs from JaCoCo).
 
-- every field should have `type`
-- use `format` for `date`, `date-time`, numeric sizes where relevant
-- define `required` explicitly
-- prefer reusable schemas under `components.schemas`
-- document enums with descriptions
+**NOT** used: `modelNameSuffix`. Schema names already carry the version
+suffix explicitly in the YAML (`ResourceV1`, `ApiErrorV1`, etc.) — see
+"Versioned DTO names" below.
 
-## SpringDoc Contract
+### Versioned DTO names (mandatory)
 
-Generated projects should expose Swagger UI against the static OpenAPI file:
+Every schema in `openapi.yaml` is named with a version suffix **explicitly
+in the YAML** — `ResourceV1`, `CreateResourceRequestV1`, `ApiErrorV1`,
+`ValidationParameterV1`. The generator emits the Java class with that same
+name verbatim.
+
+**Do NOT use `<modelNameSuffix>V1</modelNameSuffix>` in the generator
+config.** A global suffix forces every schema to carry the same version
+band, which is wrong: in practice, V2 changes maybe 30% of entities and
+leaves the rest at V1. With explicit names in the YAML you can keep
+`ResourceV1` and add `ResourceV2` side-by-side; with a global suffix you'd
+have to bump every type at once.
+
+When a breaking v2 contract is needed:
+
+1. Add the new schemas to the **same** `openapi.yaml` under their explicit
+   V2 names: `ResourceV2`, `CreateResourceRequestV2`. Keep V1 schemas
+   untouched.
+2. Add new operations under `/api/v2/...` paths in the same file (or split
+   into two specs if the team prefers — same generator plugin, two
+   executions, each with its own `apiPackage`).
+3. V1 endpoints + V1 DTOs keep working unchanged; V2 endpoints emit V2 DTOs.
+4. Sunset V1 when the last consumer migrates; mark V1 operations
+   `deprecated: true` in the spec first to telegraph the deadline.
+
+Why this matters in practice: 95% of "V2" changes touch some entities and
+not others. The explicit-suffix convention lets you ship those incremental
+breaks without renaming the world.
+
+Every reference to a DTO type in handwritten code uses the explicit
+versioned name: `ApiErrorV1 dto = new ApiErrorV1()`. There is never a
+type called `ApiError` (no suffix) in this project — the suffix is part
+of the type's identity, not a generator-time decoration.
+
+Output: `${project.build.directory}/generated-sources/openapi`.
+Generated API/model/invoker packages must be explicit and separate from
+hand-written packages.
+
+## SpringDoc
 
 ```yaml
 springdoc:
   swagger-ui:
-    url: /api/v1/specs/openapi_3.0.3_spec.yaml
+    url: /api/v1/specs/openapi.yaml
 ```
 
-Do not treat controller annotations as the primary documentation source.
+## Frontend contract
 
-## Generator Contract
+React frontends consume this same YAML via `openapi-typescript` +
+`openapi-fetch` + TanStack Query. See
+`templates/generated-project/frontend/canonical-react-frontend-rules.md`.
 
-Generated Java backend projects must use the canonical Maven snippet from:
+## Review checklist
 
-- `templates/generated-project/pom-snippets/openapi-generator-maven-plugin.xml`
-
-Mandatory generator behavior:
-
-- generator: `spring`
-- library: `spring-boot`
-- generate interfaces, not controller implementations
-- group API classes by tags
-- disable `openApiNullable`
-- skip default interface bodies
-- use Spring Boot 4 generation mode
-- use `java8-localdatetime` date library
-
-## Generated-Code Layout
-
-Generated sources must live under:
-
-- `${project.build.directory}/generated-sources/openapi`
-
-Generated packages must be explicit:
-
-- generated invoker package
-- generated API package
-- generated model package
-
-Do not mix generated classes into hand-written application packages.
-
-## Frontend Contract
-
-React frontends must use this same YAML as their API contract source.
-
-Required frontend approach:
-
-- `openapi-typescript` generates TypeScript schema types
-- `openapi-fetch` provides a small typed HTTP client
-- TanStack Query wraps server state in feature hooks
-- no handwritten frontend DTOs that duplicate OpenAPI schemas
-- no raw `fetch` calls from components
-
-Frontend rules are defined in:
-
-- `templates/generated-project/frontend/canonical-react-frontend-rules.md`
+See `templates/generated-project/openapi/openapi-review-checklist.md`.

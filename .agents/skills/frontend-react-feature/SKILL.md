@@ -1,99 +1,82 @@
 ---
 name: frontend-react-feature
-description: Build React + TypeScript frontend features with typed API boundaries, dual-mode auth UI, and predictable MVP behavior.
-argument-hint: "[feature-summary]"
-user-invocable: true
+description: Build a React + TypeScript frontend feature in a generated project. Use when adding pages, features, hooks, or wiring server state. Covers typed API boundary, dual-mode auth UI, accessible UX states, and Replit-vs-local runtime split.
+metadata:
+  user-invocable: "true"
 ---
 
 # Frontend React Feature
 
-Use this skill for frontend work in generated MVP projects.
+Use for any frontend change in a generated MVP project.
+
+## Canonical references
+
+- Frontend rules: `templates/generated-project/frontend/canonical-react-frontend-rules.md`
+- BEM naming (CSS class convention): `templates/generated-project/frontend/bem-naming-rules.md`
+- Auth blueprint: `templates/generated-project/auth/google-sso-clerk-blueprint.md`
+- Project structure: `templates/generated-project/structure/near-production-project-structure.md`
 
 ## Baseline
 
-- React + TypeScript
-- Vite unless another framework is explicitly requested
-- Typed API client generated from OpenAPI
-- TanStack Query for server state
-- Thin pages/routes
-- Feature modules with hooks/components
-- Accessible UX states (loading, empty, error, success)
+React · TypeScript (strict) · Vite (unless user explicitly asks for another
+framework) · `openapi-typescript` + `openapi-fetch` · TanStack Query ·
+Clerk React SDK when SSO is enabled.
 
-Canonical frontend rules:
-- `templates/generated-project/frontend/canonical-react-frontend-rules.md`
+## Core rules (delta from canonical-react-frontend-rules.md)
 
-## Recommended Structure
-
-- `app`: providers, router, app shell, global error boundary
-- `pages`: route-level composition only
-- `features`: feature modules
-- `entities`: reusable domain-level UI/models
-- `shared/api`: generated OpenAPI types and typed API client
-- `shared/ui`: reusable UI components
-- `shared/lib`: framework-agnostic helpers
-- `shared/config`: runtime config reader and validation
-
-## Core Rules
-
-- No `any` unless absolutely unavoidable.
+- No `any` unless isolated and justified.
 - No raw backend calls from page components.
-- No direct DB/BigQuery/secrets access from frontend.
 - No hardcoded backend URLs in components.
-- Keep form validation explicit and user-visible.
-- Use semantic HTML and keyboard-accessible controls.
+- No handwritten DTOs duplicating OpenAPI schemas.
+- Every async surface renders loading / empty / error / success.
+- Semantic HTML; keyboard-accessible controls.
+- **BEM class names** for every style (`block__element--modifier`). Plain
+  `.css` files, no CSS Modules / Tailwind / styled-components. One block
+  per directory. Blocks have no external margins. See `bem-naming-rules.md`.
+- Frontend never reaches the DB, service-account keys, or any secrets directly — backend APIs only.
 
-## API Integration Pattern
+## Auth UX
 
-1. Generate frontend API types from the committed backend OpenAPI YAML.
-2. Use `openapi-typescript` for types and `openapi-fetch` for the HTTP client.
-3. Keep the auth-aware fetcher in `shared/api`.
-4. Use TanStack Query hooks in feature modules.
-5. Keep components focused on rendering and local interactions.
-6. Handle errors with stable UI states and user-readable messages.
+Follow the canonical blueprint. Frontend must:
+- show a working login screen in mock mode and SSO mode without code changes
+- read `AUTH_MODE` from runtime config, not from build target
+- attach `Authorization: Bearer <jwt>` to protected calls
+- treat backend (`/api/v1/auth/me`) as source of truth
+- clear local state on `401`, render access-denied on `403`
 
-Rules:
-- no handwritten DTOs that duplicate OpenAPI schemas
-- no raw `fetch` in components
-- no multiple competing API client patterns
+## Runtime: Replit vs local-dev
 
-## Auth UX (Mandatory Dual-Mode)
+| | Replit | Local-dev |
+|---|---|---|
+| Dev server | Vite on `5173` (workspace preview, mapped 1:1) | Vite on `5173` |
+| Deployment | NOT Vite. Spring Boot serves the built `dist/` from its static resources; `vite.config.ts` writes the build there. | Standalone Spring or Vite preview, your call |
+| API base URL | Same-origin in Deployment; `/api` proxied to `localhost:5000` in dev workspace via `vite.config.ts` | `http://localhost:8080/<context-path>` |
+| Secrets | Replit Secrets pane | `.env.local` (gitignored) |
 
-Frontend must support two auth modes without code rewrites:
+`shared/config` reads runtime config from `import.meta.env` and validates it at
+boot. Build-time secrets are forbidden.
 
-- Real mode: Google SSO flow (Clerk preferred, or project-standard OIDC integration).
-- Fallback mode: mock local user login.
+## React common gotchas (real failures from past generations)
 
-Requirements:
-- Login screen/form must always exist.
-- Mode selection must come from config/env, not hardcoded branching by build target.
-- If SSO keys are missing, app still runs with mock local user mode.
-- Once SSO keys are provided, same flow activates real SSO.
-- Frontend must never store server secrets.
-- Frontend must send `Authorization: Bearer <jwt>` to backend for protected requests.
-- Frontend must treat backend as source of truth for authentication (`/api/v1/auth/me` or protected API responses).
-- On `401`, clear local auth state and redirect user to login.
-- On `403`, show explicit access-denied UI state.
+- **Never call `navigate()` during render.** `useNavigate()` returns a
+  setter that triggers a state update — calling it directly in the function
+  body of a component during rendering produces a React warning and may
+  cause infinite re-render. Use `<Navigate to="..." replace />` in JSX
+  instead, or wrap the `navigate()` call in `useEffect`.
 
-Auth mode contract to preserve across screens:
-- `AUTH_MODE=auto|sso|mock`
-- `auto`: fallback to mock mode when required SSO config is missing
-- `sso`: fail startup/bootstrap if required SSO config is missing
-- `mock`: enable local mock login flow only
+- **`401` handling lives in ONE place** — the auth-aware fetcher in
+  `shared/api/client.ts`. It clears local auth state and exposes a router
+  hook (or sets a context flag) that the root layout renders as a
+  `<Navigate to="/login" />`. Pages do not check status codes themselves.
 
-Canonical auth flow blueprint:
-- `templates/generated-project/auth/google-sso-clerk-blueprint.md`
+- **Don't read `import.meta.env` outside `shared/config/runtime.ts`**.
+  Centralising the read lets you validate it once at boot and stops typos
+  like `VITE_CLERCK_PUBLISHABLE_KEY` from silently rendering `undefined`.
 
-## BigQuery Rule
+- **TanStack Query keys are arrays, never strings**. `queryKey: ["users", id]`
+  not `queryKey: "users-" + id`. String keys break query invalidation.
 
-If a feature needs BigQuery-backed data, frontend calls backend API only.
-Never connect frontend directly to BigQuery.
+## Testing guidance
 
-## Testing Guidance
-
-When tests are required, prioritize:
-- auth mode rendering and switching behavior
-- loading/empty/error/success states
-- form validation behavior
-- key user interactions
-
-Avoid large snapshot tests by default.
+Prefer behavior tests over snapshots. Cover auth-mode rendering and switching,
+loading/empty/error/success states, form validation, critical user flows.

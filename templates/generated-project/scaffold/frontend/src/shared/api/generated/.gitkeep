@@ -1,0 +1,3 @@
+# openapi-typescript writes schema.d.ts here. Do not commit the generated file
+# if your repo policy is to regenerate on CI; do commit it if you want
+# offline builds without backend access. Either is fine; pick one per project.
