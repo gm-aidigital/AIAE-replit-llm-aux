@@ -65,5 +65,11 @@ app:
       jwt-secret:   ${AUTH_MOCK_JWT_SECRET:}
   usage-logging:
     enabled:      ${USAGE_LOGGING_ENABLED:true}
-    service-name: ${USAGE_LOG_SERVICE_NAME:}
+    # service-name MUST be non-empty when enabled=true. Default falls back
+    # to spring.application.name so a generated project doesn't silently
+    # bind NoOpUsageLogger because of an unset env var (past sessions
+    # spent hours wondering "why zero usage events?"). Override per-app via
+    # USAGE_LOG_SERVICE_NAME env var with the real stable identifier
+    # (e.g. `employee-directory`, NOT `replit-mvp-template`).
+    service-name: ${USAGE_LOG_SERVICE_NAME:${spring.application.name}}
     environment:  ${USAGE_LOG_ENVIRONMENT:dev}

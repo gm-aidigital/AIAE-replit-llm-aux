@@ -7,12 +7,11 @@
 package PACKAGE_REPLACE_ME.security;
 
 import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.security.Keys;
 import io.jsonwebtoken.security.SignatureException;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
-import org.springframework.security.oauth2.jwt.JwtException as SpringJwtException;
+import org.springframework.security.oauth2.jwt.JwtException;
 
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
@@ -38,7 +37,7 @@ public class MockJwtDecoder implements JwtDecoder {
     }
 
     @Override
-    public Jwt decode(String token) throws SpringJwtException {
+    public Jwt decode(String token) throws JwtException {
         try {
             var claims = Jwts.parser()
                 .verifyWith(signingKey)
@@ -58,9 +57,9 @@ public class MockJwtDecoder implements JwtDecoder {
                 claims
             );
         } catch (SignatureException ex) {
-            throw new SpringJwtException("Invalid mock JWT signature", ex);
-        } catch (JwtException ex) {
-            throw new SpringJwtException("Invalid mock JWT: " + ex.getMessage(), ex);
+            throw new JwtException("Invalid mock JWT signature", ex);
+        } catch (io.jsonwebtoken.JwtException ex) {
+            throw new JwtException("Invalid mock JWT: " + ex.getMessage(), ex);
         }
     }
 }

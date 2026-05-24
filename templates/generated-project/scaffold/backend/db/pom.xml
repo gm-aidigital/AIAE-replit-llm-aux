@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!-- Liquibase changelogs only. `application` depends on `db` so changelogs
+     land on the classpath at runtime for Spring Boot's Liquibase auto-config.
+     No Java code (custom-change Java classes would live here if needed). -->
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
@@ -10,20 +13,13 @@
         <version>0.0.1-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
-    <artifactId>external-services</artifactId>
-    <name>Replit MVP — external-services</name>
+    <artifactId>db</artifactId>
+    <name>Replit MVP — db</name>
 
-    <!-- External HTTP/queue/broker adapters. TRUE LEAF — no internal deps.
-         Throws own <Provider>ExternalException (defined in this module);
-         service wraps into AppException. NO JPA, NO repos, NO DB. -->
     <dependencies>
         <dependency>
-            <groupId>org.projectlombok</groupId>
-            <artifactId>lombok</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-web</artifactId>
+            <groupId>org.liquibase</groupId>
+            <artifactId>liquibase-core</artifactId>
         </dependency>
     </dependencies>
 </project>

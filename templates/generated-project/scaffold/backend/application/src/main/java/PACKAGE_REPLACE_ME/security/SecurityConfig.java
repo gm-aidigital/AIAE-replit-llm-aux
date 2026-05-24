@@ -1,29 +1,18 @@
 // SecurityConfig — dual-mode auth chain.
+// AUTH_MODE=sso  → Clerk JwtDecoder against issuer JWKS.
+// AUTH_MODE=mock → MockJwtDecoder (HS256, backend-signed).
+// AUTH_MODE=auto → SSO if CLERK_SECRET_KEY set, else mock.
+// Single SecurityFilterChain; only JwtDecoder bean differs per mode.
 //
-// AUTH_MODE=sso  → Clerk JwtDecoder against issuer JWKS (real Google SSO).
-// AUTH_MODE=mock → MockJwtDecoder (backend-signed HS256, no external IdP).
-// AUTH_MODE=auto → use the SSO chain if CLERK_SECRET_KEY is set; otherwise mock.
-//
-// All three modes go through the SAME filter chain: SecurityFilterChain bean
-// below. They only differ in which JwtDecoder bean is active.
-//
-// !!! GOTCHA — OAuth2 auto-configuration !!!
-// Spring Boot's OAuth2 Resource Server auto-config triggers as soon as
-// `spring-boot-starter-oauth2-resource-server` is on the classpath, EVEN
-// when `spring.security.oauth2.resourceserver.jwt.issuer-uri` is empty or
-// missing. It will try to fetch JWKS from the empty URL and throw at
-// startup.
-//
-// Two-part fix (both required):
-//   1. Always provide a `@Bean JwtDecoder` — this template guarantees one
-//      via the @ConditionalOn... chain below, with a hard fallback that
-//      fires if every other condition is false.
-//   2. Do NOT set `spring.security.oauth2.resourceserver.jwt.*` properties
-//      in application.yml. Leave them unset. The @Bean JwtDecoder below
-//      satisfies the resource-server chain without poking auto-config.
+// GOTCHA: OAuth2 resource-server auto-config triggers on empty issuer-uri
+// and crashes startup. Fix: always provide @Bean JwtDecoder (hard-fallback
+// branch below); never set spring.security.oauth2.resourceserver.jwt.* in YAML.
+// Full: `.agents/skills/backend-java-feature/references/spring-boot-gotchas.md`
+// → "OAuth2 Resource Server auto-config".
 
 package PACKAGE_REPLACE_ME.security;
 
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -78,12 +67,16 @@ public class SecurityConfig {
         return JwtDecoders.fromIssuerLocation(issuer);
     }
 
-    /** AUTH_MODE=auto AND Clerk keys present → real Clerk SSO. */
+    /**
+     * AUTH_MODE=auto AND Clerk keys present → real Clerk SSO.
+     *
+     * SpEL composite (see AuthConstants.SSO_AUTO_CONDITION) because
+     * @ConditionalOnProperty is NOT repeatable — stacking two of them
+     * silently drops the second and the bean wires up regardless of
+     * whether CLERK_SECRET_KEY is set.
+     */
     @Bean
-    @ConditionalOnProperty(name = AuthConstants.AUTH_MODE_PROPERTY,
-                           havingValue = AuthConstants.AUTH_MODE_AUTO,
-                           matchIfMissing = true)
-    @ConditionalOnProperty(name = AuthConstants.CLERK_SECRET_KEY_PROPERTY)
+    @ConditionalOnExpression(AuthConstants.SSO_AUTO_CONDITION)
     @ConditionalOnMissingBean(JwtDecoder.class)
     JwtDecoder autoSsoJwtDecoder(AuthProperties props) {
         return JwtDecoders.fromIssuerLocation(props.getSso().getIssuerUri());

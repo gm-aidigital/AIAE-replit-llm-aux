@@ -20,86 +20,111 @@ jobs:
         run: |
           set -euo pipefail
           required_files=(
+            # === Template control plane (root) ===
             "replit.md"
             ".replit"
             "replit.nix"
             "custom_instruction/instructions.md"
-            "templates/generated-project/scaffold/backend/config/checkstyle.xml"
-            "templates/generated-project/scaffold/backend/config/checkstyle-suppressions.xml"
-            "templates/generated-project/scaffold/backend/lombok.config"
+
+            # === SKILL files ===
             ".agents/skills/backend-java-feature/SKILL.md"
             ".agents/skills/backend-java-feature/references/hikari-jpa-baseline.yml"
             ".agents/skills/backend-java-feature/references/application-replit.yml"
             ".agents/skills/backend-java-feature/references/database-url-translation.md"
-            "AGENTS.md"
+            ".agents/skills/backend-java-feature/references/ReplitDatabaseUrlPostProcessor.java"
+            ".agents/skills/backend-java-feature/references/spring-boot-gotchas.md"
+            ".agents/skills/backend-java-feature/references/code-patterns.md"
             ".agents/skills/openapi-contract-first/SKILL.md"
             ".agents/skills/frontend-react-feature/SKILL.md"
             ".agents/skills/mvp-safety-review/SKILL.md"
             ".agents/skills/engineering-handoff/SKILL.md"
+
+            # === Canonical docs (templates/generated-project/) ===
             "templates/generated-project/.github/workflows/ci.yml"
-            "templates/generated-project/pom-snippets/git-commit-id-maven-plugin.xml"
-            "templates/generated-project/pom-snippets/openapi-generator-maven-plugin.xml"
             "templates/generated-project/openapi/openapi-review-checklist.md"
             "templates/generated-project/openapi/canonical-openapi-rules.md"
             "templates/generated-project/auth/google-sso-clerk-blueprint.md"
             "templates/generated-project/frontend/canonical-react-frontend-rules.md"
             "templates/generated-project/frontend/bem-naming-rules.md"
-            "templates/generated-project/scaffold/frontend/src/shared/ui/base/tokens.css"
-            "templates/generated-project/scaffold/frontend/src/shared/ui/base/reset.css"
-            "templates/generated-project/scaffold/frontend/src/shared/lib/cn.ts"
-            "templates/generated-project/scaffold/frontend/src/App.css"
             "templates/generated-project/structure/near-production-project-structure.md"
             "templates/generated-project/generation/token-efficient-generation-rules.md"
             "templates/generated-project/observability/usage-logging-rules.md"
             "templates/generated-project/observability/logbook-http-logging-rules.md"
             "templates/generated-project/errors/error-handling-pattern.md"
             "templates/generated-project/testing/testing-policy.md"
-            "templates/generated-project/scaffold/scripts/setup-project.sh"
-            "templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/observability/usage/LogUsage.java"
-            "templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/observability/usage/UsageLoggingAspect.java"
+
+            # === Scaffold root ===
             "templates/generated-project/scaffold/.gitignore"
-            ".agents/skills/backend-java-feature/references/ReplitDatabaseUrlPostProcessor.java"
-            "templates/generated-project/scaffold/README.md"
             "templates/generated-project/scaffold/.env.example"
-            "templates/generated-project/scaffold/backend/Dockerfile"
-            "templates/generated-project/scaffold/frontend/Dockerfile"
-            "templates/generated-project/scaffold/frontend/nginx.conf"
-            "templates/generated-project/scaffold/docker-compose.yml"
-            "templates/generated-project/scaffold/backend/pom.xml"
-            "templates/generated-project/scaffold/backend/lombok.config"
             "templates/generated-project/scaffold/README.md.template"
+            "templates/generated-project/scaffold/docker-compose.yml"
+            "templates/generated-project/scaffold/scripts/setup-project.sh"
+
+            # === Scaffold backend root ===
+            "templates/generated-project/scaffold/backend/Dockerfile"
+            "templates/generated-project/scaffold/backend/lombok.config"
+            "templates/generated-project/scaffold/backend/pom.xml"
+            "templates/generated-project/scaffold/backend/config/checkstyle.xml"
+            "templates/generated-project/scaffold/backend/config/checkstyle-suppressions.xml"
+
+            # === Scaffold backend modules — poms ===
+            "templates/generated-project/scaffold/backend/application/pom.xml"
+            "templates/generated-project/scaffold/backend/service/pom.xml"
+            "templates/generated-project/scaffold/backend/domain/pom.xml"
+            "templates/generated-project/scaffold/backend/db/pom.xml"
+            "templates/generated-project/scaffold/backend/external-services/pom.xml"
+
+            # === Scaffold application module (Java) ===
             "templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/Application.java"
+            "templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/config/OpenApiSpecConfig.java"
             "templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/config/ReplitDatabaseUrlPostProcessor.java"
             "templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/security/SecurityConfig.java"
             "templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/security/MockJwtDecoder.java"
             "templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/security/AuthConstants.java"
             "templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/security/AuthProperties.java"
             "templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/error/GlobalExceptionHandler.java"
-            "templates/generated-project/scaffold/backend/domain/pom.xml"
-            "templates/generated-project/scaffold/backend/service/pom.xml"
-            "templates/generated-project/scaffold/backend/external-services/pom.xml"
-            "templates/generated-project/scaffold/backend/domain/src/main/java/PACKAGE_REPLACE_ME/domain/common/error/AppException.java"
-            "templates/generated-project/scaffold/backend/domain/src/main/java/PACKAGE_REPLACE_ME/domain/common/error/AppErrorReason.java"
-            "templates/generated-project/scaffold/backend/domain/src/main/java/PACKAGE_REPLACE_ME/domain/common/error/ValidationMessage.java"
-            "templates/generated-project/scaffold/backend/domain/src/main/java/PACKAGE_REPLACE_ME/domain/common/error/ValidationParameter.java"
-            "templates/generated-project/scaffold/backend/domain/src/main/java/PACKAGE_REPLACE_ME/domain/common/error/ValidationMessageType.java"
-            "templates/generated-project/scaffold/backend/domain/src/main/java/PACKAGE_REPLACE_ME/domain/common/error/CommonErrorCodes.java"
+            "templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/observability/usage/UsageLoggingAspect.java"
+
+            # === Scaffold service module (Java) — AppException family + LogUsage live HERE ===
+            "templates/generated-project/scaffold/backend/service/src/main/java/PACKAGE_REPLACE_ME/service/common/error/AppException.java"
+            "templates/generated-project/scaffold/backend/service/src/main/java/PACKAGE_REPLACE_ME/service/common/error/ErrorReason.java"
+            "templates/generated-project/scaffold/backend/service/src/main/java/PACKAGE_REPLACE_ME/service/common/error/ValidationMessage.java"
+            "templates/generated-project/scaffold/backend/service/src/main/java/PACKAGE_REPLACE_ME/service/common/error/ValidationParameter.java"
+            "templates/generated-project/scaffold/backend/service/src/main/java/PACKAGE_REPLACE_ME/service/common/error/ValidationMessageType.java"
+            "templates/generated-project/scaffold/backend/service/src/main/java/PACKAGE_REPLACE_ME/service/common/observability/LogUsage.java"
+            "templates/generated-project/scaffold/backend/service/src/main/java/PACKAGE_REPLACE_ME/service/sample/services/SampleService.java"
+            "templates/generated-project/scaffold/backend/service/src/main/java/PACKAGE_REPLACE_ME/service/sample/services/impl/SampleServiceImpl.java"
+            "templates/generated-project/scaffold/backend/service/src/main/java/PACKAGE_REPLACE_ME/service/sample/mappers/SampleMapper.java"
+            "templates/generated-project/scaffold/backend/service/src/main/java/PACKAGE_REPLACE_ME/service/sample/models/SampleRecord.java"
+            "templates/generated-project/scaffold/backend/service/src/main/java/PACKAGE_REPLACE_ME/service/sample/models/SampleUpdate.java"
+
+            # === Scaffold application resources ===
             "templates/generated-project/scaffold/backend/application/src/main/resources/META-INF/spring/org.springframework.boot.env.EnvironmentPostProcessor.imports"
             "templates/generated-project/scaffold/backend/application/src/main/resources/application.yml"
             "templates/generated-project/scaffold/backend/application/src/main/resources/application-replit.yml"
             "templates/generated-project/scaffold/backend/application/src/main/resources/application-local.yml"
             "templates/generated-project/scaffold/backend/application/src/main/resources/logback-spring.xml"
-            "templates/generated-project/scaffold/backend/application/src/main/resources/static/api/v1/specs/openapi.yaml"
+            "templates/generated-project/scaffold/backend/application/src/main/resources/api/v1/specs/openapi.yaml"
+
+            # === Scaffold db module (Liquibase) ===
             "templates/generated-project/scaffold/backend/db/src/main/resources/db/changelog/db.changelog-master.xml"
             "templates/generated-project/scaffold/backend/db/src/main/resources/db/changelog/changes/0001-usage-events.xml"
+
+            # === Scaffold frontend ===
+            "templates/generated-project/scaffold/frontend/Dockerfile"
+            "templates/generated-project/scaffold/frontend/nginx.conf"
             "templates/generated-project/scaffold/frontend/package.json"
             "templates/generated-project/scaffold/frontend/vite.config.ts"
             "templates/generated-project/scaffold/frontend/tsconfig.json"
             "templates/generated-project/scaffold/frontend/index.html"
             "templates/generated-project/scaffold/frontend/src/main.tsx"
             "templates/generated-project/scaffold/frontend/src/App.tsx"
+            "templates/generated-project/scaffold/frontend/src/App.css"
             "templates/generated-project/scaffold/frontend/src/shared/api/client.ts"
             "templates/generated-project/scaffold/frontend/src/shared/config/runtime.ts"
+            "templates/generated-project/scaffold/frontend/src/shared/ui/base/tokens.css"
+            "templates/generated-project/scaffold/frontend/src/shared/ui/base/reset.css"
+            "templates/generated-project/scaffold/frontend/src/shared/lib/cn.ts"
           )
           for file in "${required_files[@]}"; do
             test -f "${file}" || { echo "Missing required file: ${file}"; exit 1; }
@@ -210,16 +235,21 @@ jobs:
           # PACKAGE_REPLACE_ME is the only allowed Java-package placeholder
           # token. Anywhere else it appears, treat as drift.
           for f in templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/Application.java \
+                   templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/config/OpenApiSpecConfig.java \
                    templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/config/ReplitDatabaseUrlPostProcessor.java; do
             grep -q 'PACKAGE_REPLACE_ME' "$f" || { echo "Scaffold $f lost the PACKAGE_REPLACE_ME placeholder"; exit 1; }
           done
+          test -f templates/generated-project/scaffold/backend/application/src/main/resources/api/v1/specs/openapi.yaml \
+            || { echo "Scaffold OpenAPI spec must live outside static/"; exit 1; }
+          test ! -f templates/generated-project/scaffold/backend/application/src/main/resources/static/api/v1/specs/openapi.yaml \
+            || { echo "OpenAPI spec must not live under static/ because Vite build wipes it"; exit 1; }
           # Liquibase master must include the usage-events changelog.
           master='templates/generated-project/scaffold/backend/db/src/main/resources/db/changelog/db.changelog-master.xml'
           grep -q '0001-usage-events.xml' "$master" \
             || { echo "Liquibase master changelog does not include 0001-usage-events.xml"; exit 1; }
           # Frontend package.json must define the canonical scripts.
           pj='templates/generated-project/scaffold/frontend/package.json'
-          for k in '"generate:api"' '"check:api"' 'openapi-typescript' 'openapi-fetch' '@tanstack/react-query' '@clerk/clerk-react'; do
+          for k in '"generate:api"' '"check:api"' '"test"' 'openapi-typescript' 'openapi-fetch' '@tanstack/react-query' '@clerk/clerk-react' 'vitest' '@testing-library/react'; do
             grep -q "$k" "$pj" || { echo "Scaffold frontend/package.json missing $k"; exit 1; }
           done
 

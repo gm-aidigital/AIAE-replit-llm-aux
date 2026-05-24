@@ -1,40 +1,29 @@
 # Logbook HTTP Logging Rules
 
-Generated Java/Spring backend services must log inbound and outbound HTTP traffic with Zalando Logbook.
-
-These logs are operational/debug logs to stdout. They are separate from usage analytics events.
+Backend logs inbound + outbound HTTP via Zalando Logbook. Operational/debug
+logs to stdout, separate from usage analytics events.
 
 ## Required Dependency
 
-- `org.zalando:logbook-spring-boot-starter`
-
-Use a centrally managed version property in the parent POM.
+- `org.zalando:logbook-spring-boot-starter` (version managed in parent POM).
 
 ## Required Configuration
 
-Create a `LogbookConfiguration` class in the backend application/common layer.
+`LogbookConfiguration` class in application/common layer:
 
-Required behavior:
-
-- register a `Logbook` bean
-- use `JsonHttpLogFormatter` so request/response logs are JSON
-- use `DefaultHttpLogWriter`
-- log request and response bodies always, after filtering
-- exclude noisy infrastructure traffic
-- mask sensitive headers and JSON body fields
+- register `Logbook` bean
+- `JsonHttpLogFormatter` (JSON request/response logs)
+- `DefaultHttpLogWriter`
+- log request + response bodies always, after filtering
+- exclude noisy infrastructure
+- mask sensitive headers + JSON body fields
 
 ## Body Logging Policy
 
-Request and response bodies must be logged for application endpoints.
-
-Rules:
-
-- always log bodies after applying filters
-- never log unfiltered bodies
-- truncate or filter very large payloads if the application accepts files/documents
-- never log raw documents, credentials, JWTs, service account JSON, API keys, or raw personal data
-
-Do not use `BodyOnlyIfStatusAtLeastStrategy` for this template because successful request/response bodies must also be visible in logs.
+- Always log bodies after filters; never log unfiltered.
+- Truncate large payloads if app accepts files/docs.
+- Never log raw documents, credentials, JWTs, service account JSON, API keys, PII.
+- Do NOT use `BodyOnlyIfStatusAtLeastStrategy` — successful bodies must be visible too.
 
 ## Exclusions
 

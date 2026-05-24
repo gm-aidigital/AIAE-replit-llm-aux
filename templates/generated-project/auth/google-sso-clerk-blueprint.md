@@ -1,16 +1,12 @@
 # Google SSO + Mock Auth Blueprint
 
-> **STACK REMINDER.** This template generates **Java 21 LTS + Spring Boot 3.x**
-> backends. Nothing in this document changes that. Replit-managed Clerk's
-> "auto-mounted Express middleware" is for Node apps and **does not apply**
-> here. Our Spring backend validates Clerk JWTs via
-> `spring-boot-starter-oauth2-resource-server` + Clerk JWKS — no Express,
-> no Node, no Python. If reading this blueprint makes you think "Flask would
-> be simpler" or "let me use Express for the middleware path", stop and
-> re-read `replit.md` STACK LOCK and `instructions.md` ABSOLUTE STACK LOCK.
+> **STACK REMINDER.** Template = Java 21 + Spring Boot 3.x. Replit-managed
+> Clerk's "auto-mounted Express middleware" is Node-only — does NOT apply.
+> Spring validates Clerk JWTs via `spring-boot-starter-oauth2-resource-server`
+> + Clerk JWKS. Re-read `custom_instruction/instructions.md` STACK LOCK if
+> tempted toward Flask/Express.
 
-Single source of truth for auth in generated projects. Other files reference
-this one; do not restate the contract elsewhere.
+Single source of truth for auth. Other files reference this; never restate.
 
 ## Two ways to wire Clerk on Replit
 
@@ -24,41 +20,34 @@ this one; do not restate the contract elsewhere.
 | Frontend SDK | `@clerk/clerk-react` with `<ClerkProvider>` (Replit injects the publishable key automatically). | Same `@clerk/clerk-react`, but you set `VITE_CLERK_PUBLISHABLE_KEY` yourself. |
 | Backend (**Spring Boot — the only allowed backend**) | Replit's auto-wired *Node/Express* middleware is **irrelevant** here. Spring verifies JWTs via `spring-boot-starter-oauth2-resource-server` + Clerk's JWKS endpoint. Code path is the same whether Clerk is Replit-managed or standalone. | Same Spring path. |
 
-### Choose the managed path when
+### Choose managed when
 
-- The app will ship primarily on Replit (Workspace + Deployment).
-- Non-technical users / managers should never have to touch a Clerk Dashboard.
-- You don't need to export the same Clerk tenant to a local docker-compose
-  environment.
+- App ships primarily on Replit (Workspace + Deployment).
+- Non-technical users should never touch a Clerk Dashboard.
+- Same Clerk tenant doesn't need to export to local docker-compose.
 
-### Choose the standalone Clerk Dashboard path when
+### Choose standalone when
 
-- The same app must run on Replit AND on engineering's local docker-compose
-  with the same identities.
-- You want custom Clerk branding/templates beyond what Replit's Auth pane exposes.
-- Compliance requires owning the Clerk tenant on the company's own Clerk account.
+- Same app runs on Replit AND engineering's local docker-compose with same identities.
+- Custom Clerk branding beyond Replit's Auth pane.
+- Compliance requires owning the Clerk tenant on the company's own account.
 
-The template defaults to **managed-Clerk on Replit + mock-auth locally**.
-That keeps the Replit demo zero-config while the local-dev path stays
-isolated (mock JWT). Engineering can later swap mock for standalone Clerk
-during handoff.
+Template default: **managed-Clerk on Replit + mock-auth locally**. Engineering
+swaps mock for standalone Clerk during handoff.
 
 ## Preferred architecture
 
-`Google → Clerk → application`. Clerk issues the JWT; Spring verifies it as
-an OAuth2 Resource Server. Whether Clerk is Replit-managed or standalone is
-an operational detail — the JWT validation code path is identical.
+`Google → Clerk → application`. Clerk issues JWT; Spring verifies as OAuth2
+Resource Server. JWT validation code path is identical for managed vs standalone.
 
-Direct Google OIDC without Clerk is allowed only when project standards
-explicitly require it.
+Direct Google OIDC without Clerk only when project standards require it.
 
-## When to skip Clerk entirely and use Replit Auth
+## Skip Clerk entirely — use Replit Auth
 
-If the generated app will only ever ship on Replit (no local-dev export, no
-engineering handoff), [Replit Auth](https://docs.replit.com/references/auth-and-identity/authentication)
-is the simplest path — identity is handled by Replit itself, no Clerk at
-all. Reach for it only when the demo is Replit-only and you accept that
-exporting later means rewriting the auth layer.
+For Replit-only demos (no local-dev export, no handoff),
+[Replit Auth](https://docs.replit.com/references/auth-and-identity/authentication)
+is zero-config — identity handled by Replit. Accept that exporting later
+means rewriting the auth layer.
 
 ## Modes (`AUTH_MODE`)
 
@@ -68,15 +57,13 @@ exporting later means rewriting the auth layer.
 | `sso` | Require Clerk keys; fail startup if missing. |
 | `mock` | Skip external IdP; expose local mock login. |
 
-Generated projects must start in both `mock` (no keys) and `sso` (keys present)
-without code rewrites. On Replit-managed Clerk, the keys are automatically
-present in Workspace and Deployment, so `auto` resolves to `sso`. Locally
-(docker-compose) the keys are absent, so `auto` resolves to `mock`.
+Generated projects start in both `mock` (no keys) and `sso` (keys present)
+without code rewrites. Managed Clerk: keys auto-present → `auto` resolves
+`sso`. Locally: keys absent → `auto` resolves `mock`.
 
-### Auto-mode detection (backend, mandatory implementation pattern)
+### Auto-mode detection (backend pattern)
 
-On `AUTH_MODE=auto` the backend MUST decide between SSO and mock by checking
-whether `CLERK_SECRET_KEY` is non-empty. Standard Spring pattern:
+On `AUTH_MODE=auto` backend decides via `CLERK_SECRET_KEY` non-empty check:
 
 ```java
 @Configuration
@@ -92,9 +79,9 @@ public class AutoAuthConfig {
 }
 ```
 
-`AUTH_MODE=sso` and `AUTH_MODE=mock` use their own `@Configuration` classes
-without `@ConditionalOnProperty` on `CLERK_SECRET_KEY`. This makes the
-auto-detection an implementation detail of the `auto` branch only.
+`AUTH_MODE=sso`/`mock` use their own `@Configuration` without
+`@ConditionalOnProperty` on `CLERK_SECRET_KEY` — auto-detection is an
+implementation detail of the `auto` branch.
 
 ## Frontend contract
 
@@ -132,6 +119,35 @@ Provider-specific:
 
 Map trusted claims (`sub`, `email`, roles/groups) into the application principal.
 
+### Principal-key contract (REQUIRED)
+
+One claim is canonical principal id; used EVERYWHERE ("who the user is"):
+`Authentication#getName()`, seed `user_roles.user_id`, audit/usage-event
+`user_id`, any "logged-in person" FK.
+
+**Canonical claim: `email`** (lowercased, trimmed).
+
+- `sub` is provider-internal (Clerk user id, Google subject); changes on
+  re-provision. Don't key business tables on it.
+- `email` is stable for the demo/handoff window; reads naturally in seed/logs.
+- Both mock + SSO modes MUST make `getName()` return lowercased email.
+  `MockJwtDecoder` puts `email` into `sub` AND sets it as principal name;
+  Clerk's JWT carries `email` directly.
+
+**Hard rules** (#1 source of "logged in but no data" bugs):
+
+1. Every Liquibase-seeded `user_roles.user_id` = the exact lowercased email
+   the mock/SSO flow produces. Anti-pattern: seeding `user_id = 'mock-hr-manager'`
+   while principal name is `alice.johnson@company.com` → login succeeds,
+   authorization silently denies every protected endpoint.
+2. Mock-login endpoint accepts the same email values as the seed. Wire
+   `AUTH_MOCK_USER` + "demo accounts" to seed emails, not role slugs.
+3. Audit/usage-event `user_id` stores the same email — cross-table joins
+   on `user_id` work without translation.
+
+`mock` mode: `AUTH_MOCK_USER` is an email (e.g. `alice.johnson@company.com`),
+never a role name.
+
 Spring config keys:
 ```
 spring.security.oauth2.resourceserver.jwt.issuer-uri
@@ -139,14 +155,12 @@ spring.security.oauth2.resourceserver.jwt.jwk-set-uri   # optional
 spring.security.oauth2.resourceserver.jwt.audiences
 ```
 
-Return `401` for missing/invalid token; `403` for insufficient authority.
-Never treat frontend session state alone as proof of authentication.
+Return `401` missing/invalid token; `403` insufficient authority. Never
+trust frontend session state alone.
 
-> **Note for Replit-managed Clerk.** Replit auto-mounts an Express middleware
-> for Node apps. **We do not use Node anywhere in this template.** Spring's
-> OAuth2 Resource Server filter chain replaces that middleware completely.
-> The JWT-validation contract is the same; only the implementation lives
-> in `application/.../security/` Java, not in `middleware.js`.
+> Replit-managed Clerk's Express middleware is Node-only — irrelevant here.
+> Spring's OAuth2 Resource Server filter chain replaces it; same JWT
+> contract, Java implementation in `application/.../security/`.
 
 ## Endpoints
 
@@ -224,17 +238,14 @@ Never inject the Google client secret into the browser.
 5. Protected endpoint: `200` with valid token, `401` without, `403` for insufficient authority.
 
 **SSO mode — standalone Clerk Dashboard**
-Same as above, but Clerk keys are pasted manually into Replit Secrets / `.env`
-from the Clerk Dashboard, and the tenant lives on the company's Clerk
-account rather than Replit's.
+Same as above; Clerk keys pasted manually into Replit Secrets / `.env`
+from the Clerk Dashboard; tenant on the company's account.
 
 ## Replit-managed Clerk: hard rules
 
 - **Do NOT** manually edit `CLERK_PUBLISHABLE_KEY` / `CLERK_SECRET_KEY` in
-  the Replit Secrets pane. Doing so breaks the automatic dev↔prod switch
-  and is explicitly unsupported by Replit's docs.
-- **Do NOT** configure Google OAuth inside the Clerk Dashboard for the
-  Replit-managed tenant — use Replit's Auth pane.
-- Managed Clerk credentials cannot be exported to local docker-compose.
-  Local-dev runs in mock mode unless a separate standalone-Clerk tenant is
-  provisioned for engineering.
+  Replit Secrets — breaks automatic dev↔prod switch (unsupported by Replit docs).
+- **Do NOT** configure Google OAuth in Clerk Dashboard for the managed tenant
+  — use Replit's Auth pane.
+- Managed Clerk credentials don't export to local docker-compose. Local-dev
+  runs in mock mode unless engineering provisions a standalone tenant.

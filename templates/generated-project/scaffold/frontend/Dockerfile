@@ -12,10 +12,11 @@ WORKDIR /workspace
 COPY package*.json ./
 RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 COPY . ./
-# `generate:api` reads ../backend/application/src/main/resources/static/api/v1/specs/openapi.yaml
-# which is bind-mounted at /workspace-backend by docker-compose; the script
-# uses a relative path so we point at the mount.
-ARG OPENAPI_SPEC=/workspace-backend/application/src/main/resources/static/api/v1/specs/openapi.yaml
+# `generate:api` reads ../backend/application/src/main/resources/api/v1/specs/openapi.yaml
+# (spec lives OUTSIDE static/ so Vite's `emptyOutDir: true` build can't wipe it —
+# see OpenApiSpecConfig.java header). Bind-mounted at /workspace-backend by
+# docker-compose; the script uses a relative path so we point at the mount.
+ARG OPENAPI_SPEC=/workspace-backend/application/src/main/resources/api/v1/specs/openapi.yaml
 RUN OPENAPI_SPEC="${OPENAPI_SPEC}" npm run generate:api && npm run build
 
 # ---------- Stage 2: runtime (static SPA via nginx) ----------

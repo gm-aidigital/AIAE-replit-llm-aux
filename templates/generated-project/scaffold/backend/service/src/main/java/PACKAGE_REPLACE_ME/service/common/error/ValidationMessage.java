@@ -1,8 +1,8 @@
 // ValidationMessage — code + formatted message + type + parameters.
-// Mirrors cls's ValidationMessage. Created by AppException; serialised
-// into the ApiErrorV1 response body by GlobalExceptionHandler.
+// Constructed by AppException and serialised into ApiErrorV1 by
+// GlobalExceptionHandler.
 
-package PACKAGE_REPLACE_ME.domain.common.error;
+package PACKAGE_REPLACE_ME.service.common.error;
 
 import jakarta.validation.constraints.NotNull;
 
@@ -18,7 +18,7 @@ public final class ValidationMessage {
     private final ValidationMessageType type;
     private final List<ValidationParameter> parameters;
 
-    public ValidationMessage(@NotNull AppErrorReason reason, ValidationParameter... params) {
+    public ValidationMessage(@NotNull ErrorReason reason, ValidationParameter... params) {
         this.code = reason.getCode();
         this.type = ValidationMessageType.ERROR;
         this.parameters = params != null ? Arrays.asList(params) : Collections.emptyList();
@@ -58,8 +58,7 @@ public final class ValidationMessage {
         return String.format("%s: %s", code, message);
     }
 
-    /** Convenience factory: positional params become ValidationParameter("param0", str), … */
-    public static ValidationMessage withParams(AppErrorReason reason, Object... params) {
+    public static ValidationMessage withParams(ErrorReason reason, Object... params) {
         ValidationParameter[] validationParameters = null;
         if (params != null) {
             validationParameters = new ValidationParameter[params.length];

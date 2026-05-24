@@ -1,49 +1,53 @@
 # Usage Logging Rules
 
-Generated backend services emit one fire-and-forget event per meaningful user
-action into the app's own PostgreSQL `usage_events` table. The manager runs
-SQL against that table for usage estimation.
+One fire-and-forget event per meaningful user action → app's PostgreSQL
+`usage_events` table. Manager queries the table for usage estimation.
 
-This is intentionally simple: one sink, one table, the same DB the app already
-uses on Replit and local-dev.
+One sink, one table, the same DB the app already uses.
 
 ## Default behavior
 
-Generated projects ship with `USAGE_LOGGING_ENABLED=true` and a
-`PostgresUsageLogger` bound. When the flag is `false`, or any required setting
-is missing, `NoOpUsageLogger` is bound instead — the logger silently
-short-circuits.
+Ships with `USAGE_LOGGING_ENABLED=true` + `PostgresUsageLogger`. Binding
+rules at startup:
 
-Local dev and tests must run without any usage-logging setup beyond the
-default `usage_events` Liquibase changelog. The logger never blocks a user
-request and never throws into the request flow.
+| `enabled` | `service-name` | Binds | Notes |
+|---|---|---|---|
+| `false` | (any) | `NoOpUsageLogger` | Explicit opt-out, silent by design |
+| `true`  | non-empty, not placeholder | `PostgresUsageLogger` | Normal path |
+| `true`  | **empty / blank / `replit-mvp-template`** | **FAIL FAST at startup** | Loud `IllegalStateException` — do NOT silently fall back to NoOp |
 
-## What is automatic vs. what is your job
+The fail-fast row is REQUIRED. Past sessions silently bound `NoOpUsageLogger`
+on empty `service-name` and shipped projects with zero usage events to the
+DB — the dashboard read as "0 actions" with no error anywhere. The right
+behavior is loud refusal so the misconfiguration is impossible to miss.
 
-**Automatic (the template wires it for you, do not reimplement):**
-- `spring-boot-starter-aop` on the classpath → Spring Boot enables AspectJ
-  proxying with no `@EnableAspectJAutoProxy` needed.
-- `UsageLoggingAspect` is `@Aspect @Component` — component-scanned at startup.
+The scaffold's `application.yml` defaults `service-name` to
+`${spring.application.name}` so an unset env var still binds the real
+logger — but `spring.application.name` MUST be set to the real service
+identifier per app (not the placeholder `replit-mvp-template`).
+
+Local dev + tests run without setup beyond the default `usage_events`
+Liquibase changelog. Logger never blocks a request, never throws into the flow.
+
+## Automatic vs. manual
+
+**Automatic** (template wires it, don't reimplement):
+- `spring-boot-starter-aop` → AspectJ proxying (no `@EnableAspectJAutoProxy`).
+- `UsageLoggingAspect` is `@Aspect @Component`, scanned at startup.
 - `@ConditionalOnProperty(name="app.usage-logging.enabled", matchIfMissing=true)`
-  → aspect is **active by default**; set the flag to `false` to globally
-  silence usage logging without touching code.
-- The aspect handles success / exception / duration / user / correlationId
-  uniformly. Business code never imports `UsageLogger`.
+  → aspect active by default; flip to `false` to silence without code change.
+- Aspect handles success/exception/duration/user/correlationId. Business code
+  never imports `UsageLogger`.
 
-**Manual (your discipline — the aspect cannot guess it):**
-- **You must put `@LogUsage(action = "<dotted.lowercase>")` on every
-  service-impl public method that represents a user action.** Methods without
-  the annotation are NOT logged — the aspect has no way to know which method
-  is a "user action" and which is internal helper, so it only fires on the
-  annotation.
-- One `@LogUsage` per public method on every `*ServiceImpl` is the rule.
-  Private helpers and internal-only methods stay un-annotated.
-- The `action` value is a stable identifier for analytics — pick once,
-  don't rename later (or you'll break the manager's dashboard queries).
+**Manual** (your discipline):
+- **`@LogUsage(action = "<dotted.lowercase>")` on every `*ServiceImpl` public
+  method that's a user action.** Without it, the method is NOT logged —
+  aspect can't guess which methods are user actions vs internal helpers.
+- One `@LogUsage` per public method on every `*ServiceImpl`. Private/internal
+  helpers stay un-annotated.
+- `action` is a stable analytics identifier — pick once; renaming breaks dashboard queries.
 
-Copy `SampleServiceImpl` in scaffold as the reference shape — every new
-service follows the same `@Service` + `@RequiredArgsConstructor` + `@LogUsage`
-on each public method pattern.
+Reference: `SampleServiceImpl` in scaffold.
 
 ## Required env placeholders (in `.env.example`)
 
@@ -82,33 +86,34 @@ or empty strings at startup with a clear error message (and bind
 
 ## Java backend contract — AOP-driven, single annotation
 
-Usage logging is wired via a Spring AOP aspect — **no explicit
-`logger.record(...)` calls scattered in business code**. Service / controller
-methods you want to track get the `@LogUsage(action = "...")` annotation;
-the `UsageLoggingAspect` does the rest.
-
-Why aspect-based:
-- Zero noise in service code. Business logic doesn't import UsageLogger.
-- Single switch: remove `@LogUsage` (or disable the aspect via
-  `app.usage-logging.enabled=false`) and logging disappears from the call
-  path entirely.
-- Both success and exception paths are captured automatically by one
-  `try/catch/finally` in the aspect.
+Wired via Spring AOP aspect — **no explicit `logger.record(...)` calls in
+business code**. Methods to track get `@LogUsage(action = "...")`;
+`UsageLoggingAspect` does the rest. Both success and exception paths captured
+by one `try/catch/finally` in the aspect. Disable globally via
+`app.usage-logging.enabled=false`.
 
 ### Components
 
 - `LogUsage` annotation (`@Retention(RUNTIME) @Target(METHOD)`) carrying
   `action` (mandatory, dotted lowercase like `employee.update`) and
-  `eventType` (default `api_request`).
+  `eventType` (default `api_request`). Lives in
+  `service/src/main/java/<base>/service/common/observability/LogUsage.java` —
+  in the service module so all `*ServiceImpl` classes can see it without
+  service depending on application.
 - `UsageLoggingAspect` — `@Aspect @Component @Order(LOWEST_PRECEDENCE - 100)`,
   bound to `@annotation(logUsage)`, wraps target with `try/catch/finally`.
 - `UsageLoggingProperties` — `@ConfigurationProperties("app.usage-logging")`
   binding `enabled`, `service-name`, `environment`. NO magic strings.
-- `UsageEvent` — immutable value type (`@Builder` Lombok record).
+- `UsageEvent` — immutable value type (`@Builder` Lombok record), also in
+  `service/common/observability/`. Service classes don't construct it
+  directly (the aspect does), but it lives in service so the aspect (in
+  application/) can import it via the application→service direction.
 - `UsageEventEntity` — JPA `@Entity` on `usage_events` (lives in `domain`).
 - `UsageEventRepository extends JpaRepository<UsageEventEntity, Long>`
   (lives in `domain`).
 - `UsageLogger` — interface, single method `void record(UsageEvent event)`.
+  Lives in `service/common/observability/`; impls (`PostgresUsageLogger`,
+  `NoOpUsageLogger`) live in `application/observability/usage/`.
 - `PostgresUsageLogger` — implementation, `@Async` + `@Transactional(REQUIRES_NEW)`
   so the DB write runs off the request thread in its own short transaction
   (uncoupled from the calling request's tx outcome).
@@ -151,7 +156,7 @@ public class ResourceServiceImpl implements ResourceService {
     @LogUsage(action = "resource.update")
     public ResourceRecord update(Long id, ResourceUpdate update, AppUser caller) {
         ResourceEntity entity = repo.findById(id)
-            .orElseThrow(() -> new AppException(ResourceErrorReason.E001, id));
+            .orElseThrow(() -> new AppException(ErrorReason.C001, id));
         entity.apply(update);
         return mapper.toRecord(repo.save(entity));
     }
@@ -164,22 +169,19 @@ authenticated user from `SecurityContext`, the correlationId from MDC.
 
 ### Async + SecurityContext caveat
 
-`SecurityContextHolder` uses `ThreadLocal` by default. If the
-`@LogUsage`-annotated method is itself `@Async` (running on a different
-thread), set the strategy at startup:
+`SecurityContextHolder` is `ThreadLocal`. If the `@LogUsage` method is itself
+`@Async`, set at startup:
 
 ```java
-SecurityContextHolder.setStrategyName(
-    SecurityContextHolder.MODE_INHERITABLETHREADLOCAL);
+SecurityContextHolder.setStrategyName(SecurityContextHolder.MODE_INHERITABLETHREADLOCAL);
 ```
 
-Or use Spring's `DelegatingSecurityContextRunnable`. For synchronous
-controller → service calls (the common path) this isn't needed.
+Or use `DelegatingSecurityContextRunnable`. Not needed for synchronous
+controller→service (common path).
 
-**Why JPA, not JdbcTemplate.** The rest of the codebase uses JPA; mixing
-JdbcTemplate for one table is a smell and a second persistence path to
-maintain. JPA `save()` on a single insert is fast enough; the async wrapper
-makes the cost off the request path either way.
+**Why JPA, not JdbcTemplate.** Codebase uses JPA; mixing = two persistence
+paths to maintain. JPA `save()` single insert is fast enough; async wrapper
+keeps it off the request path.
 
 Binding rule (Spring `@Configuration`, no magic strings):
 
@@ -294,42 +296,35 @@ ORDER BY n DESC;
 
 ## Manager workflow: build a dashboard with Replit
 
-Replit ships a built-in [Create a dashboard from data](https://docs.replit.com/build/dashboard)
-workflow that turns any data source into a small visualization app. The
-manager uses it on the **same DB** that the MVP writes to.
+Replit's [Create a dashboard from data](https://docs.replit.com/build/dashboard)
+turns any data source into a small visualization app. Manager uses it on the
+**same DB** the MVP writes to.
 
-### Cross-app DB sharing on Replit (important)
+### Cross-app DB sharing
 
-Replit's `postgresql-16` module provisions a SQL Database **per app**. The
-manager's dashboard app is a separate Replit app, so it does NOT automatically
-share the MVP's DB. Two ways to give the dashboard access:
+`postgresql-16` provisions a SQL Database **per app**. Dashboard app is
+separate → does NOT auto-share MVP's DB. Two options:
 
 **Option 1 — manual connection string (simplest).**
-1. In the MVP app's Replit Secrets pane, copy the value of `DATABASE_URL`.
-2. Create a read-only role on the MVP's DB (`usage_reader`, see below) and
-   build a connection string with its credentials instead of the default
-   superuser.
-3. In the dashboard app's Replit Secrets pane, paste that read-only URL as
-   `DATABASE_URL` (or whatever var the dashboard app uses).
+1. Copy MVP app's `DATABASE_URL` from Replit Secrets.
+2. Create read-only role on MVP's DB (`usage_reader`, see below); build a
+   connection string with its credentials (not superuser).
+3. Paste read-only URL as `DATABASE_URL` in the dashboard app's Secrets.
 
-**Option 2 — shared external DB** (only when usage from multiple services
-must aggregate). Provision a managed Postgres outside Replit (Neon, RDS,
-etc.) and point both apps' `DATABASE_URL` at it. This is the trigger to
-revisit the BigQuery migration note below.
+**Option 2 — shared external DB** (only for cross-service aggregation).
+Managed Postgres outside Replit (Neon, RDS); both apps' `DATABASE_URL` point
+to it. Triggers the BigQuery migration revisit below.
 
 ### Manager flow (Option 1)
 
-1. Manager opens Replit and picks "Create a dashboard from data".
-2. Pastes the read-only `DATABASE_URL` into the dashboard app's Secrets pane
-   when prompted for a data source.
-3. Describes the desired view in plain language, e.g. *"build a dashboard
-   from the `usage_events` table: action counts per day, top users by
-   action volume, error-rate trend, filter by service and date range."*
-4. Replit Agent generates the dashboard app. The manager bookmarks its
-   preview URL.
+1. "Create a dashboard from data" in Replit.
+2. Paste read-only `DATABASE_URL`.
+3. Describe the view in plain language (e.g. "action counts per day, top users
+   by action volume, error-rate trend, filter by service and date range").
+4. Agent generates the dashboard; manager bookmarks the URL.
 
-The dashboard app is independent of the MVP — it only reads `usage_events`.
-Service code stays free of dashboard UI.
+Dashboard is independent of MVP — reads `usage_events` only. Service code
+stays free of dashboard UI.
 
 ### Read-only manager role
 
@@ -349,8 +344,6 @@ postgresql://usage_reader:<password>@<host>:<port>/<db>?sslmode=require
 
 ## Future migration (only when needed)
 
-If usage from multiple internal services later needs cross-service
-aggregation, add a second `UsageLogger` implementation that writes to your
-aggregation target (for example BigQuery) and bind it instead of
-`PostgresUsageLogger`. The event payload above is intentionally portable, so
-adding a sink is implementation work only — no contract or call-site changes.
+For cross-service aggregation, add a second `UsageLogger` impl writing to
+the aggregation target (e.g. BigQuery); bind instead of `PostgresUsageLogger`.
+Event payload is portable — adding a sink is implementation-only, no contract changes.

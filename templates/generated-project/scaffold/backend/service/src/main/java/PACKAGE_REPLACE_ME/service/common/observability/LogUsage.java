@@ -16,7 +16,7 @@
 // to record a domain-specific attribute, call UsageLogger directly inside
 // the method body for that one detail.
 
-package PACKAGE_REPLACE_ME.observability.usage;
+package PACKAGE_REPLACE_ME.service.common.observability;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;

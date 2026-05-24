@@ -1,4 +1,4 @@
-package PACKAGE_REPLACE_ME.domain.common.error;
+package PACKAGE_REPLACE_ME.service.common.error;
 
 public enum ValidationMessageType {
     ERROR,

@@ -1,44 +1,22 @@
-// UsageLoggingAspect — intercepts every @LogUsage method call and records
-// a UsageEvent row via UsageLogger. The whole usage-logging behaviour
-// lives behind one annotation; remove `@LogUsage` from a method (or
-// remove this aspect bean) and the application keeps working without any
-// other code change.
-//
-// VALIDATION NOTES — keep these guarantees on every edit to this file:
-//
-//  1. PROXY MECHANISM. Spring AOP proxies bean methods. Self-invocation
-//     (`this.annotatedMethod()` inside the same bean) bypasses the proxy
-//     — aspect does NOT fire. Document this on @LogUsage; call across
-//     bean boundaries only.
-//
-//  2. ORDER vs @Transactional. Spring's @Transactional aspect has
-//     `@Order(Ordered.LOWEST_PRECEDENCE)` (innermost). Putting this
-//     aspect at `LOWEST_PRECEDENCE - 100` makes it OUTER — the usage
-//     event is logged AFTER commit/rollback, with the final tx outcome
-//     reflected as `success` or `error`.
-//
-//  3. EXCEPTION PATH. `try { proceed() } catch (Throwable) { rethrow }
-//     finally { log }` guarantees we log both success and failure, and
-//     never swallow exceptions.
-//
-//  4. SECURITY CONTEXT. Read via SecurityContextHolder (ThreadLocal) —
-//     works for synchronous HTTP requests on the same thread. For @Async
-//     code, configure
-//     `SecurityContextHolder.setStrategyName(MODE_INHERITABLETHREADLOCAL)`
-//     or wrap with DelegatingSecurityContextRunnable.
-//
-//  5. LOGGER IS @Async. UsageLogger.record() does its own DB write off
-//     the request thread. This aspect only ASSEMBLES the event and hands
-//     it off; the assembly must be cheap (no DB calls, no I/O).
-//
-//  6. NO RAW ARGS LOGGED. The aspect deliberately ignores
-//     joinPoint.getArgs(). Anything sensitive — request bodies, JWTs,
-//     PII — can't leak through this path.
+// UsageLoggingAspect — intercepts @LogUsage methods, records UsageEvent via
+// UsageLogger. Behaviour invariants (preserve on every edit):
+//  1. Self-invocation bypasses Spring AOP proxy → aspect won't fire.
+//  2. @Order(LOWEST_PRECEDENCE - 100) — OUTER than @Transactional, so the
+//     usage event reflects final commit/rollback outcome.
+//  3. try { proceed() } catch (Throwable) { rethrow } finally { log }
+//     — logs success + failure, never swallows.
+//  4. SecurityContextHolder is ThreadLocal; for @Async paths use
+//     MODE_INHERITABLETHREADLOCAL or DelegatingSecurityContextRunnable.
+//  5. Logger is @Async (off-thread DB write). Aspect only assembles + hands off
+//     — assembly must be cheap (no I/O).
+//  6. joinPoint.getArgs() deliberately ignored — no payload/JWT/PII leakage.
+// Full contract: `templates/generated-project/observability/usage-logging-rules.md`.
 
 package PACKAGE_REPLACE_ME.observability.usage;
 
-import PACKAGE_REPLACE_ME.domain.observability.UsageEvent;
-import PACKAGE_REPLACE_ME.domain.observability.UsageLogger;
+import PACKAGE_REPLACE_ME.service.common.observability.LogUsage;
+import PACKAGE_REPLACE_ME.service.common.observability.UsageEvent;
+import PACKAGE_REPLACE_ME.service.common.observability.UsageLogger;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
@@ -50,7 +28,8 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 
-import java.time.OffsetDateTime;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.UUID;
 
 @Aspect
@@ -105,7 +84,7 @@ public class UsageLoggingAspect {
 
         return UsageEvent.builder()
             .eventId(UUID.randomUUID().toString())
-            .eventTimestamp(OffsetDateTime.now())
+            .eventTimestamp(LocalDateTime.now(ZoneOffset.UTC))
             .service(props.getServiceName())
             .environment(props.getEnvironment())
             .eventType(failed ? EVENT_TYPE_ERROR : logUsage.eventType())

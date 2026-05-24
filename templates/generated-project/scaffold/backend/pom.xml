@@ -1,29 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Backend parent POM. Lives at `backend/pom.xml` — NOT at the project root.
-  Root holds project-level files (docker-compose.yml, README.md, .replit,
-  frontend/, etc.); everything Java/Maven lives under backend/.
-
-  Pinned to Java 21 LTS + Spring Boot 3.4.0 (current stable). Switch
-  versions globally by changing the properties below — never re-pin in
-  child modules.
-
-  This POM declares **all** dependency versions and plugin configuration
-  centrally in <dependencyManagement> and <pluginManagement>. Child
-  modules reference dependencies by `<artifactId>` ONLY, no `<version>`.
-  Agent extends this POM by adding entries here, not by version-pinning
-  inside child modules.
-
-  Replace before use:
-    - <groupId>           : your Maven groupId
-    - <artifactId>        : project artifactId
-    - <name> / <description>
-  Module list below assumes the canonical 5-module layout
-  (application/service/domain/db/external-services). Add/remove modules
-  only when the project genuinely needs it.
-
-  Build: `mvn -f backend/pom.xml ...` from project root, or
-  `cd backend && mvn ...` from a shell.
+  Backend parent POM at `backend/pom.xml` (NOT project root).
+  Java 21 LTS + Spring Boot 3.4.0. All versions + plugin config centralised
+  in <dependencyManagement> + <pluginManagement>; children reference by
+  <artifactId> only. Extend here, never re-pin in children.
+  Replace: <groupId>, <artifactId>, <name>/<description>.
+  Modules: canonical 5 (application/service/domain/db/external-services).
+  Build: `mvn -f backend/pom.xml ...` or `cd backend && mvn ...`.
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -45,8 +28,8 @@
         <relativePath/>
     </parent>
 
-    <!-- Module paths are RELATIVE to backend/ (this file lives in backend/).
-         No `common` module — AppException family lives in domain/common/error/. -->
+    <!-- Paths relative to backend/. No `common` Maven module —
+         AppException family lives in service/<base>/service/common/error/. -->
     <modules>
         <module>domain</module>
         <module>db</module>
@@ -60,10 +43,11 @@
         <maven.compiler.release>21</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
-        <!-- ===== Versions (centralised — child modules NEVER override) ===== -->
-        <!-- Spring Boot starters are managed by spring-boot-starter-parent above. -->
+        <!-- Versions centralised. Spring Boot starters managed by parent. -->
 
-        <lombok.version>1.18.36</lombok.version>
+        <!-- Lombok JDK matrix (stale → `TypeTag :: UNKNOWN` build crash):
+             1.18.30+ JDK 21, 1.18.36+ JDK 23, 1.18.40+ JDK 24. -->
+        <lombok.version>1.18.40</lombok.version>
         <mapstruct.version>1.6.3</mapstruct.version>
         <openapi-generator.version>7.10.0</openapi-generator.version>
         <frontend-maven-plugin.version>1.15.1</frontend-maven-plugin.version>
@@ -80,22 +64,12 @@
         <!-- Quality gates -->
         <jacoco.version>0.8.12</jacoco.version>
         <checkstyle.version>10.21.0</checkstyle.version>
-        <!--
-          JaCoCo gate. Phased per templates/generated-project/testing/testing-policy.md:
-            - Phase 1 (initial build): 0.00 — gate off, allows -DskipTests.
-            - Phase 2 (post-working): ratchet up as the suite grows (manually
-              edit this property when adding tests; the suite must never let
-              it slip back).
-            - Phase 3 (handoff): 0.80 — activated by `-Phandoff` (see profile below).
-        -->
+        <!-- JaCoCo gate. Phased — see testing-policy.md. -->
         <jacoco.line.coverage>0.00</jacoco.line.coverage>
 
-        <!-- OpenAPI generated-code packages. The version (v1, v2, …) lives
-             in BOTH the package name (api.v1.* / api.v2.*) AND in the
-             schema names themselves inside openapi.yaml (ResourceV1,
-             ApiErrorV1, etc.). We do NOT use `modelNameSuffix` — schemas
-             are named explicitly in the YAML so v2 can ship partial breaks
-             (some entities at V2, others still V1). -->
+        <!-- OpenAPI packages. Version (v1, v2) in BOTH package name AND
+             schema names in openapi.yaml. NO modelNameSuffix — partial V2
+             breaks need explicit schema-level versioning. -->
         <openapi.api.package>${project.groupId}.api.v1</openapi.api.package>
         <openapi.model.package>${project.groupId}.api.v1.model</openapi.model.package>
         <openapi.invoker.package>${project.groupId}.api.v1.invoker</openapi.invoker.package>
@@ -107,7 +81,7 @@
     <dependencyManagement>
         <dependencies>
 
-            <!-- Internal modules — referenced by artifactId across the codebase. -->
+            <!-- Internal modules. -->
             <dependency>
                 <groupId>${project.groupId}</groupId>
                 <artifactId>domain</artifactId>
@@ -129,12 +103,8 @@
                 <version>${project.version}</version>
             </dependency>
 
-            <!-- Spring AOP — drives @LogUsage / UsageLoggingAspect.
-                 Version managed by spring-boot-starter-parent. -->
-            <dependency>
-                <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-starter-aop</artifactId>
-            </dependency>
+            <!-- Spring Boot starters NOT listed here — versions inherited
+                 from spring-boot-starter-parent. -->
 
             <!-- Lombok / MapStruct -->
             <dependency>
@@ -216,6 +186,28 @@
         <pluginManagement>
             <plugins>
 
+                <!-- Spring Boot repackage: only `application` activates it
+                     (sets <start-class>); other modules never try to repackage. -->
+                <plugin>
+                    <groupId>org.springframework.boot</groupId>
+                    <artifactId>spring-boot-maven-plugin</artifactId>
+                    <configuration>
+                        <mainClass>${start-class}</mainClass>
+                        <excludes>
+                            <exclude>
+                                <groupId>org.projectlombok</groupId>
+                                <artifactId>lombok</artifactId>
+                            </exclude>
+                        </excludes>
+                    </configuration>
+                    <executions>
+                        <execution>
+                            <id>repackage</id>
+                            <goals><goal>repackage</goal></goals>
+                        </execution>
+                    </executions>
+                </plugin>
+
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-compiler-plugin</artifactId>
@@ -249,9 +241,7 @@
                     <artifactId>maven-checkstyle-plugin</artifactId>
                     <version>3.6.0</version>
                     <configuration>
-                        <!-- Checkstyle config lives inside backend/ (backend/config/),
-                             alongside this pom.xml. ${maven.multiModuleProjectDirectory}
-                             resolves to backend/. -->
+                        <!-- ${maven.multiModuleProjectDirectory} resolves to backend/. -->
                         <configLocation>${maven.multiModuleProjectDirectory}/config/checkstyle.xml</configLocation>
                         <suppressionsLocation>${maven.multiModuleProjectDirectory}/config/checkstyle-suppressions.xml</suppressionsLocation>
                         <consoleOutput>true</consoleOutput>
@@ -352,13 +342,14 @@
                             <configuration>
                                 <generatorName>spring</generatorName>
                                 <library>spring-boot</library>
-                                <inputSpec>${project.basedir}/src/main/resources/static/api/v1/specs/openapi.yaml</inputSpec>
+                                <!-- Spec OUTSIDE static/ (Vite emptyOutDir wipes static/);
+                                     public URL restored by OpenApiSpecConfig. -->
+                                <inputSpec>${project.basedir}/src/main/resources/api/v1/specs/openapi.yaml</inputSpec>
                                 <output>${project.build.directory}/generated-sources/openapi</output>
                                 <apiPackage>${openapi.api.package}</apiPackage>
                                 <modelPackage>${openapi.model.package}</modelPackage>
                                 <invokerPackage>${openapi.invoker.package}</invokerPackage>
-                                <!-- modelNameSuffix intentionally omitted — schemas
-                                     are versioned in the YAML directly. -->
+                                <!-- modelNameSuffix omitted — versioned in YAML. -->
                                 <generateApiTests>false</generateApiTests>
                                 <generateModelTests>false</generateModelTests>
                                 <configOptions>
@@ -416,15 +407,8 @@
         </plugins>
     </build>
 
-    <!--
-      Phased testing profiles. See:
-        templates/generated-project/testing/testing-policy.md
-
-      Default (no profile) — Phase 1 / 2: gate at 0.00 (Phase 1) or whatever
-      `jacoco.line.coverage` is ratcheted to in Phase 2.
-
-      `-Phandoff` — Phase 3: strict 0.80 enforced. Engineering CI runs this.
-    -->
+    <!-- Phased testing — see testing-policy.md. Default = Phase 1/2 gate
+         (0.00 → ratcheted); `-Phandoff` = Phase 3 strict 0.80. -->
     <profiles>
         <profile>
             <id>handoff</id>

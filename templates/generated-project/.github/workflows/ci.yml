@@ -194,9 +194,9 @@ jobs:
         if: steps.detect.outputs.has_backend == 'true'
         run: |
           set -euo pipefail
-          spec="$(find . -path "*/src/main/resources/static/api/v1/specs/openapi.yaml" -type f)"
+          spec="$(find . -path "*/src/main/resources/api/v1/specs/openapi.yaml" -type f)"
           test -n "${spec}" || {
-            echo "Static OpenAPI spec required at */src/main/resources/static/api/v1/specs/openapi.yaml"
+            echo "OpenAPI spec required at */src/main/resources/api/v1/specs/openapi.yaml (NOT under static/ — Vite build wipes that dir)"
             exit 1
           }
           if ! find . -name pom.xml -print0 | xargs -0 grep -l "<artifactId>openapi-generator-maven-plugin</artifactId>" | grep -q .; then
@@ -223,9 +223,80 @@ jobs:
         run: |
           set -euo pipefail
           grep -q '"generate:api"' frontend/package.json || { echo "frontend/package.json must define generate:api"; exit 1; }
+          grep -q '"test"' frontend/package.json || { echo "frontend/package.json must define test"; exit 1; }
           grep -q 'openapi-typescript' frontend/package.json || { echo "frontend must use openapi-typescript"; exit 1; }
           grep -q 'openapi-fetch'      frontend/package.json || { echo "frontend must use openapi-fetch"; exit 1; }
           grep -q '@tanstack/react-query' frontend/package.json || { echo "frontend must use TanStack Query"; exit 1; }
+
+      - name: Verify MVP backend safety tests exist
+        if: steps.detect.outputs.has_backend == 'true'
+        run: |
+          set -euo pipefail
+          controller_count=0
+          service_count=0
+          test_count=0
+
+          if [ -d backend/application/src/main/java ]; then
+            controller_count=$(find backend/application/src/main/java -name '*Controller.java' | wc -l | tr -d ' ')
+          fi
+          if [ -d backend/service/src/main/java ]; then
+            service_count=$(find backend/service/src/main/java -name '*ServiceImpl.java' | wc -l | tr -d ' ')
+          fi
+          if [ -d backend ]; then
+            test_count=$(find backend -path '*/src/test/java/*' \( -name '*Test.java' -o -name '*IT.java' \) | wc -l | tr -d ' ')
+          fi
+
+          if [ "$controller_count" -gt 0 ] || [ "$service_count" -gt 0 ]; then
+            [ "$test_count" -gt 0 ] || {
+              echo "Backend controllers/services exist but no backend tests were found."
+              echo "Add the MVP safety suite from templates/generated-project/testing/testing-policy.md."
+              exit 1
+            }
+          fi
+
+          find backend -path '*/src/test/java/*' \( -iname '*Application*Test.java' -o -iname '*Health*Test.java' -o -iname '*SmokeTest.java' \) | grep -q . || {
+            echo "Add an application/health smoke test for the backend."
+            exit 1
+          }
+
+          if [ -d backend/application/src/main/java ]; then
+            for c in $(find backend/application/src/main/java -name '*Controller.java'); do
+              name=$(basename "$c" .java)
+              find backend -path '*/src/test/java/*' -name "${name}Test.java" | grep -q . || {
+                echo "Missing controller safety test: ${name}Test.java"
+                exit 1
+              }
+            done
+          fi
+
+          if [ -d backend/service/src/main/java ]; then
+            for s in $(find backend/service/src/main/java -name '*ServiceImpl.java'); do
+              name=$(basename "$s" .java | sed 's/Impl$//')
+              find backend -path '*/src/test/java/*' \( -name "${name}Test.java" -o -name "${name}ImplTest.java" \) | grep -q . || {
+                echo "Missing service unit test for: ${name}"
+                exit 1
+              }
+            done
+          fi
+
+          if [ '${{ steps.detect.outputs.has_persistence }}' = 'true' ]; then
+            find backend -path '*/src/test/java/*' \( -iname '*Liquibase*Test.java' -o -iname '*Changelog*Test.java' \) | grep -q . || {
+              echo "Persistence is enabled; add a Liquibase/changelog smoke test."
+              exit 1
+            }
+          fi
+
+      - name: Verify MVP frontend safety tests exist
+        if: steps.detect.outputs.has_frontend == 'true'
+        run: |
+          set -euo pipefail
+          test -d frontend/src || { echo "frontend/src is required"; exit 1; }
+          test_count=$(find frontend/src \( -name '*.test.ts' -o -name '*.test.tsx' \) | wc -l | tr -d ' ')
+          [ "$test_count" -gt 0 ] || {
+            echo "Frontend exists but no Vitest behavior tests were found under frontend/src."
+            echo "Add the MVP frontend safety tests from templates/generated-project/testing/testing-policy.md."
+            exit 1
+          }
 
       - name: Verify Replit and local-dev runtime files
         if: steps.detect.outputs.has_backend == 'true'
@@ -348,7 +419,7 @@ jobs:
           npm run generate:api
           npm run typecheck --if-present
           npm run build
-          npm test --if-present
+          npm test
 
   local-dev-dry-run:
     name: Local-dev docker-compose dry run

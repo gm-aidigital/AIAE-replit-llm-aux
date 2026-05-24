@@ -97,3 +97,12 @@ frontend/src/shared/api/generated/*
 .cache/
 .breakpoints
 .replit.local
+
+# ====================================================================
+# Replit Agent's Node/Express bias — empty server/ at project root
+# ====================================================================
+# Replit Agent's default for "server" mode is a Node/Express scaffold
+# that lives at `server/`. This template forbids Node backends; if
+# the directory shows up empty after generation, it's an artifact —
+# delete and keep ignored so Agent doesn't repopulate it.
+server/

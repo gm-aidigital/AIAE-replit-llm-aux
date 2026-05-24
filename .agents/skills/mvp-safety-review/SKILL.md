@@ -7,186 +7,347 @@ metadata:
 
 # MVP Safety Review
 
-Run before any publish / share / demo of a generated MVP. Pure gate — does
-not change code.
+Run before any publish / share / demo. Pure gate — does not change code.
+Every check is binary: pass or **reject publish**.
 
 ## Security and secret hygiene
 
-- [ ] No real secrets committed (`grep` for `BEGIN PRIVATE KEY`, `"private_key"`, `"type": "service_account"`).
-- [ ] No production datasets embedded.
-- [ ] No production service-account files in repo.
-- [ ] `.env.example` exists with placeholders only.
-- [ ] `.env.example` covers auth and usage-logging placeholders.
+- [ ] No real secrets committed — grep for `BEGIN PRIVATE KEY`, `"private_key"`, `"type": "service_account"`.
+- [ ] No production datasets embedded; no production service-account files in repo.
+- [ ] `.env.example` exists with placeholders only, covering auth and usage-logging.
 - [ ] README lists data sources, env vars, run/deploy steps, MVP limitations.
 
 ## Auth (dual-mode)
 
-Canonical contract: `templates/generated-project/auth/google-sso-clerk-blueprint.md`.
+Canonical: `templates/generated-project/auth/google-sso-clerk-blueprint.md`.
 
 - [ ] `AUTH_MODE=auto|sso|mock` honored; default `auto` works without keys.
-- [ ] Login UI usable in mock mode.
-- [ ] Same flow switches to real SSO when Clerk keys present.
-- [ ] Backend validates Bearer JWT (signature via JWKS; `iss`, `aud`, `exp`, `nbf` when present).
-- [ ] `401` for missing/invalid token; `403` for unauthorized.
-- [ ] No hardcoded auth secrets anywhere.
+- [ ] Login UI usable in mock mode; switches to real SSO when keys present.
+- [ ] Backend validates Bearer JWT (JWKS signature; `iss`, `aud`, `exp`, `nbf`).
+- [ ] `401` missing/invalid token; `403` unauthorized.
+- [ ] No hardcoded auth secrets.
 
-Reject publish if any auth claim is unsupported (e.g., README claims SSO but
-only mock implementation exists, or backend trusts frontend state without
-validating JWT).
+Reject if README claims SSO with only mock impl, or backend trusts frontend
+state without JWT validation.
 
 ## Usage logging
 
-Canonical contract: `templates/generated-project/observability/usage-logging-rules.md`.
+Canonical: `templates/generated-project/observability/usage-logging-rules.md`.
 
-- [ ] `USAGE_LOGGING_ENABLED`, `USAGE_LOG_SERVICE_NAME`, `USAGE_LOG_ENVIRONMENT`
-      are set in `.env.example`.
-- [ ] Liquibase changelog for `usage_events` exists and runs at startup.
-- [ ] `spring-boot-starter-aop` dependency is present (enables `UsageLoggingAspect`).
-- [ ] `UsageLoggingAspect` + `@LogUsage` annotation files exist in the project.
-- [ ] **Every `*ServiceImpl` public method that represents a user action carries `@LogUsage(action = "...")`**.
-      Spot-check: count methods on each `*ServiceImpl`, count `@LogUsage`
-      annotations — they should be approximately equal. Endpoints without
-      `@LogUsage` produce no usage events and silently break the dashboard.
-- [ ] Business code contains **no** direct `usageLogger.record(...)` calls.
-      All recording flows through the aspect.
-- [ ] `PostgresUsageLogger` is bound when enabled; `NoOpUsageLogger` otherwise.
-- [ ] Logger never blocks/fails user requests; insert errors are logged and swallowed.
+- [ ] `USAGE_LOGGING_ENABLED`, `USAGE_LOG_SERVICE_NAME`, `USAGE_LOG_ENVIRONMENT` in `.env.example`.
+- [ ] Liquibase changelog for `usage_events` runs at startup.
+- [ ] `spring-boot-starter-aop` declared (enables `UsageLoggingAspect`).
+- [ ] `UsageLoggingAspect` + `@LogUsage` annotation files present.
+- [ ] `PostgresUsageLogger` binds when enabled; `NoOpUsageLogger` otherwise.
+- [ ] Logger never blocks / fails user requests; insert errors are swallowed.
+- [ ] `app.usage-logging.service-name` resolves to a real, non-placeholder
+      value (NOT empty, NOT `replit-mvp-template`). Empty service-name +
+      `enabled=true` must FAIL FAST at startup, not silently bind NoOp:
+      ```bash
+      # service-name in application.yml must NOT default to "" or to the
+      # template placeholder. Should be `${spring.application.name}` or a
+      # concrete app identifier.
+      grep -E 'service-name:.*\$\{USAGE_LOG_SERVICE_NAME:\}' \
+        backend/application/src/main/resources/application*.yml \
+        && echo "REJECT: empty default for USAGE_LOG_SERVICE_NAME"
+      grep -E 'spring\.application\.name:\s*replit-mvp-template' \
+        backend/application/src/main/resources/application*.yml \
+        && echo "REJECT: spring.application.name still at template placeholder"
+      ```
 - [ ] Frontend never reaches `usage_events` directly.
+- [ ] **`@LogUsage` on every `*ServiceImpl` public method** — past generations
+      defined the aspect but annotated zero methods, silently breaking dashboards:
+      ```bash
+      for s in $(find backend/service/src/main/java -name '*ServiceImpl.java'); do
+        grep -q '@LogUsage' "$s" || echo "MISSING @LogUsage in $s"
+      done
+      ```
+- [ ] No direct `usageLogger.record(...)` in business code:
+      ```bash
+      grep -rEn 'usageLogger\.record\(' backend/service backend/application/src/main/java/*/[!observability]*
+      ```
 
 ## Backend / frontend quality
 
-- [ ] OpenAPI contract updated for any API change; spec at
-      `src/main/resources/static/api/v1/specs/openapi.yaml`.
-- [ ] `openapi-generator-maven-plugin` configured when REST API exists.
+- [ ] OpenAPI contract updated for any API change; spec at `src/main/resources/api/v1/specs/openapi.yaml` (NOT under `static/`).
+- [ ] `openapi-generator-maven-plugin` configured.
 - [ ] Frontend uses `openapi-typescript` + `openapi-fetch` + TanStack Query.
-- [ ] Structured JSON logs to stdout.
-- [ ] Actuator `health` and `prometheus` reachable through context-path.
-- [ ] Checkstyle gate wired.
-- [ ] JaCoCo plugin wired (default gate is `0.00` in MVP — see Tests below).
+- [ ] Structured JSON logs to stdout; Actuator `health` + `prometheus` reachable through context-path.
+- [ ] Checkstyle and JaCoCo plugins wired (default JaCoCo gate `0.00` in MVP — see Tests).
 
-## Tests (Phase 2 gate — required before publish)
+## Tests (publish gate — hard reject if missing)
 
-Canonical: `templates/generated-project/testing/testing-policy.md`.
+Canonical: `templates/generated-project/testing/testing-policy.md`. Past
+runs skipped Phase 2 and shipped with zero tests.
 
-Publish is **blocked** if the project is still in Phase 1 — i.e. zero
-tests exist while the app already runs. Phase 1 → Phase 2 transition is
-triggered by:
-- `mvn -f backend/pom.xml -DskipTests package` succeeds.
-- Replit Run boots cleanly; `/api/v1/auth/me` returns 200 with a mock JWT.
-- At least one feature endpoint reaches the DB end-to-end.
+- [ ] Test files exist (zero tests with controllers present = reject):
+      ```bash
+      find backend -path '*/src/test/java/*' -name '*Test.java' -o -name '*IT.java' | wc -l
+      ```
+- [ ] Every `*Controller.java` has a matching test:
+      ```bash
+      for c in $(find backend/application/src/main/java -name '*Controller.java'); do
+        name=$(basename "$c" .java)
+        find backend -name "${name}Test.java" | grep -q . || echo "MISSING: ${name}Test.java"
+      done
+      ```
+- [ ] Every `*ServiceImpl.java` has a matching test:
+      ```bash
+      for s in $(find backend/service/src/main/java -name '*ServiceImpl.java'); do
+        name=$(basename "$s" .java | sed 's/Impl$//')
+        find backend -name "${name}Test.java" -o -name "${name}ImplTest.java" | grep -q . || echo "MISSING test for: $name"
+      done
+      ```
+- [ ] At least one application/health smoke test exists:
+      ```bash
+      find backend -path '*/src/test/java/*' \( -iname '*Application*Test.java' -o -iname '*Health*Test.java' -o -iname '*SmokeTest.java' \) | wc -l
+      ```
+- [ ] At least one Liquibase smoke test (`@DataJpaTest` running master changelog).
+- [ ] `mvn -f backend/pom.xml verify` passes locally.
+- [ ] Frontend behavior tests exist when frontend logic exists:
+      ```bash
+      find frontend/src \( -name '*.test.ts' -o -name '*.test.tsx' \) | wc -l
+      ```
+- [ ] Frontend tests and build pass:
+      ```bash
+      cd frontend && npm test && npm run build
+      ```
+- [ ] No commit removed existing tests just to clear CI.
 
-Once those are true (i.e. now, at safety review time), Phase 2 demands:
+Phase 3 (`mvn -Phandoff verify`, `0.80`) is the handoff bar, not MVP-publish.
 
-- [ ] At least one `*Test.java` exists for every `@Service` public method
-      (happy-path + main `AppException` branch).
-- [ ] At least one `@WebMvcTest` per controller covering 2xx, 401, 403.
-- [ ] At least one Liquibase smoke test (`@DataJpaTest` that runs master changelog).
-- [ ] `mvn -f backend/pom.xml verify` passes locally (default gate at `0.00`
-      or wherever Phase 2 has ratcheted it — never increases the threshold
-      beyond what the suite currently delivers).
-- [ ] No commit removed existing tests just to make CI green.
+## Replit deployment readiness
 
-Phase 3 (`mvn -Phandoff verify`, `0.80`) is NOT required at MVP publish —
-it's the engineering-handoff bar.
+Canonical: backend SKILL → "Port architecture lock" + replit.md → "Replit deployment model".
 
-## Replit vs local-dev runtime
+### Workspace + Deployment config
 
 - [ ] `.replit` + `replit.nix` present and the workspace runs.
-- [ ] `.replit` `[env]` sets `SPRING_PROFILES_ACTIVE = "replit"`.
-- [ ] `.replit` `[deployment]` sets `deploymentTarget = "gce"` (Reserved VM),
-      not `"cloudrun"` / Autoscale, when persistence is used.
-- [ ] App binds port `5000` and uses Replit's SQL Database via `DATABASE_URL`
-      (NOT the legacy `PGHOST`/`PGUSER`/`PGPASSWORD`/`PGDATABASE` vars).
-- [ ] `ReplitDatabaseUrlPostProcessor` (or equivalent) is the source of the
-      `DataSource` bean on profile `replit`; YAML does not configure the
-      datasource on that profile.
-- [ ] HikariCP `maximum-pool-size` is `2–3` on the `replit` profile.
-- [ ] **Local-dev Docker artifacts present** (handoff is the template default):
-      - `backend/Dockerfile` (multi-stage Maven → JRE)
-      - `frontend/Dockerfile` (Node → nginx static)
-      - `frontend/nginx.conf` (SPA routing + `/api` proxy)
-      - `docker-compose.yml` at project root with profile `local`,
-        services `postgres` + `backend` + `frontend`, build contexts
-        pointing at `./backend` and `./frontend`.
-      - Local dry-run commands documented in README.
+- [ ] `.replit` `[env]` sets `SPRING_PROFILES_ACTIVE = "replit"` and `PORT = "5000"`.
+- [ ] `.replit` `[deployment].deploymentTarget = "gce"` (Reserved VM), not Autoscale.
+- [ ] `.replit` `onBoot` runs `bash templates/generated-project/scaffold/scripts/setup-project.sh`.
+- [ ] Build command (`mvn -DskipTests package` + frontend-maven-plugin build) succeeds in CI.
+- [ ] Deployment Secrets pane has copies of `SPRING_PROFILES_ACTIVE`, `CLERK_*`, `AUTH_*`,
+      `USAGE_LOG_*` (workspace `[env]` does NOT propagate).
 
-## Replit Deployment readiness (before clicking Deploy)
+### Port architecture lock (hard reject)
 
-- [ ] Workspace Secrets are copied to the Deployment Secrets pane:
-      `SPRING_PROFILES_ACTIVE`, `CLERK_*`, `AUTH_*`, `USAGE_LOG_*`,
-      and any `DATABASE_URL` override. Workspace `[env]` does NOT propagate.
-- [ ] Reserved VM target chosen (not Autoscale) when persistence is used.
-- [ ] Build command (`mvn -DskipTests package` + frontend build) succeeds in CI.
-- [ ] `application-replit.yml` correctly translates `DATABASE_URL` to JDBC
-      with `sslmode=require` enforced.
+Past runs swapped Vite onto 5000 + Spring to 8080 → broke Reserved-VM Deployment.
 
-## Auth alternative (informational)
+- [ ] `.replit` `[[ports]]` first entry: `5000 → 80`. Second: `5173 → 5173`.
+- [ ] `application-replit.yml` uses `server.port: ${PORT:5000}` — not hard-coded:
+      ```bash
+      grep 'server.port:' backend/application/src/main/resources/application-replit.yml
+      ```
+- [ ] `application-replit.yml` does NOT set
+      `spring.datasource.url|username|password|driver-class-name` —
+      `ReplitDatabaseUrlPostProcessor` populates them; yaml entries break it:
+      ```bash
+      grep -E 'spring\.datasource\.(url|username|password|driver-class-name)' \
+        backend/application/src/main/resources/application-replit.yml
+      ```
+- [ ] No legacy `PG*` env refs (Replit `postgresql-16` exposes `DATABASE_URL` only):
+      ```bash
+      grep -rE '\$\{PG(HOST|PORT|USER|PASSWORD|DATABASE)[:}]' \
+        backend/application/src/main/resources/
+      ```
+- [ ] No `sslmode=disable` (Replit managed Postgres needs `require`):
+      ```bash
+      grep -rEn 'sslmode=disable' .  # matches in .agents/templates/ are docs
+      ```
+- [ ] `vite.config.ts` uses `port: 5173 + strictPort: true` (NOT 5000):
+      ```bash
+      grep -E 'port: *5(000|173)' frontend/vite.config.ts
+      ```
+- [ ] `vite.config.ts` `server.allowedHosts` covers `.replit.dev`, `.repl.co`,
+      `.kirk.replit.dev` (otherwise Vite 5+ returns "Blocked request"):
+      ```bash
+      grep -E 'allowedHosts|replit\.dev' frontend/vite.config.ts
+      ```
+- [ ] No `start.sh` at project root:
+      ```bash
+      [ -f start.sh ] && echo "REJECT" || echo "OK"
+      ```
 
-For Replit-only demos that don't need to be exported to local-dev,
-[Replit Auth](https://docs.replit.com/references/auth-and-identity/authentication)
-is a zero-config alternative to Clerk. The template defaults to Clerk because
-generated apps must also run locally, but the user can swap to Replit Auth
-when handoff/export isn't a requirement.
+### Local-dev artifacts (handoff is template default)
 
-## Template control plane is NOT tracked by git
+- [ ] `backend/Dockerfile` (multi-stage Maven → JRE).
+- [ ] `frontend/Dockerfile` (Node → nginx static).
+- [ ] `frontend/nginx.conf` (SPA routing + `/api` proxy).
+- [ ] `docker-compose.yml` at project root with `local` profile, `postgres + backend + frontend`
+      services, build contexts at `./backend` and `./frontend`.
+- [ ] Local dry-run commands documented in README.
 
-Template-only files must stay in the Replit workspace but never enter
-the company git repo. Verify with:
+### HikariCP pool sizes
 
-```bash
-git ls-files .agents templates custom_instruction AGENTS.md replit.md 2>/dev/null
-```
+- [ ] `replit` profile: HikariCP `maximum-pool-size: 2-3` (Replit SQL Database has a low conn ceiling).
+- [ ] `local` profile: HikariCP `maximum-pool-size: ~50`.
 
-Expected output: empty. If anything prints, run
-`bash templates/generated-project/scaffold/scripts/setup-project.sh` to
-untrack them and **redo the commit**.
+## Template control-plane leak (hard reject)
+
+Recent runs committed `.agents/`, `templates/`, `custom_instruction/`,
+`AGENTS.md`, `replit.md` to the customer repo — exposed internal skills.
+
+- [ ] These paths are NOT tracked by git (if anything prints, run
+      `bash templates/generated-project/scaffold/scripts/setup-project.sh`):
+      ```bash
+      git ls-files .agents templates custom_instruction AGENTS.md replit.md 2>/dev/null
+      ```
+- [ ] `.gitignore` excludes control-plane + Replit Agent runtime workspace:
+      ```bash
+      grep -E '^(\.agents|templates|custom_instruction|AGENTS\.md|replit\.md|\.local|\.config|server)' .gitignore
+      ```
 
 ## Stack lock check (hard reject)
 
-The repo must NOT contain any of:
+Repo must NOT contain any of:
 
-- `main.py`, `requirements.txt`, `Pipfile`, `pyproject.toml`, `uv.lock`, `poetry.lock`, `manage.py`, `wsgi.py`, `asgi.py` (Python backend or Replit's auto-injected Python defaults)
-- Root-level `package.json` declaring `express`/`fastify`/`koa`/`@nestjs/core`/`next` (Node backend)
-- `go.mod`, `Gemfile`, `composer.json`, `Cargo.toml`, `mix.exs` (other backends)
-- Backend code in any directory that isn't `backend/` Maven module
-- `.replit` `modules` containing `python-*`
-- `.replit` `[agent] integrations` containing `flask_*`, `django_*`, `fastapi_*`
+- `main.py`, `requirements.txt`, `Pipfile`, `pyproject.toml`, `uv.lock`, `poetry.lock`,
+  `manage.py`, `wsgi.py`, `asgi.py` (Python or Replit's auto-injected defaults).
+- Root-level `package.json` declaring `express` / `fastify` / `koa` / `@nestjs/core` / `next`.
+- `go.mod`, `Gemfile`, `composer.json`, `Cargo.toml`, `mix.exs` (other backends).
+- Backend code outside `backend/` Maven module.
+- `.replit` `modules` containing `python-*`.
+- `.replit` `[agent] integrations` containing `flask_*`, `django_*`, `fastapi_*`.
 
-If any of the above are present, either the template's stack lock was
-violated by Agent, or Replit's default Python scaffolding survived
-generation. Either way: delete the offending files/lines and regenerate
-the backend from `templates/generated-project/scaffold/`.
+Any match → stack lock violated. Delete offending files/lines, regenerate from
+`templates/generated-project/scaffold/`.
 
 ## Parent pom location
 
-- [ ] Parent `pom.xml` lives at `backend/pom.xml` — **not** at project root.
-      Root only holds project-level files (README, docker-compose, .replit, etc).
-- [ ] Module paths in `backend/pom.xml` are relative to `backend/` (e.g.
-      `<module>application</module>`, not `<module>backend/application</module>`).
+- [ ] Parent `pom.xml` at `backend/pom.xml` — **not** at project root.
+- [ ] Module paths in `backend/pom.xml` are relative to `backend/`
+      (e.g. `<module>application</module>`, not `<module>backend/application</module>`).
 - [ ] Child module poms use `<relativePath>../pom.xml</relativePath>`.
 
-## Error handling
+## Error handling: single `ErrorReason` enum (hard reject)
 
-Canonical contract: `templates/generated-project/errors/error-handling-pattern.md`.
+Canonical: `templates/generated-project/errors/error-handling-pattern.md`.
 
-- [ ] `AppException` + `AppErrorReason` interface + per-domain reason enums exist in `backend/common/error/`.
-- [ ] `ValidationMessage` and `ValidationParameter` shape matches the canonical (code + formatted message + type + params).
-- [ ] Single `@RestControllerAdvice` in `application/` converts all exceptions to the OpenAPI `ApiError` DTO.
-- [ ] No `ResponseStatusException`, no raw `Map<String,Object>` error bodies.
-- [ ] Services throw `AppException(reason, params)`; controllers never catch or wrap.
+- [ ] Exactly ONE `ErrorReason.java` at
+      `backend/service/src/main/java/<base>/service/common/error/`:
+      ```bash
+      find backend -name 'ErrorReason.java' -type f   # expected: 1 line
+      ```
+- [ ] NO per-domain enums or legacy files:
+      ```bash
+      find backend -name '*ErrorReason.java' -type f | grep -v 'common/error/ErrorReason.java'
+      find backend -name '*ErrorCode*.java' -o -name 'CommonErrorCodes.java'
+      ```
+- [ ] NO `AppErrorReason` interface (prior scaffold; removed):
+      ```bash
+      grep -rln 'interface AppErrorReason' backend
+      ```
+- [ ] NO `throw new ResponseStatusException` / `IllegalStateException` /
+      `IllegalArgumentException` / `RuntimeException` in service/controller:
+      ```bash
+      grep -rEn 'throw new (ResponseStatus|IllegalState|IllegalArgument|Runtime)Exception' \
+        backend/service backend/application
+      ```
+- [ ] Single `@RestControllerAdvice` (`GlobalExceptionHandler`) in `application/`
+      maps every `AppException` → `ApiErrorV1`.
+- [ ] No raw `Map<String,Object>` error bodies.
 
-## Controllers and mappers
+## Thin controllers (hard reject)
 
-- [ ] Every controller method does: get principal → call ONE service method → MapStruct map → return.
-- [ ] Zero `if`/`switch` on business state in controllers.
-- [ ] Zero repository or `EntityManager` references in controllers.
-- [ ] MapStruct mappers exist for `Entity ↔ ServiceRecord` (in `service/`) and `ServiceRecord ↔ ApiDto` (in `application/`).
-- [ ] No handwritten `new SomeDto(); dto.setX(...)` chains for OpenAPI-generated DTOs.
-- [ ] Entities never appear as method parameters or return types outside `service/`.
+Controllers do ONLY: principal extraction → one service call → mapper → return.
+Full rule in backend SKILL.
+
+- [ ] No `*Repository` field in any controller:
+      ```bash
+      grep -rEn 'private final.*Repository' backend/application/src/main/java/**/controllers/
+      ```
+      Expected: empty.
+- [ ] No `if`/`switch`/`for`/`while`/`try`/`catch` in controller method bodies:
+      ```bash
+      grep -rEn '^\s+(if|switch|for|while|try|catch)\b' backend/application/src/main/java/**/controllers/*.java
+      ```
+      Expected: empty (review false positives).
+- [ ] No manual DTO construction:
+      ```bash
+      grep -rEn 'new .*V1\(\);' backend/application/src/main/java/**/controllers/
+      ```
+      Expected: empty. All DTO construction goes through `*ApiMapper`.
+- [ ] Two MapStruct mappers per resource exist: `Entity ↔ ServiceRecord` in `service/`,
+      `ServiceRecord ↔ ApiDto` in `application/`.
+- [ ] Entities never appear as parameters or return types outside `service/`.
+
+## Module isolation (architectural — hard reject)
+
+- [ ] `backend/service/pom.xml` does NOT declare spring-security / oauth2 / web / servlet-api:
+      ```bash
+      grep -E 'spring-(security|boot-starter-(security|oauth2|web))|servlet-api' backend/service/pom.xml
+      ```
+      Expected: empty. Service is business orchestration — it does not know about HTTP/JWT.
+- [ ] `backend/service/` source contains no `SecurityContextHolder`, `Authentication`,
+      `Jwt`, or `@AuthenticationPrincipal`. Service methods that need the caller take an
+      `AppUser` parameter; the controller does the JWT → AppUser conversion.
+- [ ] `backend/external-services/pom.xml` declares no internal-module deps:
+      ```bash
+      grep -E '<artifactId>(domain|service|application|db)</artifactId>' backend/external-services/pom.xml
+      ```
+      Expected: empty. external-services is a true leaf.
+- [ ] `backend/domain/pom.xml` does NOT depend on `service` / `application` / `external-services` / `db`.
+- [ ] AppException family lives at `service/<base>/service/common/error/`, not `domain/common/error/`:
+      ```bash
+      find backend -path '*/domain/common/error/*' -name '*.java'
+      ```
+      Expected: empty.
+- [ ] `LogUsage.java` lives at `service/<base>/service/common/observability/LogUsage.java`,
+      not `application/observability/usage/`:
+      ```bash
+      find backend -name LogUsage.java
+      ```
+      Expected: one line, under `service/.../service/common/observability/`.
+
+## Package layout (hard reject)
+
+Plural = collections, singular = namespaces. Agent defaults to singular →
+silently fragments codebase. Reject.
+
+- [ ] Each domain aggregate in `service/` has `services/`, `services/impl/`, `mappers/`, `models/`:
+      ```bash
+      for d in backend/service/src/main/java/*/service/*/ ; do
+        for sub in services services/impl mappers models; do
+          [ -d "$d$sub" ] || echo "MISSING: $d$sub"
+        done
+      done | grep -v common
+      ```
+      Expected: no MISSING lines.
+- [ ] No singular versions (`service/`, `mapper/`, `model/`, `entity/`, `repository/`, `controller/`) anywhere:
+      ```bash
+      find backend -type d \( -name 'service' -path '*/sample/service' \
+          -o -name 'mapper' -o -name 'model' \
+          -o -name 'entity' -o -name 'repository' \
+          -o -name 'controller' \) | grep -v 'src/main/java/[^/]*$'
+      ```
+      Expected: empty.
+- [ ] Each `domain/` aggregate has `entities/` + `repositories/`:
+      ```bash
+      for d in backend/domain/src/main/java/*/domain/*/ ; do
+        [ -d "${d}entities" ]    || echo "MISSING entities/ under $d"
+        [ -d "${d}repositories" ] || echo "MISSING repositories/ under $d"
+      done
+      ```
+      Expected: no MISSING lines.
+
+## Build flags (hard reject)
+
+Past Agent runs typed `-Dcheckstyle.skip=true` and forgot to remove it.
+
+- [ ] `.github/workflows/ci.yml` has no `-Dcheckstyle.skip`, `-Djacoco.skip`,
+      `-Dmaven.test.skip`, `-Dopenapi.skip`.
+- [ ] No Makefile / script invokes Maven with these flags.
+- [ ] README doesn't recommend skipping gates:
+      ```bash
+      grep -rE 'checkstyle\.skip|jacoco\.skip|maven\.test\.skip|openapi\.skip' .
+      # matches in templates/ .agents/ are rule-statements, not violations
+      ```
 
 ## Database
 
-- [ ] No `CREATE TYPE … AS ENUM` anywhere in changelogs. Dictionary data lives in `<thing>_status` / `<thing>_kind` tables with `BIGINT id` + `TEXT code` + `TEXT name` + FK from owning table.
+- [ ] No `CREATE TYPE … AS ENUM` in changelogs. Dictionary data lives in
+      `<thing>_status` / `<thing>_kind` tables with `BIGINT id` + `TEXT code` + `TEXT name` + FK.
 - [ ] IDs are `BIGINT`, strings are `TEXT`, no `VARCHAR`.
 
 ## Non-publish conditions (any one blocks)
@@ -195,4 +356,4 @@ Canonical contract: `templates/generated-project/errors/error-handling-pattern.m
 - Production credentials required to run the local demo.
 - No working auth path when SSO keys are absent.
 - App relies on undocumented manual setup.
-- **Backend is not Java + Spring Boot + Maven** (see stack lock check above).
+- Backend is not Java + Spring Boot + Maven (see Stack lock check above).

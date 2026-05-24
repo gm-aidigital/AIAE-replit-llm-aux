@@ -1,119 +1,106 @@
-# Testing Policy — Phased
+# Testing Policy — MVP Safety Suite + Handoff Hardening
 
-Single source of truth for what level of testing is expected at each
-stage of the project. The policy is **phased deliberately**: writing
-tests before the app works costs tokens and gets thrown away when the
-implementation shape changes. So we defer tests until the app actually
-runs end-to-end — but once it does, tests become mandatory before
-publish.
+Single source of truth. MVPs do not need full production coverage, but a
+zero-test project is not complete. Build/debug loops may skip tests while the
+app is unstable; the final MVP must include a lean safety suite for backend
+and frontend before publish or handoff.
 
 ## Phases
 
 | Phase | Trigger | Tests required? | JaCoCo gate |
 |---|---|---|---|
-| **1. Building** | Initial generation; app not yet running E2E | **No** — best-effort, can skip with `-DskipTests` | `0%` (gate disabled) |
-| **2. Post-working** | Replit Run launches; mock-login → `/auth/me` → 200; main CRUD reaches DB and back | **Yes** — happy-path per endpoint, auth states (401/403), error contract | Soft `~50%`, never **decreases** |
+| **1. Building** | Initial generation; app not yet running E2E | **No final requirement yet** — `-DskipTests` allowed only for internal debug loops | `0%` (gate disabled) |
+| **2. MVP safety suite** | Replit Run launches; mock-login -> `/auth/me` -> 200; main flow reaches backend/DB and renders in frontend | **Yes** — lean backend + frontend safety tests are mandatory before completion | Soft ratchet; never decreases once raised |
 | **3. Handoff** | Engineering takeover | **Strict** — full coverage including IT, edge cases, business invariants | `80%` enforced (`-Phandoff`) |
 
 ### Phase 1 — Building
 
-Agent is iterating on the app shape, debugging compile/runtime issues,
-wiring auth, getting Liquibase to run. Tests written here will be
-rewritten when the implementation changes — wasted tokens.
+Agent iterates app shape, debugging compile/runtime, wiring auth, Liquibase.
+Tests here get rewritten on implementation churn — wasted tokens.
 
 Allowed:
-- `mvn install -DskipTests -Dcheckstyle.skip=true` for fast dev loops.
-- No test directories required.
-- JaCoCo plugin still installed; gate at `0.00` so `verify` passes.
+- `mvn install -DskipTests` for fast internal loops while code is still moving.
+- No new test dirs required until the first runnable E2E version exists.
+- JaCoCo plugin installed; gate `0.00` (verify passes).
 
 Not allowed:
-- Removing the JaCoCo plugin from the parent POM.
-- Removing `src/test/` directories that *do* exist.
-- Pushing to `main` without at least one smoke test (see Phase 2).
+- Removing JaCoCo plugin from parent POM.
+- Removing existing `src/test/` directories.
+- Using `-DskipTests` in the final verification command.
+- Describing the MVP as complete without the Phase 2 safety suite.
 
-### Phase 2 — Post-working (the moment Phase 1 ends)
+### Phase 2 — MVP safety suite
 
-The app boots, the mock-auth flow works, the demo data is visible in
-the UI. At this point Agent **stops adding features** and writes the
-tests. This is the "best-effort, but mandatory" phase the user asked
-for: not perfect coverage, but every public surface has at least one
-test, and the test suite is part of the same generation pass.
+App boots, mock-auth works, demo data is visible, and the main frontend flow
+renders against the backend. Agent **stops adding features** and writes the
+minimum safety suite in the same generation pass.
 
-Required per service / endpoint:
+Backend minimums:
 
-1. **Success path** — for every `@Service` public method, one happy-path
-   `*Test` with the AppException negative case mocked.
-2. **REST contract** — for every controller method, one
-   `@SpringBootTest` or `@WebMvcTest` that:
-   - calls with a valid mock JWT → expects 2xx + canonical DTO shape,
-   - calls without a token → expects 401 + `ApiErrorV1` body,
-   - calls with insufficient role → expects 403 + `ApiErrorV1` body.
-3. **Error mapping** — one test per non-trivial `AppErrorReason` to
-   confirm the `GlobalExceptionHandler` translates it to the correct
-   HTTP code.
-4. **Liquibase smoke** — `@DataJpaTest` (or Testcontainers) that runs
-   the master changelog; ensures migrations apply cleanly.
+1. **Application smoke** — app context starts, and health endpoint is reachable.
+2. **Auth boundary** — at least one protected API returns `401` without a
+   token and `2xx` with a valid mock JWT.
+3. **Main happy path** — the primary generated flow returns the canonical DTO
+   shape from controller/API level.
+4. **Main error path** — validation or business error maps to the committed
+   `ApiErrorV1` contract.
+5. **Service behavior** — every generated `*ServiceImpl` public method has a
+   focused unit test for happy path plus the main negative `AppException` path.
+6. **Liquibase smoke** — when PostgreSQL/Liquibase is used, one test applies
+   the master changelog.
 
-JaCoCo gate moves from `0.00` to `current_coverage` (set the property to
-whatever the suite actually delivers — usually `0.40`–`0.60` at this
-stage). Future commits cannot decrease it. This is the "ratchet" — the
-project never loses coverage, only adds.
+Frontend minimums:
+
+1. **Render smoke** — the main route renders under Vitest without crashing.
+2. **Auth/session behavior** — mock or SSO session state is represented through
+   the same UI path used by the app.
+3. **Async states** — the primary server-backed surface covers loading, error,
+   and success states.
+4. **Critical action** — forms or user actions added for the MVP have at least
+   one behavior test for the expected outcome and one validation/error case.
+
+Final MVP verification:
+
+- `mvn -f backend/pom.xml verify`
+- `cd frontend && npm test && npm run build`
+
+Coverage may remain below production level in MVP phase. Once raised, coverage
+thresholds must not be lowered to make CI pass.
 
 ### Phase 3 — Engineering handoff
 
-When the demo is accepted and engineering takes over, tighten:
+Demo accepted, engineering takes over. Tighten:
 
-- JaCoCo `0.80` line coverage (the `handoff` Maven profile flips it).
-- Integration tests with Testcontainers Postgres (`*IT.java`,
-  `mvn -Phandoff failsafe:integration-test`).
-- Contract tests against the OpenAPI YAML (e.g. `springdoc` + REST
-  Assured, or a contract test framework of the team's choice).
-- Mutation testing (PITest) is nice-to-have, not required.
+- JaCoCo `0.80` line coverage (`handoff` Maven profile).
+- Integration tests with Testcontainers Postgres (`*IT.java`, `mvn -Phandoff failsafe:integration-test`).
+- Contract tests against OpenAPI YAML (springdoc + REST Assured or equivalent).
+- Mutation testing (PITest) optional.
 
-The `handoff` profile activates the strict gate:
-
-```bash
-mvn -Phandoff verify
-```
-
-This is the command engineering runs in their CI before accepting the
-codebase.
+`mvn -Phandoff verify` — engineering's pre-acceptance CI command.
 
 ### Phase 3-done — remove the phased plumbing
 
-The `handoff` profile is a transition-period artifact: it lets engineering
-validate "the code clears 0.80" before they accept the project, without
-the MVP author having to commit to that bar prematurely. Once engineering
-takes ownership and the suite reliably clears `0.80`, **collapse the
-profile into the default**:
+`handoff` profile is transition-period. Once suite reliably clears `0.80`,
+collapse into default:
 
-1. In `backend/pom.xml`, change the default property:
-   `<jacoco.line.coverage>0.00</jacoco.line.coverage>` → `0.80`.
-2. Delete the `<profiles>` block (the `handoff` profile becomes redundant
-   when the default already enforces `0.80`).
-3. Update the project README to drop references to `-Phandoff`.
-4. Engineering CI command simplifies: `mvn verify` (no profile flag).
+1. `backend/pom.xml`: `<jacoco.line.coverage>0.00</jacoco.line.coverage>` → `0.80`.
+2. Delete `<profiles>` block (redundant when default enforces `0.80`).
+3. README: drop `-Phandoff` references.
+4. Engineering CI: `mvn verify` (no profile flag).
 
-Why remove rather than keep: keeping a profile that's identical to the
-default is dead config — it confuses future contributors ("when do I use
-`-Phandoff`?"). The profile existed only while the default was `0.00`.
+Keeping a profile identical to default is dead config — confuses future contributors.
 
-The phased policy (this file) is also fair game to delete from the
-project's documentation **after handoff** — at that point the company's
-own engineering standards take over and the MVP-phase rules no longer
-apply. Engineering may keep this file for historical context, or remove
-it; both are fine.
+This phased-policy file is also fair game to delete after handoff —
+company standards take over and MVP rules no longer apply.
 
 ## Maven plumbing
 
-The parent POM declares two coverage thresholds via a profile switch.
-Default phase (Phase 1 / 2) uses the property `jacoco.line.coverage`
-(starts at `0.00`, ratchets up in Phase 2). The `handoff` profile sets
-it to `0.80`:
+Parent POM declares two thresholds via profile. Default (Phase 1/2) uses
+`jacoco.line.coverage` (starts `0.00`, then may be ratcheted after the MVP
+safety suite exists). `handoff` profile sets `0.80`:
 
 ```xml
 <properties>
-    <!-- Default: gate effectively off; ratchet up manually as suite grows. -->
     <jacoco.line.coverage>0.00</jacoco.line.coverage>
 </properties>
 
@@ -127,12 +114,11 @@ it to `0.80`:
 </profiles>
 ```
 
-The `jacoco-check` execution reads `${jacoco.line.coverage}` and binds
-to the `verify` phase — same plumbing, two thresholds.
+`jacoco-check` execution reads `${jacoco.line.coverage}`, binds to `verify`.
 
-## When Agent should switch phases
+## When Agent switches phases
 
-Agent moves from Phase 1 to Phase 2 the moment ALL of these are true:
+Phase 1 -> 2 when ALL true:
 
 - [ ] `mvn -f backend/pom.xml -DskipTests package` succeeds.
 - [ ] Replit Run boots the workspace without unhandled exceptions in logs.
@@ -140,6 +126,6 @@ Agent moves from Phase 1 to Phase 2 the moment ALL of these are true:
 - [ ] At least one feature endpoint reads from the DB and returns data.
 - [ ] Frontend renders without console errors against the running backend.
 
-That's the explicit "Phase 1 done → start writing tests" handshake.
-`mvp-safety-review` SKILL refuses publish until Phase 2 has been entered
-(i.e. at least one real test file exists in `*/src/test/java/`).
+"Phase 1 done -> start writing tests" handshake. `mvp-safety-review` refuses
+publish until Phase 2 is complete for both backend and frontend when those
+surfaces exist.

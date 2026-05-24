@@ -14,7 +14,7 @@ reverse.
 
 - Rules: `templates/generated-project/openapi/canonical-openapi-rules.md`
 - Review checklist: `templates/generated-project/openapi/openapi-review-checklist.md`
-- Generator plugin snippet: `templates/generated-project/pom-snippets/openapi-generator-maven-plugin.xml`
+- Generator plugin (inline in parent pom): `templates/generated-project/scaffold/backend/pom.xml`
 - Frontend rules: `templates/generated-project/frontend/canonical-react-frontend-rules.md`
 - Auth contract: `templates/generated-project/auth/google-sso-clerk-blueprint.md`
 

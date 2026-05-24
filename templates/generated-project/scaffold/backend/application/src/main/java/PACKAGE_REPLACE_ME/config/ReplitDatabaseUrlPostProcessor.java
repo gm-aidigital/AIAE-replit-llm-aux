@@ -1,30 +1,15 @@
-// ReplitDatabaseUrlPostProcessor.java
+// EnvironmentPostProcessor: parses Replit's DATABASE_URL libpq URL into
+// standard spring.datasource.url/username/password before context build.
+// Spring Boot then builds HikariDataSource normally — no custom @Bean.
 //
-// Spring Boot EnvironmentPostProcessor: runs before the application context
-// is built and translates Replit's DATABASE_URL libpq URL into the standard
-// spring.datasource.url / username / password properties. After this runs,
-// Spring Boot's auto-configuration builds the HikariDataSource normally —
-// no custom @Bean, no override of Spring's DataSource construction.
+// CRITICAL: gate on DATABASE_URL presence, NOT profile. postProcessEnvironment()
+// runs BEFORE SPRING_PROFILES_ACTIVE resolves; getActiveProfiles() is empty
+// — any profile check silently no-ops everywhere.
 //
-// Why this over a @Configuration @Bean DataSource? See:
-//   .agents/skills/backend-java-feature/references/database-url-translation.md
+// Registration: META-INF/spring/org.springframework.boot.env.EnvironmentPostProcessor.imports
+// (one line: FQN of this class).
 //
-// !!! CRITICAL — DO NOT GATE ON PROFILE !!!
-// EnvironmentPostProcessor.postProcessEnvironment() is called BEFORE Spring
-// resolves the active profile set from `SPRING_PROFILES_ACTIVE` env var.
-// Calling `env.getActiveProfiles()` here returns an empty array; any
-// `if (!profiles.contains("replit")) return;` check would silently no-op
-// in every environment and the datasource properties would never be set.
-//
-// Correct gate: the presence of the DATABASE_URL env var itself. On Replit
-// it's always injected. On local-dev it's absent, the post-processor
-// short-circuits, and `application-local.yml` provides the datasource the
-// normal way. On tests it's absent too — Testcontainers / @AutoConfigureTestDatabase
-// take over. No profile reasoning needed.
-//
-// Registration: this class is wired in via
-//   META-INF/spring/org.springframework.boot.env.EnvironmentPostProcessor.imports
-// (one line: the FQN of this class).
+// Full rationale: `.agents/skills/backend-java-feature/references/database-url-translation.md`.
 
 package PACKAGE_REPLACE_ME.config;
 

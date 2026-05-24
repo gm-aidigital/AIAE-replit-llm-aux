@@ -16,8 +16,18 @@ public final class AuthConstants {
     public static final String AUTH_MODE_SSO  = "sso";
     public static final String AUTH_MODE_MOCK = "mock";
 
-    /** Property indicating Clerk keys are present (for auto-mode detection). */
-    public static final String CLERK_SECRET_KEY_PROPERTY = "CLERK_SECRET_KEY";
+    /**
+     * SpEL expression for "AUTH_MODE=auto AND Clerk keys present". Used via
+     * @ConditionalOnExpression on the auto-mode SSO JwtDecoder bean.
+     *
+     * Why SpEL and not @ConditionalOnProperty: @ConditionalOnProperty is NOT
+     * repeatable, so two annotations on one bean silently drop the second.
+     * The env var `CLERK_SECRET_KEY` is resolved via Spring's
+     * SystemEnvironmentPropertySource (uppercase env vars are queryable
+     * with their original name via the ${...} placeholder).
+     */
+    public static final String SSO_AUTO_CONDITION =
+        "'${app.auth.mode:auto}' == 'auto' and '${CLERK_SECRET_KEY:}' != ''";
 
     /** Path patterns that must remain public. */
     public static final String[] PUBLIC_PATHS = {

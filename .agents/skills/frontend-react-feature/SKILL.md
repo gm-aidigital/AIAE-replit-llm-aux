@@ -20,7 +20,7 @@ Use for any frontend change in a generated MVP project.
 
 React · TypeScript (strict) · Vite (unless user explicitly asks for another
 framework) · `openapi-typescript` + `openapi-fetch` · TanStack Query ·
-Clerk React SDK when SSO is enabled.
+Clerk React SDK when SSO is enabled · Vitest + Testing Library.
 
 ## Core rules (delta from canonical-react-frontend-rules.md)
 
@@ -56,27 +56,28 @@ Follow the canonical blueprint. Frontend must:
 `shared/config` reads runtime config from `import.meta.env` and validates it at
 boot. Build-time secrets are forbidden.
 
-## React common gotchas (real failures from past generations)
+## React common gotchas (real past failures)
 
-- **Never call `navigate()` during render.** `useNavigate()` returns a
-  setter that triggers a state update — calling it directly in the function
-  body of a component during rendering produces a React warning and may
-  cause infinite re-render. Use `<Navigate to="..." replace />` in JSX
-  instead, or wrap the `navigate()` call in `useEffect`.
-
+- **Never call `navigate()` during render.** `useNavigate()` is a setter
+  that triggers state update → React warning + possible infinite re-render.
+  Use `<Navigate to="..." replace />` in JSX, or wrap `navigate()` in `useEffect`.
 - **`401` handling lives in ONE place** — the auth-aware fetcher in
-  `shared/api/client.ts`. It clears local auth state and exposes a router
-  hook (or sets a context flag) that the root layout renders as a
-  `<Navigate to="/login" />`. Pages do not check status codes themselves.
-
-- **Don't read `import.meta.env` outside `shared/config/runtime.ts`**.
-  Centralising the read lets you validate it once at boot and stops typos
-  like `VITE_CLERCK_PUBLISHABLE_KEY` from silently rendering `undefined`.
-
-- **TanStack Query keys are arrays, never strings**. `queryKey: ["users", id]`
+  `shared/api/client.ts`. It clears local auth + exposes a router hook
+  (or context flag) the root layout renders as `<Navigate to="/login" />`.
+  Pages do NOT check status codes.
+- **Don't read `import.meta.env` outside `shared/config/runtime.ts`.**
+  Centralising lets you validate at boot; stops typos like
+  `VITE_CLERCK_PUBLISHABLE_KEY` silently rendering `undefined`.
+- **TanStack Query keys are arrays, never strings.** `queryKey: ["users", id]`,
   not `queryKey: "users-" + id`. String keys break query invalidation.
 
-## Testing guidance
+## Testing requirements
 
-Prefer behavior tests over snapshots. Cover auth-mode rendering and switching,
-loading/empty/error/success states, form validation, critical user flows.
+MVP is not complete with zero frontend tests when frontend logic is generated.
+Use Vitest behavior tests, not snapshot-only suites.
+
+Minimum before final response/publish:
+- main route renders without crashing
+- auth/session state is represented through the same UI path used by the app
+- primary server-backed surface covers loading, error, and success states
+- forms or critical user actions cover expected outcome plus one validation/error case

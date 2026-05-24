@@ -8,7 +8,7 @@
 
 ## What this is
 
-This is an MVP demo. It is NOT production-grade. See "MVP limitations" below.
+MVP demo. NOT production-grade. See "MVP limitations" below.
 
 ## How to run
 
@@ -57,15 +57,15 @@ See `.env.example`. Real values live in Replit Secrets / local `.env` (gitignore
 
 ## CI
 
-`.github/workflows/ci.yml` runs unit tests + Checkstyle + JaCoCo (0.80 line
-coverage gate), the OpenAPI generator check, frontend build, secret hygiene
-and the docker-compose local-dev dry run.
+`.github/workflows/ci.yml` runs the MVP safety test suite, Checkstyle, JaCoCo,
+the OpenAPI generator check, frontend tests/build, secret hygiene and the
+docker-compose local-dev dry run.
 
 Integration tests run on `workflow_dispatch` with `run_integration_tests=true`.
 
 ## Architecture
 
-- Backend: Java 25 + Spring Boot 4.x, multi-module Maven.
+- Backend: Java 21 LTS + Spring Boot 3.x, multi-module Maven.
 - Frontend: React + TypeScript + Vite, typed via `openapi-typescript`.
 - Auth: dual-mode (`AUTH_MODE=auto|sso|mock`), real path via Clerk + Google.
 - Persistence: PostgreSQL (Replit SQL Database on workspace, docker-compose locally).

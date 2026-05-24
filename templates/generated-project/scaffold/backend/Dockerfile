@@ -1,24 +1,8 @@
 # Dockerfile — local-dev / handoff only. Not used on Replit.
-#
-# Project layout:
-#   <root>/
-#     backend/                  ← parent pom.xml + all Java modules
-#       pom.xml                 ← Maven parent (NOT at project root)
-#       application/, service/, domain/, db/, common/, external-services/
-#     frontend/                 ← React + Vite
-#     config/                   ← Checkstyle config (referenced from backend/pom.xml)
-#     lombok.config
-#     docker-compose.yml
-#
-# Multi-stage build:
-#   1. node:22 builds the frontend (Vite) → frontend/dist/.
-#   2. maven:3.9-eclipse-temurin-21 packages the backend, copying
-#      frontend/dist into backend/application/src/main/resources/static/
-#      so the resulting JAR serves the SPA.
-#   3. eclipse-temurin:21-jre runs the JAR.
-#
-# Java 21 LTS — matches the parent pom.xml `<java.version>` and replit.nix
-# `pkgs.jdk21`. Switch all three together when bumping to Java 25.
+# Multi-stage: node:22 builds Vite → maven:3.9-eclipse-temurin-21 packages
+# backend (copying frontend/dist into static/) → eclipse-temurin:21-jre runs.
+# Java 21 must match backend/pom.xml `<java.version>` + replit.nix `pkgs.jdk21`.
+# Layout: see `templates/generated-project/structure/near-production-project-structure.md`.
 
 # ---------- Stage 1: frontend ----------
 FROM node:22-bookworm-slim AS frontend
@@ -26,8 +10,8 @@ WORKDIR /workspace/frontend
 COPY frontend/package*.json ./
 RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 COPY frontend/ ./
-COPY backend/application/src/main/resources/static/api/v1/specs/openapi.yaml \
-     /workspace/backend/application/src/main/resources/static/api/v1/specs/openapi.yaml
+COPY backend/application/src/main/resources/api/v1/specs/openapi.yaml \
+     /workspace/backend/application/src/main/resources/api/v1/specs/openapi.yaml
 RUN npm run generate:api && npm run build
 
 # ---------- Stage 2: backend ----------

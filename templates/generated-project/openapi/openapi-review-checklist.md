@@ -6,7 +6,7 @@ Quick gate for every API change. Detailed rules in
 ## Contract
 
 - [ ] `openapi` and `info.version` present
-- [ ] Spec path is `src/main/resources/static/api/v1/specs/openapi.yaml`
+- [ ] Spec path is `src/main/resources/api/v1/specs/openapi.yaml` (NOT under `static/` — Vite build wipes that dir)
 - [ ] Path/method correct, unique stable `operationId`, meaningful tags
 
 ## Request and response

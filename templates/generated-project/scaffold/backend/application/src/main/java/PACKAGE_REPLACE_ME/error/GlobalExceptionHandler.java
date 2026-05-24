@@ -1,15 +1,16 @@
 // GlobalExceptionHandler — single source of HTTP error translation.
 // Catches AppException + Spring validation/security exceptions and converts
 // them to the OpenAPI-generated ApiErrorV1 DTO. Controllers throw nothing
-// of their own; services throw AppException.
+// of their own; services throw AppException with ErrorReason.
 
 package PACKAGE_REPLACE_ME.error;
 
 import PACKAGE_REPLACE_ME.api.v1.model.ApiErrorV1;
 import PACKAGE_REPLACE_ME.api.v1.model.ValidationParameterV1;
-import PACKAGE_REPLACE_ME.domain.common.error.AppException;
-import PACKAGE_REPLACE_ME.domain.common.error.CommonErrorCodes;
-import PACKAGE_REPLACE_ME.domain.common.error.ValidationMessage;
+import PACKAGE_REPLACE_ME.service.common.error.AppException;
+import PACKAGE_REPLACE_ME.service.common.error.ErrorReason;
+import PACKAGE_REPLACE_ME.service.common.error.ValidationMessage;
+import PACKAGE_REPLACE_ME.service.common.error.ValidationParameter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -22,7 +23,8 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import jakarta.validation.ConstraintViolationException;
 
-import java.time.OffsetDateTime;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -59,33 +61,38 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiErrorV1> handleValidation(Exception ex) {
         LOG.warn("Validation failed: {}", ex.getMessage());
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(
-            toDto(new ValidationMessage(CommonErrorCodes.MALFORMED_REQUEST,
-                new PACKAGE_REPLACE_ME.domain.common.error.ValidationParameter("detail", ex.getMessage()))));
+            toDto(new ValidationMessage(ErrorReason.C002,
+                new ValidationParameter("detail", ex.getMessage()))));
     }
 
     @ExceptionHandler(AuthenticationException.class)
     public ResponseEntity<ApiErrorV1> handleAuth(AuthenticationException ex) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(
-            toDto(new ValidationMessage(CommonErrorCodes.UNAUTHENTICATED)));
+            toDto(new ValidationMessage(ErrorReason.C005)));
     }
 
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<ApiErrorV1> handleAccessDenied(AccessDeniedException ex) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(
-            toDto(new ValidationMessage(CommonErrorCodes.FORBIDDEN,
-                new PACKAGE_REPLACE_ME.domain.common.error.ValidationParameter("detail", ex.getMessage()))));
+            toDto(new ValidationMessage(ErrorReason.C004,
+                new ValidationParameter("detail", ex.getMessage()))));
     }
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiErrorV1> handleUnknown(Exception ex) {
         LOG.error("Unhandled exception", ex);
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
-            toDto(new ValidationMessage(CommonErrorCodes.UNEXPECTED,
-                new PACKAGE_REPLACE_ME.domain.common.error.ValidationParameter("class", ex.getClass().getSimpleName()))));
+            toDto(new ValidationMessage(ErrorReason.C000,
+                new ValidationParameter("class", ex.getClass().getSimpleName()))));
     }
 
     // ----- helpers -----
 
+    /**
+     * Maps the leading-prefix of an {@link ErrorReason} code to an HTTP status.
+     * Add a branch here when introducing a new cross-cutting code family
+     * (e.g. {@code C008} → {@code GONE}).
+     */
     private static HttpStatus statusForCode(String code) {
         if (code == null) return HttpStatus.INTERNAL_SERVER_ERROR;
         if (code.startsWith(NOT_FOUND_PREFIX))  return HttpStatus.NOT_FOUND;
@@ -98,11 +105,16 @@ public class GlobalExceptionHandler {
         return HttpStatus.BAD_REQUEST;
     }
 
+    /**
+     * Builds the ApiErrorV1 wire payload from an internal {@link ValidationMessage}.
+     * Timestamp is recorded in UTC as a {@code LocalDateTime} to match the
+     * project-wide time convention (see backend SKILL "Time types").
+     */
     private ApiErrorV1 toDto(ValidationMessage msg) {
         ApiErrorV1 dto = new ApiErrorV1();
         dto.setCode(msg.getCode());
         dto.setMessage(msg.getMessage());
-        dto.setTimestamp(OffsetDateTime.now());
+        dto.setTimestamp(LocalDateTime.now(ZoneOffset.UTC));
         dto.setCorrelationId(MDC.get(MDC_CORRELATION_ID));
         List<ValidationParameterV1> params = msg.getParameters().stream()
             .map(p -> {

@@ -1,7 +1,7 @@
 # BEM Naming Rules (canonical)
 
-The frontend uses **BEM methodology** for CSS class names. Single source of
-truth: this file. Full background: https://skillbox.ru/media/code/metodologiya-bem-chto-eto-takoe-i-kak-ona-uproshchaet-zhizn-razrabotchikam/
+BEM methodology for CSS class names. Single source of truth.
+Background: https://skillbox.ru/media/code/metodologiya-bem-chto-eto-takoe-i-kak-ona-uproshchaet-zhizn-razrabotchikam/
 
 ## Three concepts
 
@@ -110,12 +110,9 @@ block name.
 
 ## Plain CSS, not CSS Modules / Tailwind / styled-components
 
-The whole point of BEM is that the global namespace is *the contract* —
-every developer reads `.user-card__name` and knows exactly what it styles.
-CSS Modules generate scoped names like `_user-card__name_h7g3k` which
-breaks the contract; Tailwind utility classes bypass it entirely;
-styled-components encodes styles in JS instead of CSS. Pick none of the
-above.
+BEM's point: the global namespace IS the contract — `.user-card__name` reads
+identically everywhere. CSS Modules scope-mangle names (breaks the contract);
+Tailwind bypasses it; styled-components encodes styles in JS. Pick none.
 
 Use plain `.css` files, imported at the top of the component:
 

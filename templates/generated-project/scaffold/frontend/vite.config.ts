@@ -1,13 +1,14 @@
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 
-// Vite config. Three things to know about Replit + this template:
-//   1. Dev server binds 0.0.0.0:5173 so Replit can expose it.
-//   2. /api/* is proxied to the backend on http://localhost:5000 in dev,
-//      so the frontend never builds raw backend URLs.
-//   3. Production builds go to ../backend/application/src/main/resources/static
-//      (configurable below) so the Spring Boot JAR serves the SPA from the
-//      same process — this is what allows Reserved VM deployment.
+// Replit-tuned Vite config. Hard rules:
+//  - Vite stays on 5173 (backend owns 5000 → externalPort 80).
+//  - /api/* proxied to backend; never hardcode backend URLs.
+//  - Build → ../backend/application/src/main/resources/static (Spring serves SPA).
+//  - allowedHosts must include `.replit.dev`/`.repl.co`/`.kirk.replit.dev`
+//    (Vite 5+ blocks unknown Host headers).
+// See `templates/generated-project/frontend/canonical-react-frontend-rules.md`
+// → "Bootstrap rule" + backend SKILL "Port architecture lock".
 
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, process.cwd(), "");
@@ -18,8 +19,15 @@ export default defineConfig(({ mode }) => {
         plugins: [react()],
         server: {
             host: "0.0.0.0",
-            port: 5173,
-            strictPort: true,
+            port: 5173,                                          // ← do NOT change to 5000 (see header #1)
+            strictPort: true,                                    // fail loudly if 5173 is taken
+            allowedHosts: [
+                ".replit.dev",                                   // workspace preview hostnames
+                ".repl.co",                                      // legacy preview hostnames
+                ".kirk.replit.dev",                              // alternate workspace cluster
+                "localhost",
+                "127.0.0.1",
+            ],
             proxy: {
                 "/api": {
                     target: `http://localhost:${backendPort}${backendContextPath}`,
@@ -35,6 +43,7 @@ export default defineConfig(({ mode }) => {
         preview: {
             host: "0.0.0.0",
             port: 5173,
+            allowedHosts: [".replit.dev", ".repl.co", ".kirk.replit.dev", "localhost"],
         },
     };
 });
