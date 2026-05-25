@@ -26,6 +26,9 @@
 
 package PACKAGE_REPLACE_ME.service.common.error;
 
+/**
+ * Canonical registry of service-layer business error codes.
+ */
 public enum ErrorReason {
 
     C000("Unexpected error: %s"),
@@ -35,13 +38,19 @@ public enum ErrorReason {
     C004("Access forbidden"),
     C005("Authentication required"),
     C006("Conflict: %s"),
-    C007("Rate limit exceeded"),
-    ;
+    C007("Rate limit exceeded");
 
     private final String description;
 
-    ErrorReason(String description) { this.description = description; }
+    ErrorReason(String description) {
+        this.description = description;
+    }
 
-    public String getCode()        { return name(); }
-    public String getDescription() { return description; }
+    public String getCode() {
+        return name();
+    }
+
+    public String getDescription() {
+        return description;
+    }
 }

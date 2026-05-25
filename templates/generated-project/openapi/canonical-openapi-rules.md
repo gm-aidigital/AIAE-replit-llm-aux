@@ -83,6 +83,18 @@ components:
 Protected operations must declare `security: [{ bearerAuth: [] }]` and document
 `401` and `403` responses with examples.
 
+## Frontend contract boundary
+
+Frontend code must call backend operations through the generated
+`openapi-fetch` client only. Raw `fetch`, `axios`, and `XMLHttpRequest` are
+forbidden under `frontend/src` because they bypass generated path/method types.
+This is what allows regressions such as `PATCH` when the spec defines `PUT`, or
+`/usage/summary` when the spec defines `/admin/usage`.
+
+Every Replit/frontend workflow must run `npm run generate:api` before Vite,
+typecheck, tests, or build. Stale/missing `schema.d.ts` invalidates the
+contract-first guarantee.
+
 ## Response discipline
 
 Every protected operation explicitly declares:

@@ -23,22 +23,22 @@ requiredFiles = [
     "templates/generated-project/scaffold/scripts/setup-project.sh",
 ]
 
-# === Deployment === Reserved VM (`gce`), not Autoscale. See replit.md.
+# === Deployment === Reserved VM (`gce`), not Autoscale. Build + run wrapped
+# in scripts so .replit, README, CI, and Dockerfile call the same commands.
 [deployment]
 deploymentTarget = "gce"
-build = ["sh", "-c", "mvn -f backend/pom.xml -B -DskipTests package"]
-run   = ["sh", "-c", "java -jar $(ls backend/application/target/*.jar | grep -v '\\.original$' | head -n1)"]
+build = ["bash", "scripts/replit-build.sh"]
+run   = ["bash", "scripts/replit-run.sh"]
 
-# === Ports === Backend 5000 → externalPort 80 is the single public surface.
-# Vite 5173 is workspace preview only. NEVER swap — see backend SKILL
-# "Port architecture lock".
+# === Ports === Backend 5000 → externalPort 80 is the single public surface
+# (Reserved-VM Deployment supports ONE externalPort). Vite dev preview lives
+# on 5173 but is workspace-only: the Replit workspace pane auto-detects the
+# listening port — no [[ports]] entry needed (and adding one tries to expose
+# 5173 externally even in deployment where Vite isn't running). NEVER swap
+# backend onto 5173 — see backend SKILL "Port architecture lock".
 [[ports]]
 localPort = 5000
 externalPort = 80
-
-[[ports]]
-localPort = 5173
-externalPort = 5173
 
 # === Workspace env === [env] does NOT propagate to Deployments; copy
 # CLERK_*/AUTH_*/USAGE_LOG_* into Deployment Secrets. DATABASE_URL auto-injected
@@ -58,8 +58,8 @@ mode = "parallel"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "if [ -f backend/pom.xml ]; then mvn -f backend/pom.xml -pl application -am spring-boot:run; elif [ -f requirements.txt ] || [ -f Pipfile ] || [ -f pyproject.toml ] || [ -f main.py ] || [ -f uv.lock ]; then echo '[FATAL] Python backend detected — delete main.py/pyproject.toml/uv.lock/requirements.txt and regenerate as Spring Boot.'; exit 1; else echo '[backend] Not generated yet — ask Agent to scaffold backend/ from templates/generated-project/scaffold/.'; fi"
+args = "if [ -f backend/pom.xml ]; then mvn -f backend/pom.xml -DskipTests -Dskip.frontend=true install && mvn -f backend/application/pom.xml -DskipTests -Dskip.frontend=true spring-boot:run; elif [ -f requirements.txt ] || [ -f Pipfile ] || [ -f pyproject.toml ] || [ -f main.py ] || [ -f uv.lock ]; then echo '[FATAL] Python backend detected — delete main.py/pyproject.toml/uv.lock/requirements.txt and regenerate as Spring Boot.'; exit 1; else echo '[backend] Not generated yet — ask Agent to scaffold backend/ from templates/generated-project/scaffold/.'; fi"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "if [ -f frontend/package.json ]; then cd frontend && { [ -f package-lock.json ] && npm ci || npm install; } && npm run dev -- --host 0.0.0.0 --port 5173; else echo '[frontend] Not generated yet — ask Agent to scaffold frontend/ from templates/generated-project/scaffold/frontend/.'; fi"
+args = "if [ -f frontend/package.json ]; then cd frontend && { [ -f package-lock.json ] && npm ci || npm install; } && npm run generate:api && npm run dev -- --host 0.0.0.0 --port 5173; else echo '[frontend] Not generated yet — ask Agent to scaffold frontend/ from templates/generated-project/scaffold/frontend/.'; fi"

@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
+import { fileURLToPath, URL } from "node:url";
 
 // Replit-tuned Vite config. Hard rules:
 //  - Vite stays on 5173 (backend owns 5000 → externalPort 80).
@@ -14,9 +15,23 @@ export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, process.cwd(), "");
     const backendPort = env.BACKEND_DEV_PORT ?? "5000";
     const backendContextPath = env.VITE_API_CONTEXT_PATH ?? "";   // e.g. "/sales-dashboard"
+    const authMode = env.VITE_AUTH_MODE ?? env.AUTH_MODE ?? "auto";
+    const hasBackendSsoConfig = Boolean(env.AUTH_ISSUER_URI || env.AUTH_JWKS_URI);
+    const clerkPublishableKey = (authMode === "sso" || hasBackendSsoConfig)
+        ? (env.VITE_CLERK_PUBLISHABLE_KEY ?? env.CLERK_PUBLISHABLE_KEY ?? "")
+        : (env.VITE_CLERK_PUBLISHABLE_KEY ?? "");
 
     return {
         plugins: [react()],
+        define: {
+            "import.meta.env.VITE_AUTH_MODE": JSON.stringify(authMode),
+            "import.meta.env.VITE_CLERK_PUBLISHABLE_KEY": JSON.stringify(clerkPublishableKey),
+        },
+        resolve: {
+            alias: {
+                "@": fileURLToPath(new URL("./src", import.meta.url)),
+            },
+        },
         server: {
             host: "0.0.0.0",
             port: 5173,                                          // ← do NOT change to 5000 (see header #1)

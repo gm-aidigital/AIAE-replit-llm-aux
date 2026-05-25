@@ -6,7 +6,10 @@ import { runtimeConfig } from "../config/runtime";
 // using whatever token the auth provider supplies (Clerk getToken() in SSO
 // mode, the mock JWT in mock mode).
 
-const baseUrl = runtimeConfig.apiBaseUrl;   // e.g. "/api/v1" in dev (proxied by Vite)
+// OpenAPI path keys already include `/api/v1/...`; apiBaseUrl is only a host
+// or servlet context prefix. Never set it to `/api/v1` or calls become
+// `/api/v1/api/v1/...`.
+const baseUrl = runtimeConfig.apiBaseUrl;
 
 export const apiClient = createClient<paths>({ baseUrl });
 

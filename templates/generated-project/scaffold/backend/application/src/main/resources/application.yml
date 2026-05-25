@@ -3,7 +3,8 @@
 #   - application-local.yml   → docker-compose / local-dev
 #
 # REPLACE before use:
-#   - server.servlet.context-path → /<app-name>
+#   - server.servlet.context-path → /<app-name> ONLY if your deployment needs one
+#     (a separate path-prefix beyond /api/v1/). Most Replit MVPs leave it empty.
 #
 # !!! DO NOT add `spring.security.oauth2.resourceserver.jwt.*` properties here !!!
 # Spring Boot's OAuth2 auto-config triggers on ANY of those properties (even
@@ -13,12 +14,14 @@
 
 spring:
   application:
-    name: replit-mvp-template
+    # Replace APP_SERVICE_NAME with the generated app's stable slug during
+    # handoff (e.g. employee-directory). The fallback keeps the scaffold
+    # runnable before the first project-specific rename.
+    name: ${APP_SERVICE_NAME:generated-mvp}
   jpa:
     hibernate:
       ddl-auto: validate
     open-in-view: false
-    database: postgresql
     properties:
       hibernate:
         query.in_clause_parameter_padding: true
@@ -30,7 +33,11 @@ spring:
 server:
   port: ${PORT:8080}
   servlet:
-    context-path: /some-path-by-app-name   # REPLACE with /<your-app-name>
+    # Default empty (root) — Spring serves /api/v1/... directly. Set a
+    # path-prefix only when a deployment specifically needs one; if you
+    # set it, also set APP_CONTEXT_PATH in docker-compose.yml so the
+    # backend healthcheck and the frontend nginx /api proxy match.
+    context-path: ${APP_CONTEXT_PATH:}
 
 management:
   endpoints:
@@ -48,6 +55,7 @@ springdoc:
 logging:
   level:
     root: INFO
+    org.zalando.logbook: TRACE   # TRACE on the logbook logger → emit req/resp lines
 
 # App-specific config — these become AuthProperties / UsageLoggingProperties
 # via @ConfigurationProperties("app.auth") and ("app.usage-logging").
@@ -62,7 +70,26 @@ app:
       audience:   ${AUTH_AUDIENCE:}
     mock:
       default-user: ${AUTH_MOCK_USER:demo-user@example.com}
-      jwt-secret:   ${AUTH_MOCK_JWT_SECRET:}
+      # MockJwtDecoder requires ≥32 chars (HS256). Default below lets the
+      # scaffold boot without AUTH_MOCK_JWT_SECRET set — REPLACE in any
+      # real deployment via env or Replit Secrets.
+      jwt-secret:   ${AUTH_MOCK_JWT_SECRET:dev-mock-jwt-secret-replace-before-production-12345}
+  security:
+    csp:
+      frame-ancestors: "${APP_SECURITY_CSP_FRAME_ANCESTORS:'self' https://*.replit.dev https://*.repl.co}"
+  # Logbook HTTP req/resp logging — bound by LogbookConfig. Defaults inline
+  # in LogbookProperties mirror the canonical rules; override here per-app.
+  # See observability/logbook-http-logging-rules.md.
+  logbook:
+    censored-replacement: XXX
+    headers-to-censor: [Authorization, Cookie, Set-Cookie, X-API-Key, AccessKey, Proxy-Authorization]
+    json-fields-to-censor: [".*password.*", ".*token.*", ".*secret.*", ".*key.*", ".*credential.*", ".*authorization.*", privateKey, clientSecret, serviceAccount]
+    excluded:
+      "/**/actuator/**": [GET]
+      "/**/swagger-ui/**": [GET]
+      "/**/specs/**": [GET]
+      "/health": [GET]
+      "/**": [OPTIONS]
   usage-logging:
     enabled:      ${USAGE_LOGGING_ENABLED:true}
     # service-name MUST be non-empty when enabled=true. Default falls back

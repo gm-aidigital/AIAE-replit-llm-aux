@@ -9,4 +9,4 @@ public record SampleRecord(
     Long id,
     String name,
     LocalDateTime updatedAt                           // LocalDateTime in UTC — see SKILL "Time types"
-) {}
+) { }

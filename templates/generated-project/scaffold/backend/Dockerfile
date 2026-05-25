@@ -17,9 +17,9 @@ RUN npm run generate:api && npm run build
 # ---------- Stage 2: backend ----------
 FROM maven:3.9-eclipse-temurin-21 AS backend
 WORKDIR /workspace
+# `COPY backend/ ./backend/` already brings backend/config/ and
+# backend/lombok.config — they live INSIDE backend/, not at repo root.
 COPY backend/ ./backend/
-COPY config/ ./config/
-COPY lombok.config ./
 COPY --from=frontend /workspace/frontend/dist/ \
      ./backend/application/src/main/resources/static/
 RUN mvn -f backend/pom.xml -B -DskipTests package
@@ -27,10 +27,13 @@ RUN mvn -f backend/pom.xml -B -DskipTests package
 # ---------- Stage 3: runtime ----------
 FROM eclipse-temurin:21-jre
 WORKDIR /app
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
 COPY --from=backend /workspace/backend/application/target/*.jar /app/app.jar
 EXPOSE 8080
 HEALTHCHECK --interval=15s --timeout=3s --start-period=30s --retries=5 \
-  CMD curl -fsS "http://localhost:${PORT:-8080}${APP_CONTEXT_PATH:-/}actuator/health" || exit 1
+  CMD sh -c 'curl -fsS "http://localhost:${PORT:-8080}${APP_CONTEXT_PATH:-}/actuator/health" || exit 1'
 ENV SPRING_PROFILES_ACTIVE=local
 ENV PORT=8080
 ENTRYPOINT ["sh","-c","exec java -jar /app/app.jar"]

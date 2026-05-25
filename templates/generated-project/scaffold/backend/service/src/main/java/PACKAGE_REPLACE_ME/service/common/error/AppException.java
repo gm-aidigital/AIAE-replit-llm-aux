@@ -13,6 +13,9 @@
 
 package PACKAGE_REPLACE_ME.service.common.error;
 
+/**
+ * Canonical unchecked exception for business and validation errors.
+ */
 public class AppException extends RuntimeException {
 
     private final ValidationMessage validationMessage;

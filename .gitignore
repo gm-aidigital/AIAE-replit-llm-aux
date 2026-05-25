@@ -1,5 +1,6 @@
 # IDE
 .idea/
+.claude/
 *.iml
 .vscode/
 
@@ -28,3 +29,4 @@ node_modules/
 dist/
 target/
 generated-sources/
+templates/generated-project/scaffold/backend/application/src/main/resources/static/

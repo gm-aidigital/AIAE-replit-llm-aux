@@ -30,12 +30,16 @@ public @interface LogUsage {
     /**
      * Dotted lowercase action name, e.g. "employee.update", "report.export".
      * Required. Becomes UsageEvent.action.
+     *
+     * @return usage action name
      */
     String action();
 
     /**
      * Event category. Defaults to "api_request". Other values: "auth",
      * "custom". Errors are inferred automatically when the method throws.
+     *
+     * @return usage event category
      */
     String eventType() default "api_request";
 }

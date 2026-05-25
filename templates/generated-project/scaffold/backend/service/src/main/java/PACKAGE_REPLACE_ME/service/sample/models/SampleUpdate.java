@@ -7,4 +7,4 @@ package PACKAGE_REPLACE_ME.service.sample.models;
 
 public record SampleUpdate(
     String name
-) {}
+) { }

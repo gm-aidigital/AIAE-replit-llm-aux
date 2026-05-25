@@ -72,6 +72,11 @@ Canonical: `templates/generated-project/observability/usage-logging-rules.md`.
 - [ ] OpenAPI contract updated for any API change; spec at `src/main/resources/api/v1/specs/openapi.yaml` (NOT under `static/`).
 - [ ] `openapi-generator-maven-plugin` configured.
 - [ ] Frontend uses `openapi-typescript` + `openapi-fetch` + TanStack Query.
+- [ ] `frontend/package-lock.json` exists and is committed — enterprise
+      reproducibility requires a pinned lockfile, not just version ranges:
+      ```bash
+      test -f frontend/package-lock.json || echo "REJECT: frontend/package-lock.json missing — run 'cd frontend && npm install' and commit it"
+      ```
 - [ ] Structured JSON logs to stdout; Actuator `health` + `prometheus` reachable through context-path.
 - [ ] Checkstyle and JaCoCo plugins wired (default JaCoCo gate `0.00` in MVP — see Tests).
 
@@ -134,7 +139,9 @@ Canonical: backend SKILL → "Port architecture lock" + replit.md → "Replit de
 
 Past runs swapped Vite onto 5000 + Spring to 8080 → broke Reserved-VM Deployment.
 
-- [ ] `.replit` `[[ports]]` first entry: `5000 → 80`. Second: `5173 → 5173`.
+- [ ] `.replit` `[[ports]]` has EXACTLY ONE entry: `5000 → 80`. Vite 5173
+      is workspace-only; adding a `[[ports]]` for it exposes 5173 externally
+      in deployment where Vite isn't running.
 - [ ] `application-replit.yml` uses `server.port: ${PORT:5000}` — not hard-coded:
       ```bash
       grep 'server.port:' backend/application/src/main/resources/application-replit.yml
@@ -151,9 +158,13 @@ Past runs swapped Vite onto 5000 + Spring to 8080 → broke Reserved-VM Deployme
       grep -rE '\$\{PG(HOST|PORT|USER|PASSWORD|DATABASE)[:}]' \
         backend/application/src/main/resources/
       ```
-- [ ] No `sslmode=disable` (Replit managed Postgres needs `require`):
+- [ ] No HARDCODED `sslmode=disable` in app config — the
+      `ReplitDatabaseUrlPostProcessor` reads sslmode from the `DATABASE_URL`
+      query string (Replit's production tier carries `require`; Helium dev
+      omits). Hardcoding `disable` in `application-replit.yml` would
+      override prod and break TLS:
       ```bash
-      grep -rEn 'sslmode=disable' .  # matches in .agents/templates/ are docs
+      grep -rEn 'sslmode=disable' backend/application/src/main/resources/
       ```
 - [ ] `vite.config.ts` uses `port: 5173 + strictPort: true` (NOT 5000):
       ```bash

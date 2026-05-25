@@ -1,0 +1,137 @@
+openapi: 3.0.3
+info:
+  title: Replit MVP API
+  version: 0.1.0
+  description: |
+    Starter contract. Replace with the real spec for your domain BEFORE
+    writing controllers — the rest of the codebase generates from here
+    (backend interfaces + frontend types).
+
+    Schemas are versioned EXPLICITLY in their names (UserV1, ApiErrorV1).
+    When V2 ships, add UserV2 / Create…V2 schemas alongside V1; V1 keeps
+    working until the last consumer migrates.
+servers:
+  - url: /api/v1
+    description: V1 base path (DOCUMENTATION ONLY — the openapi-generator-maven-plugin
+      does NOT prepend this to generated Spring routes. Path keys below carry the
+      `/api/v1/` prefix verbatim. See canonical-openapi-rules.md → "/api/v1 prefix").
+
+tags:
+  - name: auth
+    description: Authentication bootstrap
+
+paths:
+  /api/v1/auth/me:
+    get:
+      tags: [auth]
+      operationId: getCurrentUser
+      summary: Returns the authenticated user (mock or SSO)
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Authenticated user payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserV1"
+              examples:
+                demo:
+                  value:
+                    id: "user_123"
+                    email: "demo-user@example.com"
+                    roles: ["viewer"]
+        "401":
+          $ref: "#/components/responses/UnauthorizedV1"
+        "403":
+          $ref: "#/components/responses/ForbiddenV1"
+
+  /api/v1/auth/mock/login:
+    post:
+      tags: [auth]
+      operationId: mockLogin
+      summary: Issue a mock JWT (only available when AUTH_MODE=mock or auto without Clerk keys)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MockLoginRequestV1"
+      responses:
+        "200":
+          description: Mock JWT issued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MockLoginResponseV1"
+        "404":
+          description: Mock login is disabled in SSO mode
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiErrorV1"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  responses:
+    UnauthorizedV1:
+      description: Missing or invalid token
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiErrorV1"
+          examples:
+            missingToken:
+              value: { code: "C005", message: "Authentication required", timestamp: "2026-05-24T10:00:00Z", correlationId: "abc-123" }
+    ForbiddenV1:
+      description: Authenticated but lacking permission
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiErrorV1"
+
+  schemas:
+    UserV1:
+      type: object
+      required: [id, email]
+      properties:
+        id:    { type: string }
+        email: { type: string, format: email }
+        roles: { type: array, items: { type: string } }
+
+    MockLoginRequestV1:
+      type: object
+      required: [email]
+      properties:
+        email: { type: string, format: email }
+
+    MockLoginResponseV1:
+      type: object
+      required: [accessToken, expiresAt]
+      properties:
+        accessToken: { type: string, description: "Backend-signed JWT (mock)" }
+        expiresAt:   { type: string, format: date-time }
+
+    ApiErrorV1:
+      type: object
+      required: [code, message, timestamp]
+      properties:
+        code:          { type: string, description: "Machine-readable error code" }
+        message:       { type: string, description: "Human-readable message" }
+        timestamp:     { type: string, format: date-time }
+        correlationId: { type: string }
+        parameters:
+          type: array
+          items: { $ref: "#/components/schemas/ValidationParameterV1" }
+
+    ValidationParameterV1:
+      type: object
+      required: [code, value]
+      properties:
+        code:  { type: string }
+        value: { type: string }

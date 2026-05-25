@@ -48,6 +48,22 @@ Three remedies (scaffold uses #1):
 
 Stay consistent across the project.
 
+## `openapi-fetch` baseUrl must not duplicate `/api/v1`
+
+The frontend schema keys are the literal OpenAPI paths. If the spec has
+`/api/v1/auth/mock/login`, this call:
+
+```ts
+createClient<paths>({ baseUrl: "/api/v1" })
+apiClient.POST("/api/v1/auth/mock/login", ...)
+```
+
+hits `/api/v1/api/v1/auth/mock/login`. Mock login looks broken even though
+curling the backend endpoint works.
+
+Fix: `baseUrl` is empty by default. Use it only for a host or servlet context
+prefix, e.g. `/employee-directory`, never `/api/v1`.
+
 ## `LazyInitializationException` — single rule that ends it forever
 
 JPA closes session at end of `@Transactional`; lazy fields touched after
@@ -167,5 +183,28 @@ User locale → separate timezone field; never embed in the timestamp.
 ## Don't keep `git-commit-id-maven-plugin` blocking in Replit shell
 
 Replit workspaces don't always have `.git`; plugin fails `mvn package`.
-Scaffolded parent pom sets `git-commit-id.skip=true` AND
-`failOnNoGitDirectory=false` — keep both. Re-enable in CI only.
+Scaffolded parent pom keeps `failOnNoGitDirectory=false` at plugin level so
+both the named execution and Maven's default execution inherit it. In synthetic
+CI copies without `.git`, also pass `-Dgit-commit-id.skip=true`.
+
+Do NOT put `failOnNoGitDirectory=false` only inside one `<execution>` block:
+Maven may still run a `default` execution in child modules and fail before the
+rest of the reactor builds.
+
+## Frontend path/method drift vs OpenAPI
+
+Symptoms:
+- Mock login works in the spec but UI hits `/api/v1/auth/mock-login`.
+- Admin usage is implemented at `/api/v1/admin/usage` but UI calls
+  `/api/v1/usage/summary`.
+- Spec says `put`, UI sends `PATCH`.
+
+Root cause: frontend bypassed the generated OpenAPI path/method types, or Vite
+started before `npm run generate:api`.
+
+Fix:
+1. Use only `shared/api/client.ts` (`openapi-fetch`) under `frontend/src`.
+2. Run `npm run generate:api` before Vite/typecheck/build.
+3. Let TypeScript reject invalid `apiClient.METHOD("/path")` combinations.
+4. Keep local/CI grep guards forbidding raw `fetch`, `axios`, and
+   `XMLHttpRequest`.

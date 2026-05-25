@@ -125,6 +125,9 @@ Phase 1 -> 2 when ALL true:
 - [ ] `curl /api/v1/auth/me` with a mock JWT returns 200.
 - [ ] At least one feature endpoint reads from the DB and returns data.
 - [ ] Frontend renders without console errors against the running backend.
+- [ ] Browser Network tab shows mock login hitting exactly
+  `/api/v1/auth/mock/login` (or `<context-path>/api/v1/auth/mock/login`),
+  never `/api/v1/api/v1/...`.
 
 "Phase 1 done -> start writing tests" handshake. `mvp-safety-review` refuses
 publish until Phase 2 is complete for both backend and frontend when those

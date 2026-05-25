@@ -3,8 +3,13 @@
 Replit's managed SQL Database injects only:
 
 ```
-DATABASE_URL=postgresql://<user>:<password>@<host>:<port>/<db>?sslmode=require
+DATABASE_URL=postgresql://<user>:<password>@<host>:<port>/<db>[?sslmode=...]
 ```
+
+The `sslmode` parameter is tier-specific: Replit's production-grade tier
+sets `sslmode=require`; the Helium development tier omits it (no TLS).
+The processor reads sslmode from the URL and applies it as-is — do NOT
+force `require` in app config (used to be the default; broke Helium).
 
 (`PGHOST`, `PGUSER`, `PGPASSWORD`, `PGDATABASE`, `PGPORT` are legacy Neon-only
 and NOT injected by current Replit SQL Database.)
@@ -32,6 +37,8 @@ The class:
 - early-returns when `DATABASE_URL` is absent (gate on env-var presence, NOT
   profile — `getActiveProfiles()` is empty before profiles resolve),
 - parses `DATABASE_URL` via `java.net.URI`,
+- reads `sslmode` from the URL query string when present; if the URL omits it,
+  the processor does not force TLS properties (`disable` produces `ssl=false`),
 - adds `spring.datasource.url`/`username`/`password` + Hikari SSL props to a
   high-priority `MapPropertySource`,
 - fails fast with a readable message on missing `DATABASE_URL`.

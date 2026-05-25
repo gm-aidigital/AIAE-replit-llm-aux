@@ -19,6 +19,18 @@ SCAFFOLD="${ROOT}/templates/generated-project/scaffold"
 echo "==> Installing canonical .gitignore at project root"
 cp "${SCAFFOLD}/.gitignore" "${ROOT}/.gitignore"
 
+echo "==> Installing runtime scripts at project root (scripts/)"
+# Replit deployment + the company-repo handoff need build/run/verify scripts
+# at a path that survives the template control-plane cleanup. The template
+# copy under scaffold/scripts/ stays as the canonical source; this step
+# installs the runtime copies at <root>/scripts/ so .replit and engineers
+# cloning the company repo find them at the same path.
+mkdir -p "${ROOT}/scripts"
+for s in replit-build.sh replit-run.sh local-verify.sh; do
+  cp "${SCAFFOLD}/scripts/${s}" "${ROOT}/scripts/${s}"
+  chmod +x "${ROOT}/scripts/${s}"
+done
+
 echo "==> Removing Replit-injected Python scaffolding (Java template, not Python)"
 for f in main.py pyproject.toml uv.lock poetry.lock requirements.txt Pipfile Pipfile.lock; do
   [ -f "${ROOT}/${f}" ] && rm -f "${ROOT}/${f}" && echo "    removed ${f}"

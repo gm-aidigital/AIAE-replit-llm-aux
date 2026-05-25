@@ -36,6 +36,7 @@
             <column name="duration_ms"  type="BIGINT"/>
             <column name="attributes"   type="JSONB"/>
             <column name="error_message" type="TEXT"/>
+            <column name="correlation_id" type="TEXT"/>
             <column name="client_ip"   type="TEXT"/>
             <column name="user_agent"  type="TEXT"/>
         </createTable>

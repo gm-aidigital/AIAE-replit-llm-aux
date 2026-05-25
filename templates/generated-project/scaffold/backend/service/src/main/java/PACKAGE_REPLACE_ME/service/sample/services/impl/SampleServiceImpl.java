@@ -20,6 +20,12 @@ import PACKAGE_REPLACE_ME.service.sample.services.SampleService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
+
+/**
+ * Default implementation of the reference sample service.
+ */
 @Service                                              // Only the impl carries @Service.
 @RequiredArgsConstructor
 public class SampleServiceImpl implements SampleService {
@@ -45,11 +51,17 @@ public class SampleServiceImpl implements SampleService {
     }
 
     /**
-     * Copies the writable fields from {@link SampleUpdate} onto the entity.
-     * Kept private + small so the public method body reads top-to-bottom
-     * as a workflow; field-level conditionals live here.
+     * Copies writable fields from {@link SampleUpdate} onto the entity via setters.
+     * Service-side, NOT on the entity itself — keeps domain a leaf module
+     * (entity must not import SampleUpdate or anything from the service module).
+     *
+     * @param entity managed JPA entity loaded by the caller
+     * @param update writable-fields request payload
      */
     private void applyUpdate(SampleEntity entity, SampleUpdate update) {
-        entity.apply(update);
+        if (update.name() != null) {
+            entity.setName(update.name());
+        }
+        entity.setUpdatedAt(LocalDateTime.now(ZoneOffset.UTC));
     }
 }

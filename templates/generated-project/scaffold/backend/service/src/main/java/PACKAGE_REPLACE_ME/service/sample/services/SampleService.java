@@ -23,11 +23,25 @@ package PACKAGE_REPLACE_ME.service.sample.services;
 import PACKAGE_REPLACE_ME.service.sample.models.SampleRecord;
 import PACKAGE_REPLACE_ME.service.sample.models.SampleUpdate;
 
+/**
+ * Reference service contract for the sample aggregate.
+ */
 public interface SampleService {
 
-    /** Read — controller-level @Transactional(readOnly=true) handles the tx. */
+    /**
+     * Reads a sample by id.
+     *
+     * @param id sample identifier
+     * @return matching sample record
+     */
     SampleRecord findById(Long id);
 
-    /** Write — controller-level @Transactional handles the tx. */
+    /**
+     * Updates a sample by id.
+     *
+     * @param id sample identifier
+     * @param update writable sample fields
+     * @return updated sample record
+     */
     SampleRecord update(Long id, SampleUpdate update);
 }

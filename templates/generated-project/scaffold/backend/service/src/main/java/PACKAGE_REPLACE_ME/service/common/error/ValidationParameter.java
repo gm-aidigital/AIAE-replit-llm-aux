@@ -2,6 +2,9 @@ package PACKAGE_REPLACE_ME.service.common.error;
 
 import java.util.Objects;
 
+/**
+ * Named parameter used to format and expose validation messages.
+ */
 public final class ValidationParameter {
 
     private final String code;
@@ -12,13 +15,22 @@ public final class ValidationParameter {
         this.value = value;
     }
 
-    public String getCode()  { return code; }
-    public String getValue() { return value; }
+    public String getCode() {
+        return code;
+    }
+
+    public String getValue() {
+        return value;
+    }
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
         ValidationParameter that = (ValidationParameter) o;
         return Objects.equals(code, that.code) && Objects.equals(value, that.value);
     }

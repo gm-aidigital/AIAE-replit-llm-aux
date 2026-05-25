@@ -22,9 +22,9 @@ DB — the dashboard read as "0 actions" with no error anywhere. The right
 behavior is loud refusal so the misconfiguration is impossible to miss.
 
 The scaffold's `application.yml` defaults `service-name` to
-`${spring.application.name}` so an unset env var still binds the real
-logger — but `spring.application.name` MUST be set to the real service
-identifier per app (not the placeholder `replit-mvp-template`).
+`${spring.application.name}` so an unset env var still binds the logger.
+During generation, set `APP_SERVICE_NAME` / `spring.application.name` to the
+real service identifier before handoff.
 
 Local dev + tests run without setup beyond the default `usage_events`
 Liquibase changelog. Logger never blocks a request, never throws into the flow.
@@ -53,17 +53,18 @@ Reference: `SampleServiceImpl` in scaffold.
 
 ```
 USAGE_LOGGING_ENABLED=true
-USAGE_LOG_SERVICE_NAME=replit-mvp-template
+USAGE_LOG_SERVICE_NAME=generated-mvp
 USAGE_LOG_ENVIRONMENT=dev
 ```
 
 That is the entire usage-logging configuration surface.
 
-`USAGE_LOG_SERVICE_NAME` must be set to the actual service identifier before
-publishing — `replit-mvp-template` is a recognisable placeholder. The
-`PostgresUsageLogger` must reject placeholder values like `replit-mvp-template`
-or empty strings at startup with a clear error message (and bind
-`NoOpUsageLogger` instead).
+`USAGE_LOG_SERVICE_NAME` should be set to the actual service identifier before
+handoff. `replit-mvp-template` is a recognisable rejected placeholder. When
+`enabled=true` AND `service-name` is empty/blank/placeholder,
+`UsageLoggingConfig` MUST throw `IllegalStateException` at startup with a
+clear error message — do NOT silently bind `NoOpUsageLogger`. NoOp is
+reserved for the explicit opt-out path (`enabled=false`).
 
 ## Event payload
 
@@ -114,10 +115,10 @@ by one `try/catch/finally` in the aspect. Disable globally via
 - `UsageLogger` — interface, single method `void record(UsageEvent event)`.
   Lives in `service/common/observability/`; impls (`PostgresUsageLogger`,
   `NoOpUsageLogger`) live in `application/observability/usage/`.
-- `PostgresUsageLogger` — implementation, `@Async` + `@Transactional(REQUIRES_NEW)`
-  so the DB write runs off the request thread in its own short transaction
-  (uncoupled from the calling request's tx outcome).
-- `NoOpUsageLogger` — bound when `enabled=false` or required props missing.
+- `PostgresUsageLogger` — implementation, `@Async("usageLoggingExecutor")`
+  so the DB write runs off the request thread. Repository `save()` opens its
+  own short transaction.
+- `NoOpUsageLogger` — bound only when `enabled=false`.
 
 ### Critical invariants (preserve on every edit)
 

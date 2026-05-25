@@ -103,9 +103,21 @@
         </module>
         <!--		<module name="JavadocVariable"/>-->
         <module name="JavadocStyle"/>
+        <!-- Public methods MUST carry Javadoc (with @param/@return per
+             the SKILL.md "Javadoc — input/output parameters" rule).
+             Private methods enforced separately at ≥3 lines.
+             JavadocMethod above validates @param/@return correspondence
+             whenever Javadoc is present. -->
         <module name="MissingJavadocMethod">
-            <property name="minLineCount" value="3"/>
+            <property name="scope" value="public"/>
+            <property name="allowMissingPropertyJavadoc" value="true"/>
             <property name="tokens" value="METHOD_DEF , ANNOTATION_FIELD_DEF"/>
+        </module>
+        <module name="MissingJavadocMethod">
+            <property name="id" value="MissingJavadocMethodPrivate"/>
+            <property name="scope" value="private"/>
+            <property name="minLineCount" value="3"/>
+            <property name="tokens" value="METHOD_DEF"/>
         </module>
 
         <!-- Checks for Naming Conventions.                  -->

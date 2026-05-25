@@ -61,10 +61,25 @@ public class ReplitDatabaseUrlPostProcessor implements EnvironmentPostProcessor 
             URLDecoder.decode(creds[0], StandardCharsets.UTF_8));
         props.put("spring.datasource.password",
             creds.length > 1 ? URLDecoder.decode(creds[1], StandardCharsets.UTF_8) : "");
-        props.put("spring.datasource.hikari.data-source-properties.ssl", "true");
-        props.put("spring.datasource.hikari.data-source-properties.sslmode", "require");
+        String sslMode = queryParam(uri.getRawQuery(), "sslmode");
+        if (sslMode != null && !sslMode.isBlank()) {
+            boolean useSsl = !"disable".equalsIgnoreCase(sslMode);
+            props.put("spring.datasource.hikari.data-source-properties.ssl", String.valueOf(useSsl));
+            props.put("spring.datasource.hikari.data-source-properties.sslmode", sslMode);
+        }
 
         env.getPropertySources().addFirst(new MapPropertySource(SOURCE_NAME, props));
+    }
+
+    private static String queryParam(String rawQuery, String key) {
+        if (rawQuery == null) return null;
+        for (String pair : rawQuery.split("&")) {
+            int eq = pair.indexOf('=');
+            if (eq > 0 && key.equals(pair.substring(0, eq))) {
+                return URLDecoder.decode(pair.substring(eq + 1), StandardCharsets.UTF_8);
+            }
+        }
+        return null;
     }
 
     private static String maskUrl(String url) {

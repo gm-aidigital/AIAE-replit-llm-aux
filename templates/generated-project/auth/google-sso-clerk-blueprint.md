@@ -53,24 +53,27 @@ means rewriting the auth layer.
 
 | Value | Behavior |
 |---|---|
-| `auto` (default) | Use Clerk SSO when `CLERK_SECRET_KEY` is set; fall back to mock otherwise. |
+| `auto` (default) | Use Clerk SSO when `CLERK_SECRET_KEY` plus `AUTH_ISSUER_URI` or `AUTH_JWKS_URI` are set; fall back to mock otherwise. |
 | `sso` | Require Clerk keys; fail startup if missing. |
 | `mock` | Skip external IdP; expose local mock login. |
 
-Generated projects start in both `mock` (no keys) and `sso` (keys present)
-without code rewrites. Managed Clerk: keys auto-present → `auto` resolves
-`sso`. Locally: keys absent → `auto` resolves `mock`.
+Generated projects start in both `mock` and `sso` without code rewrites.
+Managed Clerk: keys may be auto-present, but Spring still needs
+`AUTH_ISSUER_URI` or `AUTH_JWKS_URI` to validate JWTs. Therefore `auto`
+resolves to `sso` only when Clerk secret **and** issuer/JWKS are present;
+otherwise it safely remains in mock mode. Explicit `AUTH_MODE=sso` fail-fast
+surfaces missing issuer/JWKS instead of booting a half-configured service.
 
 ### Auto-mode detection (backend pattern)
 
-On `AUTH_MODE=auto` backend decides via `CLERK_SECRET_KEY` non-empty check:
+On `AUTH_MODE=auto` backend decides via `CLERK_SECRET_KEY` plus issuer/JWKS:
 
 ```java
 @Configuration
-@ConditionalOnProperty(name = "AUTH_MODE", havingValue = "auto", matchIfMissing = true)
+@ConditionalOnProperty(name = "app.auth.mode", havingValue = "auto", matchIfMissing = true)
 public class AutoAuthConfig {
     @Configuration
-    @ConditionalOnProperty(name = "CLERK_SECRET_KEY")
+    @ConditionalOnExpression("CLERK_SECRET_KEY present AND (AUTH_ISSUER_URI or AUTH_JWKS_URI present)")
     static class WhenClerkKeysPresent { /* enable OAuth2ResourceServer chain */ }
 
     @Configuration
@@ -90,9 +93,9 @@ implementation detail of the `auto` branch.
 - SSO mode: Clerk SDK (`@clerk/clerk-react`) with `<ClerkProvider>` reading
   the publishable key. On Replit-managed Clerk, the publishable key is
   injected by Replit as `CLERK_PUBLISHABLE_KEY` — Vite normally only exposes
-  `VITE_*` env vars, so the frontend reads it through Replit's runtime
-  injection mechanism (see Replit Auth pane docs) OR an alias
-  `VITE_CLERK_PUBLISHABLE_KEY=$CLERK_PUBLISHABLE_KEY` set in the workflow.
+  `VITE_*` env vars, so `frontend/vite.config.ts` maps
+  `CLERK_PUBLISHABLE_KEY` into `import.meta.env.VITE_CLERK_PUBLISHABLE_KEY`
+  when SSO is actually configured.
 - Protected calls send `Authorization: Bearer <jwt>` (token from Clerk
   `useAuth().getToken()` in SSO mode, from `POST /api/v1/auth/mock/login`
   in mock mode).

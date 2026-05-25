@@ -14,7 +14,7 @@ export default function App() {
     const { data, isLoading, isError, error } = useQuery({
         queryKey: ["auth", "me"],
         queryFn: async () => {
-            const { data, error } = await apiClient.GET("/auth/me");
+            const { data, error } = await apiClient.GET("/api/v1/auth/me");
             if (error) throw error;
             return data;
         },

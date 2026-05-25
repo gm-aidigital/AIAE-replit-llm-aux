@@ -154,19 +154,19 @@ public class <X>ServiceImpl implements <X>Service {
 ## MapStruct composition via `uses`
 
 When a mapper needs to convert nested types that another mapper already
-handles, wire them through `@Mapper(uses = ...)` — never duplicate the
-conversion code.
+handles, wire them through `@Mapper(config = ..., uses = ...)` — never
+duplicate the conversion code.
 
 ```java
 // service/.../order/mappers/OrderItemMapper.java
-@Mapper(componentModel = "spring")
+@Mapper(config = ServiceMapperConfig.class)
 public interface OrderItemMapper {
     OrderItemRecord toRecord(OrderItemEntity entity);
     OrderItemEntity toEntity(OrderItemRecord record);
 }
 
 // service/.../order/mappers/OrderMapper.java
-@Mapper(componentModel = "spring", uses = OrderItemMapper.class)   // ← composition
+@Mapper(config = ServiceMapperConfig.class, uses = OrderItemMapper.class)
 public interface OrderMapper {
     // OrderItemMapper handles List<OrderItem> ↔ List<OrderItemRecord>
     // and Optional<OrderItem> ↔ Optional<OrderItemRecord> automatically.
@@ -178,8 +178,8 @@ public interface OrderMapper {
 
 Composition through `uses` keeps each mapper small, makes each one
 unit-testable in isolation, and lets MapStruct inject the dependency via
-Spring (because `componentModel = "spring"`) so mappers don't need to
-manually instantiate each other.
+Spring (through the shared mapper config) so mappers don't need to manually
+instantiate each other.
 
 ## Two MapStruct mappers per resource
 
@@ -190,7 +190,7 @@ manually instantiate each other.
 
 ```java
 // service/.../<domain>/mappers/<Domain>Mapper.java
-@Mapper(componentModel = "spring")
+@Mapper(config = ServiceMapperConfig.class)
 public interface <Domain>Mapper {
     <Domain>Record toRecord(<Domain>Entity entity);
     <Domain>Entity toEntity(<Domain>Record record);
@@ -198,7 +198,7 @@ public interface <Domain>Mapper {
 }
 
 // application/.../<domain>/mappers/<Domain>ApiMapper.java
-@Mapper(componentModel = "spring")
+@Mapper(config = ApplicationMapperConfig.class)
 public interface <Domain>ApiMapper {
     <Domain>V1 toDto(<Domain>Record record);                  // V1 DTO from openapi-generator
     <Domain>Record toRecord(Create<Domain>RequestV1 req);     // V1 request from openapi-generator
@@ -207,3 +207,63 @@ public interface <Domain>ApiMapper {
 
 Entities never escape the `domain` module — they're not arguments or
 return types of any controller, mapper-to-DTO, or external-service call.
+
+## Test method naming + Gherkin body (house style)
+
+Every `@Test` method, JUnit or Vitest, follows this convention:
+
+- **Name:** `shouldDoSomethingTest()` — starts with `should`, describes the
+  expected behaviour in camelCase, ends with the literal `Test` suffix.
+  Forbidden: `getMeRequiresAuthentication`, `findById_returnsRecord_whenExists`,
+  `testFindById`. Required: `shouldRejectUnauthenticatedRequestTest`,
+  `shouldThrowAppExceptionWhenEntityMissingTest`.
+- **Body:** three Gherkin section markers — `// Given:`, `// When:`,
+  `// Then:` — pure separators for arrange / act / assert. **Bare markers
+  only — no descriptive text after the colon.** The code below each marker
+  IS the description; the comment must not duplicate it. One blank line
+  between sections.
+- **Vitest:** the `should` opener moves into the `it(...)` string;
+  `// Given:` / `// When:` / `// Then:` still structure the body.
+- **Empty tests get NO markers.** When the assertion is "the harness loaded
+  without throwing" (`@SpringBootTest` smoke, `@DataJpaTest` changelog
+  smoke), an empty body is the right form. Don't wrap nothing in
+  Given/When/Then.
+
+```java
+@Test
+void shouldIssueTokenOnMockLoginTest() throws Exception {
+    // Given:
+    when(mockTokenService.issueToken(eq("alice@example.com")))
+        .thenReturn(new MockLoginRecord("mock-jwt", Instant.now().plusSeconds(3600)));
+
+    // When:
+    var response = mvc.perform(post("/api/v1/auth/mock/login")
+        .contentType(MediaType.APPLICATION_JSON)
+        .content("{\"email\":\"alice@example.com\"}"));
+
+    // Then:
+    response.andExpect(status().isOk())
+            .andExpect(jsonPath("$.accessToken").value("mock-jwt"));
+}
+```
+
+```ts
+it("should render the scaffold heading test", () => {
+    // Given:
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+    // When:
+    render(<QueryClientProvider client={qc}><App /></QueryClientProvider>);
+
+    // Then:
+    expect(screen.getByRole("heading", { level: 1 })).toBeTruthy();
+});
+```
+
+**Review check (grep-able):**
+```bash
+# Find Java test methods NOT matching shouldDoSomethingTest convention.
+# Expected: zero output.
+grep -rEn 'void [a-z][a-zA-Z0-9_]+\(\)' backend/**/src/test/java/ \
+  | grep -vE 'void should[A-Z][a-zA-Z0-9]*Test\('
+```

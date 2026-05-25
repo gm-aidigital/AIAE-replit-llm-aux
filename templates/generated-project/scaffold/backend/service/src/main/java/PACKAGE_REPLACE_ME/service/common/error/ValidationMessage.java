@@ -11,6 +11,9 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 
+/**
+ * Service-layer error payload before it is converted to the OpenAPI error DTO.
+ */
 public final class ValidationMessage {
 
     private final String code;
@@ -33,15 +36,30 @@ public final class ValidationMessage {
         }
     }
 
-    public String getCode()                          { return code; }
-    public String getMessage()                       { return message; }
-    public ValidationMessageType getType()           { return type; }
-    public List<ValidationParameter> getParameters() { return parameters; }
+    public String getCode() {
+        return code;
+    }
+
+    public String getMessage() {
+        return message;
+    }
+
+    public ValidationMessageType getType() {
+        return type;
+    }
+
+    public List<ValidationParameter> getParameters() {
+        return parameters;
+    }
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (!(o instanceof ValidationMessage that)) return false;
+        if (this == o) {
+            return true;
+        }
+        if (!(o instanceof ValidationMessage that)) {
+            return false;
+        }
         return Objects.equals(code, that.code)
             && Objects.equals(message, that.message)
             && type == that.type
@@ -58,6 +76,13 @@ public final class ValidationMessage {
         return String.format("%s: %s", code, message);
     }
 
+    /**
+     * Builds a validation message from raw parameter values.
+     *
+     * @param reason canonical application error reason
+     * @param params values interpolated into the error description
+     * @return formatted validation message
+     */
     public static ValidationMessage withParams(ErrorReason reason, Object... params) {
         ValidationParameter[] validationParameters = null;
         if (params != null) {

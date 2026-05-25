@@ -36,7 +36,22 @@ re-hits these three bugs:
    Replit workspace (backend on `5000`). Read from `BACKEND_DEV_PORT`,
    default `5000`. See scaffold for canonical proxy block.
 
-Regeneration (major Vite upgrade): diff against scaffold MUST preserve all three.
+4. **`@/*` works in `tsc` but fails in Vite** → `tsconfig.json` path aliases
+   are not runtime aliases. `vite.config.ts` MUST include
+   `resolve.alias["@"] = fileURLToPath(new URL("./src", import.meta.url))`.
+
+5. **`openapi-fetch` `baseUrl` set to `/api/v1`** → calls become
+   `/api/v1/api/v1/...` because OpenAPI path keys already include the prefix.
+   Default `apiBaseUrl` is empty; only set a host or servlet context prefix.
+
+6. **Wrong endpoint path/method from UI (`PATCH` vs `PUT`,
+   `/usage/summary` vs `/admin/usage`)** → frontend bypassed the typed
+   OpenAPI boundary or used stale generated types. Use only
+   `shared/api/client.ts` (`openapi-fetch`) for backend calls; raw
+   `fetch`/`axios`/`XMLHttpRequest` is forbidden under `frontend/src`.
+   Run `npm run generate:api` before Vite and before typecheck/build.
+
+Regeneration (major Vite upgrade): diff against scaffold MUST preserve all six.
 
 - `openapi-typescript` (types) + `openapi-fetch` (HTTP client).
 - TanStack Query for server state.

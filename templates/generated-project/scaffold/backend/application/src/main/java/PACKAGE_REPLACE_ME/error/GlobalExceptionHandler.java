@@ -28,6 +28,9 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.stream.Collectors;
 
+/**
+ * Converts service and framework exceptions into the committed OpenAPI error shape.
+ */
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
@@ -37,12 +40,18 @@ public class GlobalExceptionHandler {
     private static final String MDC_CORRELATION_ID = "correlationId";
 
     /** Error-code prefixes that map to specific HTTP statuses. */
-    private static final String NOT_FOUND_PREFIX  = "C001";
-    private static final String FORBIDDEN_PREFIX  = "C004";
-    private static final String UNAUTH_PREFIX     = "C005";
-    private static final String CONFLICT_PREFIX   = "C006";
+    private static final String NOT_FOUND_PREFIX = "C001";
+    private static final String FORBIDDEN_PREFIX = "C004";
+    private static final String UNAUTH_PREFIX = "C005";
+    private static final String CONFLICT_PREFIX = "C006";
     private static final String RATE_LIMIT_PREFIX = "C007";
 
+    /**
+     * Handles canonical application exceptions.
+     *
+     * @param ex application exception carrying an error code
+     * @return API error response with mapped HTTP status
+     */
     @ExceptionHandler(AppException.class)
     public ResponseEntity<ApiErrorV1> handleAppException(AppException ex) {
         HttpStatus status = statusForCode(ex.getCode());
@@ -54,6 +63,12 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(status).body(toDto(ex.getValidationMessage()));
     }
 
+    /**
+     * Handles bean-validation failures.
+     *
+     * @param ex validation exception from Spring or Jakarta Validation
+     * @return 400 API error response
+     */
     @ExceptionHandler({
         MethodArgumentNotValidException.class,
         ConstraintViolationException.class
@@ -65,12 +80,24 @@ public class GlobalExceptionHandler {
                 new ValidationParameter("detail", ex.getMessage()))));
     }
 
+    /**
+     * Handles authentication failures.
+     *
+     * @param ex Spring Security authentication exception
+     * @return 401 API error response
+     */
     @ExceptionHandler(AuthenticationException.class)
     public ResponseEntity<ApiErrorV1> handleAuth(AuthenticationException ex) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(
             toDto(new ValidationMessage(ErrorReason.C005)));
     }
 
+    /**
+     * Handles authenticated callers without sufficient permissions.
+     *
+     * @param ex Spring Security authorization exception
+     * @return 403 API error response
+     */
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<ApiErrorV1> handleAccessDenied(AccessDeniedException ex) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(
@@ -78,6 +105,12 @@ public class GlobalExceptionHandler {
                 new ValidationParameter("detail", ex.getMessage()))));
     }
 
+    /**
+     * Handles unexpected exceptions as opaque internal errors.
+     *
+     * @param ex unhandled exception
+     * @return 500 API error response
+     */
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiErrorV1> handleUnknown(Exception ex) {
         LOG.error("Unhandled exception", ex);
@@ -92,15 +125,32 @@ public class GlobalExceptionHandler {
      * Maps the leading-prefix of an {@link ErrorReason} code to an HTTP status.
      * Add a branch here when introducing a new cross-cutting code family
      * (e.g. {@code C008} → {@code GONE}).
+     *
+     * @param code canonical error code
+     * @return HTTP status for the code family
      */
     private static HttpStatus statusForCode(String code) {
-        if (code == null) return HttpStatus.INTERNAL_SERVER_ERROR;
-        if (code.startsWith(NOT_FOUND_PREFIX))  return HttpStatus.NOT_FOUND;
-        if (code.startsWith(FORBIDDEN_PREFIX))  return HttpStatus.FORBIDDEN;
-        if (code.startsWith(UNAUTH_PREFIX))     return HttpStatus.UNAUTHORIZED;
-        if (code.startsWith(CONFLICT_PREFIX))   return HttpStatus.CONFLICT;
-        if (code.startsWith(RATE_LIMIT_PREFIX)) return HttpStatus.TOO_MANY_REQUESTS;
-        if (code.startsWith("C000"))            return HttpStatus.INTERNAL_SERVER_ERROR;
+        if (code == null) {
+            return HttpStatus.INTERNAL_SERVER_ERROR;
+        }
+        if (code.startsWith(NOT_FOUND_PREFIX)) {
+            return HttpStatus.NOT_FOUND;
+        }
+        if (code.startsWith(FORBIDDEN_PREFIX)) {
+            return HttpStatus.FORBIDDEN;
+        }
+        if (code.startsWith(UNAUTH_PREFIX)) {
+            return HttpStatus.UNAUTHORIZED;
+        }
+        if (code.startsWith(CONFLICT_PREFIX)) {
+            return HttpStatus.CONFLICT;
+        }
+        if (code.startsWith(RATE_LIMIT_PREFIX)) {
+            return HttpStatus.TOO_MANY_REQUESTS;
+        }
+        if (code.startsWith("C000")) {
+            return HttpStatus.INTERNAL_SERVER_ERROR;
+        }
         // All other "Cxxx" codes and any domain-specific code → 400.
         return HttpStatus.BAD_REQUEST;
     }
@@ -109,6 +159,9 @@ public class GlobalExceptionHandler {
      * Builds the ApiErrorV1 wire payload from an internal {@link ValidationMessage}.
      * Timestamp is recorded in UTC as a {@code LocalDateTime} to match the
      * project-wide time convention (see backend SKILL "Time types").
+     *
+     * @param msg internal validation message
+     * @return OpenAPI error response DTO
      */
     private ApiErrorV1 toDto(ValidationMessage msg) {
         ApiErrorV1 dto = new ApiErrorV1();

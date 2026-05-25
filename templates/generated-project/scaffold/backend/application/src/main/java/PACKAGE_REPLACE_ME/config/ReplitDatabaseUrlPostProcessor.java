@@ -24,6 +24,9 @@ import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * Translates Replit's libpq-style {@code DATABASE_URL} into Spring datasource properties.
+ */
 public class ReplitDatabaseUrlPostProcessor implements EnvironmentPostProcessor {
 
     private static final String SOURCE_NAME = "replit-database-url";
@@ -52,6 +55,13 @@ public class ReplitDatabaseUrlPostProcessor implements EnvironmentPostProcessor 
         String[] creds = userInfo.split(":", 2);
         int port = uri.getPort() == -1 ? 5432 : uri.getPort();
 
+        // Respect sslmode from the URL query string. Replit's managed
+        // Postgres tiers behave differently:
+        //   - Replit production-grade DB → URL carries `sslmode=require`
+        //   - Replit Helium dev DB       → URL omits sslmode
+        // Do NOT force `require` when the URL is silent; that breaks Helium.
+        String sslMode = queryParam(uri.getRawQuery(), "sslmode");
+
         Map<String, Object> props = new HashMap<>();
         props.put("spring.datasource.url",
             "jdbc:postgresql://" + uri.getHost() + ":" + port + uri.getPath());
@@ -59,10 +69,34 @@ public class ReplitDatabaseUrlPostProcessor implements EnvironmentPostProcessor 
             URLDecoder.decode(creds[0], StandardCharsets.UTF_8));
         props.put("spring.datasource.password",
             creds.length > 1 ? URLDecoder.decode(creds[1], StandardCharsets.UTF_8) : "");
-        props.put("spring.datasource.hikari.data-source-properties.ssl", "true");
-        props.put("spring.datasource.hikari.data-source-properties.sslmode", "require");
+        if (sslMode != null && !sslMode.isBlank()) {
+            boolean useSsl = !"disable".equalsIgnoreCase(sslMode);
+            props.put("spring.datasource.hikari.data-source-properties.ssl",
+                String.valueOf(useSsl));
+            props.put("spring.datasource.hikari.data-source-properties.sslmode", sslMode);
+        }
 
         env.getPropertySources().addFirst(new MapPropertySource(SOURCE_NAME, props));
+    }
+
+    /**
+     * Reads one decoded query parameter value from a raw URI query.
+     *
+     * @param rawQuery raw query string without the leading question mark
+     * @param key parameter name to read
+     * @return decoded parameter value, or null when absent
+     */
+    private static String queryParam(String rawQuery, String key) {
+        if (rawQuery == null) {
+            return null;
+        }
+        for (String pair : rawQuery.split("&")) {
+            int eq = pair.indexOf('=');
+            if (eq > 0 && key.equals(pair.substring(0, eq))) {
+                return URLDecoder.decode(pair.substring(eq + 1), StandardCharsets.UTF_8);
+            }
+        }
+        return null;
     }
 
     private static String maskUrl(String url) {

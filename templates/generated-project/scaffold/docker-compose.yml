@@ -30,9 +30,12 @@ services:
       retries: 10
 
   backend:
+    # Context is the REPO ROOT — backend/Dockerfile uses repo-root-relative
+    # COPY paths (frontend/, backend/, config/, lombok.config) so it can
+    # bundle the SPA into static/ during the same image build.
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     profiles: ["local"]
     depends_on:
       postgres:
@@ -45,32 +48,36 @@ services:
       POSTGRES_PASSWORD:      ${POSTGRES_PASSWORD:-app}
       POSTGRES_HOST:          postgres
       POSTGRES_PORT:          5432
+      APP_CONTEXT_PATH:       ${APP_CONTEXT_PATH:-}
+      APP_SERVICE_NAME:       ${APP_SERVICE_NAME:-generated-mvp}
       APP_AUTH_MODE:          ${APP_AUTH_MODE:-mock}
       APP_AUTH_MOCK_JWT_SECRET: ${APP_AUTH_MOCK_JWT_SECRET:-change-me-32-chars-or-more-mock-jwt-secret}
-      APP_USAGE_LOGGING_ENABLED:   "true"
-      APP_USAGE_LOGGING_SERVICE_NAME: ${APP_USAGE_LOGGING_SERVICE_NAME:-replit-mvp-template}
-      APP_USAGE_LOGGING_ENVIRONMENT:  dev
+      USAGE_LOGGING_ENABLED:  ${USAGE_LOGGING_ENABLED:-true}
+      USAGE_LOG_SERVICE_NAME: ${USAGE_LOG_SERVICE_NAME:-generated-mvp}
+      USAGE_LOG_ENVIRONMENT:  ${USAGE_LOG_ENVIRONMENT:-dev}
     ports:
       - "8080:8080"
+    # Healthcheck assumes context-path is empty (the scaffold default — see
+    # application.yml `server.servlet.context-path`). If you set
+    # APP_CONTEXT_PATH in env, prepend it to the curl URL accordingly.
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:8080${APP_CONTEXT_PATH:-/}actuator/health || exit 1"]
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080$${APP_CONTEXT_PATH:-}/actuator/health || exit 1"]
       interval: 10s
       timeout: 3s
       retries: 15
       start_period: 30s
 
   frontend:
+    # Context is the REPO ROOT — frontend/Dockerfile COPYs both frontend/ and
+    # backend/.../openapi.yaml during build (volumes are runtime-only and
+    # can't supply build-time files to `npm run generate:api`).
     build:
-      context: ./frontend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: frontend/Dockerfile
     profiles: ["local"]
     depends_on:
       backend:
         condition: service_healthy
-    # The OpenAPI YAML lives in the backend tree; mount it as a build-time
-    # input so frontend's `npm run generate:api` can read it.
-    volumes:
-      - ./backend:/workspace-backend:ro
     ports:
       - "5173:80"
 

@@ -170,14 +170,15 @@ on impl methods. Layout: `references/code-patterns.md` → "Service interface + 
 
 Two mappers per resource: `Entity ↔ ServiceRecord` in `service/`,
 `ServiceRecord ↔ ApiDto` in `application/`. Never handwrite
-`new <Domain>V1(); dto.setX(...)` chains — parent pom sets
-`unmappedTargetPolicy=ERROR`. Entities never escape `domain`.
+`new <Domain>V1(); dto.setX(...)` chains. Every mapper must use the shared
+module mapper config with `unmappedTargetPolicy=ERROR`. Entities never
+escape `domain`.
 
 ### One entity = one MapStruct mapper per layer (hard rule)
 
 Exactly two mapper files per resource: `<Domain>Mapper` (service/) covers
 all directions/list/page; `<Domain>ApiMapper` (application/) covers all V1
-schemas for this domain. Compose via `@Mapper(uses = ...)`.
+schemas for this domain. Compose via `@Mapper(config = ..., uses = ...)`.
 
 Reject:
 - **Mega-mapper** bundling multiple aggregates (Order + OrderItem + Customer).
@@ -221,16 +222,61 @@ dto.setId(record.id()); dto.setName(record.name());
 return mapper.toDto(record);
 ```
 
-Parent pom sets `unmappedTargetPolicy=ERROR`. Unmapped target →
-`@Mapping(target = "...", ignore = true)` or `constant = "..."` (both keep
-compile-time check).
+Shared module mapper configs set `unmappedTargetPolicy=ERROR`. Unmapped
+target → `@Mapping(target = "...", ignore = true)` or `constant = "..."`
+(both keep compile-time check).
 
-## Javadoc on private methods (hard rule)
+## Javadoc — input/output parameters MUST be documented (hard rule)
 
-Public interface/override/self-documenting methods may skip Javadoc. **Private
-methods MUST carry Javadoc** — that's where complexity hides and future Agent
-edits drift silently. Doc: what isn't obvious from signature, edge cases,
-sentinel returns, what it does NOT do. Comment WHY, not WHAT.
+Every **public method** with at least one parameter, a non-void return, or a
+thrown checked exception MUST carry Javadoc with `@param` for each parameter,
+`@return` for the return value, and `@throws` for declared exceptions. This
+applies to controllers, services, factories, mappers, configuration beans —
+everything public. Generated code (OpenAPI, MapStruct) is exempt.
+
+Past generations shipped controllers/services where the Javadoc was a single
+summary line and `@param`/`@return` were absent, leaving the next reader
+guessing what each parameter means (e.g. is `email` required? lowercased?
+JWT-extracted or user-supplied?) and what edge-cases produce which return.
+
+**Required form:**
+
+```java
+/**
+ * One-line summary in imperative mood ("Issues a mock JWT…", NOT "Issues…").
+ * Optionally one more sentence for context.
+ *
+ * @param email demo account email; non-blank; caller lowercases/strips.
+ * @param ttl   token lifetime; capped at AuthConstants.MOCK_JWT_TTL_SECS.
+ * @return signed token + UTC expiry matching the JWT {@code exp} claim.
+ * @throws IllegalStateException when AUTH_MOCK_JWT_SECRET is shorter than 32 chars.
+ */
+public MockLoginRecord issueToken(String email, Duration ttl) { … }
+```
+
+**Records:** document each component in the class-level Javadoc using the
+`@param` tag (Java treats record components as constructor parameters):
+
+```java
+/**
+ * Result of a successful mock login.
+ *
+ * @param accessToken Signed JWT for the mock identity.
+ * @param expiresAt   UTC expiry, matches the JWT {@code exp} claim.
+ */
+public record MockLoginRecord(String accessToken, Instant expiresAt) {}
+```
+
+**Skip Javadoc only for:** generated code, `@Override` of an already-documented
+parent (Javadoc inherits), trivial getters/setters synthesised by Lombok, and
+private methods shorter than 3 non-blank lines.
+
+**Private methods longer than 3 lines** also MUST carry Javadoc — that's
+where complexity hides and edits drift silently. Document WHY (not WHAT),
+edge cases, sentinel returns, what the method explicitly does NOT do.
+
+Enforced by Checkstyle (`MissingJavadocMethod` scope=public, `JavadocMethod`
+validates `@param`/`@return`/`@throws` correspondence).
 
 ## Port architecture lock (hard reject if violated)
 
@@ -242,20 +288,26 @@ Spring serving the production React bundle.
 | Surface | Port | Notes |
 |---|---|---|
 | Spring Boot | **5000** | `${PORT:5000}` in `application-replit.yml`; `.replit` `[env]` `PORT="5000"` |
-| `.replit` `[[ports]]` primary | `5000 → 80` | Single public surface |
-| Vite dev server | **5173** | Workspace preview only |
-| `.replit` `[[ports]]` secondary | `5173 → 5173` | Preview pane |
+| `.replit` `[[ports]]` (single) | `5000 → 80` | Reserved-VM Deployment supports ONE externalPort |
+| Vite dev server | **5173** | Workspace preview only — auto-detected by Replit pane, NO `[[ports]]` entry (would try to expose 5173 in deployment where Vite isn't running) |
 | Production frontend | served by backend | `npm run build` → `backend/application/src/main/resources/static/` |
 
 **Hard rules:**
 - Never Vite=`5000`, never Spring=`8080` on `replit` profile.
-- Never invent root `start.sh` — `.replit` parallel tasks run `mvn spring-boot:run` + `npm run dev`.
+- Never run `spring-boot:run` on the parent reactor. `.replit` must first
+  `mvn -f backend/pom.xml -DskipTests -Dskip.frontend=true install`, then run
+  `mvn -f backend/application/pom.xml -DskipTests -Dskip.frontend=true spring-boot:run`.
+- Never start Vite before `npm run generate:api`; missing generated types mean
+  the frontend was booted against a stale or absent OpenAPI schema.
+- Never invent root `start.sh` — `.replit` parallel tasks run the two commands above + `npm run dev`.
 - Never hard-code `server.port: 8080` in `application-replit.yml` — keep `${PORT:5000}`.
 - Never bypass `ReplitDatabaseUrlPostProcessor`. Don't set `spring.datasource.url`
   from `PGHOST`/`PGPORT`/etc. — the post-processor parses `DATABASE_URL` (single
-  source on `replit`). `PG*` are legacy, may be unset by `postgresql-16`; Replit
-  managed Postgres needs `sslmode=require` (`sslmode=disable` breaks). Delete
-  `spring.datasource.url:` from `application-replit.yml` if present.
+  source on `replit`). `PG*` are legacy, NOT provided by `postgresql-16`.
+  `sslmode` is read from the URL — Replit's production-grade tier ships
+  `sslmode=require`, Helium dev tier omits it; the processor doesn't force
+  `require` anymore. Delete `spring.datasource.url:` from
+  `application-replit.yml` if present.
 
 Tempted to "swap Vite onto 5000 so the webview shows the UI"? Stop. On
 Deployment the UI is Spring serving the BUILT React from `/static/`.
@@ -275,7 +327,7 @@ Never handwrite DTOs that duplicate generated schemas.
 | | Replit | Local-dev |
 |---|---|---|
 | Spring profile | `replit` | `local` |
-| PostgreSQL | Replit SQL DB via `DATABASE_URL` (`sslmode=require`); Hikari `2–3` | docker-compose; Hikari `50` |
+| PostgreSQL | Replit SQL DB via `DATABASE_URL` (sslmode read from URL — Replit prod tier sets `require`, Helium dev omits); Hikari `2–3` | docker-compose; Hikari `50` |
 | Server port | `5000` → external `80` | `8080` |
 | Build | Maven via `.replit` Run | Maven or `docker compose --profile local up --build` |
 | Deployment | Reserved VM (`gce`) | n/a |
@@ -382,6 +434,9 @@ symptom. Do NOT improvise alternative fixes.
 | Compile mismatch `OffsetDateTime` vs `LocalDateTime` | Time types — `LocalDateTime` only |
 | `git-commit-id` plugin failing in workspace without `.git` | git-commit-id blocking in Replit shell |
 | Service signature returns `Entity` (lazy safe but module-bad) | Services still return Records, not Entities |
+| Replit log says `spring-boot:run` is running on parent POM | Run install on parent, then `spring-boot:run` from `backend/application/pom.xml` |
+| Vite says generated API types are missing | Run `npm run generate:api` before Vite in `.replit` |
+| Frontend calls wrong path/method (`PATCH` vs `PUT`, `/usage/summary` vs `/admin/usage`) | Use only typed `apiClient`; raw fetch/axios is forbidden |
 
 ## Local-dev dry run
 

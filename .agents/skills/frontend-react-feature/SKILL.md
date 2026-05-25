@@ -53,6 +53,11 @@ Follow the canonical blueprint. Frontend must:
 | API base URL | Same-origin in Deployment; `/api` proxied to `localhost:5000` in dev workspace via `vite.config.ts` | `http://localhost:8080/<context-path>` |
 | Secrets | Replit Secrets pane | `.env.local` (gitignored) |
 
+OpenAPI paths already include `/api/v1/...`. Therefore `openapi-fetch`
+`baseUrl` must be empty by default or a host/context prefix only. Never set
+`baseUrl`/`VITE_API_BASE_URL` to `/api/v1`; that produces
+`/api/v1/api/v1/...` and breaks mock login.
+
 `shared/config` reads runtime config from `import.meta.env` and validates it at
 boot. Build-time secrets are forbidden.
 
@@ -70,6 +75,14 @@ boot. Build-time secrets are forbidden.
   `VITE_CLERCK_PUBLISHABLE_KEY` silently rendering `undefined`.
 - **TanStack Query keys are arrays, never strings.** `queryKey: ["users", id]`,
   not `queryKey: "users-" + id`. String keys break query invalidation.
+- **Vite and TypeScript aliases must both be configured.** If `tsconfig.json`
+  has `@/*`, `vite.config.ts` must also define `resolve.alias["@"]`.
+- **Path/method drift is a contract violation.** Calls like
+  `PATCH /employees/{id}/status` when the spec says `PUT`, or
+  `/usage/summary` when the spec says `/admin/usage`, must fail in typecheck.
+  Use only `shared/api/client.ts` (`openapi-fetch`) under `frontend/src`.
+  Raw `fetch`, `axios`, and `XMLHttpRequest` are forbidden because they bypass
+  generated OpenAPI path/method types and recreate the Replit log failures.
 
 ## Testing requirements
 

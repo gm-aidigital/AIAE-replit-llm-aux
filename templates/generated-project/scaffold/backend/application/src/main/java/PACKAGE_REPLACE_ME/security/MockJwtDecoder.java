@@ -19,11 +19,14 @@ import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * Decodes backend-issued mock JWTs for local development and demos.
+ */
 public class MockJwtDecoder implements JwtDecoder {
 
     private static final String HEADER_TYP_VALUE = "JWT";
-    private static final String HEADER_ALG_KEY   = "alg";
-    private static final String HEADER_TYP_KEY   = "typ";
+    private static final String HEADER_ALG_KEY = "alg";
+    private static final String HEADER_TYP_KEY = "typ";
 
     private final SecretKey signingKey;
 

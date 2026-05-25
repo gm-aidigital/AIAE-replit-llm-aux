@@ -237,7 +237,7 @@ Never write singular `service/`, `mapper/`, `entity/`, `repository/`, `model/`,
 - Controllers implement generated OpenAPI interfaces; thin (≤6 lines, no conditionals).
 - Only `*ServiceImpl` carries `@Service`; each public impl method has `@LogUsage(action = "...")`.
 - Entities/repositories never appear in REST contracts.
-- DB via Liquibase. MapStruct for all conversion. One entity = one mapper per layer; compose via `uses=`.
+- DB via Liquibase. MapStruct for all conversion. One entity = one mapper per layer; compose via shared mapper config + `uses=`.
 - Business errors as `AppException(ErrorReason.X, ...)` — never per-domain enums.
 - Usage logging: `templates/generated-project/observability/usage-logging-rules.md`.
 
