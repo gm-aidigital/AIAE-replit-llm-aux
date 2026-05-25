@@ -95,7 +95,7 @@ Hard recap:
 
 | Module | NEVER depend on | Why |
 |---|---|---|
-| `service` | `spring-boot-starter-security`, `spring-boot-starter-oauth2-resource-server`, `spring-boot-starter-web`, `spring-security-*`, `jakarta.servlet-api`, anything `org.springframework.web.*` | Service is business orchestration — no HTTP/JWT/caller knowledge. |
+| `service` | `spring-boot-starter-security`, `spring-boot-starter-oauth2-resource-server`, `spring-boot-starter-web`, `spring-security-*`, `jakarta.servlet-api`, `io.jsonwebtoken:*` / `jjwt-*`, anything `org.springframework.web.*` | Service is business orchestration — no HTTP/JWT/caller knowledge. |
 | `service` | `spring-boot-starter-data-jpa` (direct) | Uses repos from `domain` (transitive JPA is fine). Entities never escape service. |
 | `domain` | `service`, `application`, `external-services`, anything except JPA + validation + Lombok | Pure leaf. |
 | `external-services` | `domain`, `service`, `application`, `spring-boot-starter-data-jpa`, any `*Repository` | True leaf, NO internal deps. Throws own `<Provider>ExternalException`; service wraps. No DB. |

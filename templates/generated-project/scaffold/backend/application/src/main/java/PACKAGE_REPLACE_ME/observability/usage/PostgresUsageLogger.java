@@ -53,6 +53,7 @@ public class PostgresUsageLogger implements UsageLogger {
         entity.setUserEmail(e.userEmail());
         entity.setStatus(e.status());
         entity.setDurationMs(e.durationMs());
+        entity.setAttributes(e.attributes());     // JSONB; null is fine, Hibernate native JSON handles it
         entity.setErrorMessage(e.errorMessage());
         entity.setCorrelationId(e.correlationId());
         entity.setClientIp(e.clientIp());

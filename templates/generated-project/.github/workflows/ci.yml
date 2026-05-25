@@ -238,8 +238,12 @@ jobs:
               exit 1
             }
           fi
-          ! grep -RIn 'baseUrl[[:space:]]*[:=][[:space:]]*["'\'']/api/v1' frontend/src/shared/api frontend/src/shared/config >/dev/null 2>&1 || {
-            echo "Frontend apiBaseUrl/baseUrl must not be /api/v1; OpenAPI paths already include /api/v1"
+          ! grep -RInE '(baseUrl|apiBaseUrl|BASE_URL)[[:space:]]*[:=][[:space:]]*["'\'']/api/v1/?["'\'']' frontend/src/shared/api frontend/src/shared/config >/dev/null 2>&1 || {
+            echo "Frontend apiBaseUrl/baseUrl/BASE_URL must not be /api/v1; OpenAPI paths already include /api/v1"
+            exit 1
+          }
+          ! grep -RInE '^VITE_API_BASE_URL=/api/v1/?$' .env.example frontend/.env* >/dev/null 2>&1 || {
+            echo "VITE_API_BASE_URL must not be /api/v1; leave it empty for same-origin Replit/Vite proxy"
             exit 1
           }
           ! grep -RInE 'fetch[[:space:]]*\(|from[[:space:]]+["'\'']axios["'\'']|axios\.|new[[:space:]]+XMLHttpRequest' \
@@ -290,17 +294,37 @@ jobs:
                 echo ".replit frontend workflow must run npm run generate:api before Vite"
                 exit 1
               }
-              ! grep -Eq 'npm run dev.*--port 5000|vite.*--port 5000' .replit || {
-                echo "Vite must not run on 5000; Spring owns the public Replit port"
+              ! grep -Eq 'npm run dev.*--port 5000|vite.*--port 5000|localPort = 5173' .replit || {
+                echo "Vite must not run on/expose 5000; Spring owns the public Replit port"
                 exit 1
               }
             fi
+            grep -q 'PORT = "5000"' .replit || {
+              echo ".replit [env] must keep PORT = \"5000\""
+              exit 1
+            }
+            grep -q 'localPort = 5000' .replit && grep -q 'externalPort = 80' .replit || {
+              echo ".replit must expose exactly backend 5000 -> externalPort 80"
+              exit 1
+            }
           fi
 
       - name: Verify backend runtime anti-regressions
         if: steps.detect.outputs.has_backend == 'true'
         run: |
           set -euo pipefail
+          grep -q 'port:[[:space:]]*\${PORT:5000}' backend/application/src/main/resources/application-replit.yml || {
+            echo "application-replit.yml must keep server.port: \${PORT:5000}"
+            exit 1
+          }
+          ! grep -RIn 'spring.datasource.url\|spring.datasource.username\|spring.datasource.password' backend/application/src/main/resources/application-replit.yml >/dev/null 2>&1 || {
+            echo "application-replit.yml must not set datasource url/username/password; DATABASE_URL post-processor owns them"
+            exit 1
+          }
+          ! grep -RInE '^[[:space:]]*(url|username|password):' backend/application/src/main/resources/application-replit.yml >/dev/null 2>&1 || {
+            echo "application-replit.yml must not set datasource url/username/password; DATABASE_URL post-processor owns them"
+            exit 1
+          }
           ! grep -RIn '^AUTH_[A-Z_]*:[[:space:]]*\${AUTH_' backend/application/src/main/resources >/dev/null 2>&1 || {
             echo "Do not relay AUTH_* env vars as top-level YAML keys; Spring treats them as circular placeholders"
             exit 1
@@ -311,6 +335,16 @@ jobs:
           }
           ! grep -RIn 'PGHOST\|PGPORT\|PGDATABASE\|PGUSER\|PGPASSWORD' backend/application/src/main/resources/application-replit.yml >/dev/null 2>&1 || {
             echo "application-replit.yml must use DATABASE_URL via ReplitDatabaseUrlPostProcessor, not PG* vars"
+            exit 1
+          }
+          imports_file="backend/application/src/main/resources/META-INF/spring/org.springframework.boot.env.EnvironmentPostProcessor.imports"
+          [ -f "${imports_file}" ] && grep -q 'ReplitDatabaseUrlPostProcessor' "${imports_file}" || {
+            echo "ReplitDatabaseUrlPostProcessor must be registered in META-INF/spring/org.springframework.boot.env.EnvironmentPostProcessor.imports"
+            exit 1
+          }
+          grep -q '<groupId>org.postgresql</groupId>' backend/application/pom.xml \
+              && grep -q '<artifactId>postgresql</artifactId>' backend/application/pom.xml || {
+            echo "backend/application/pom.xml must declare the PostgreSQL runtime driver"
             exit 1
           }
           grep -q '<artifactId>h2</artifactId>' backend/application/pom.xml || {
@@ -330,6 +364,14 @@ jobs:
           }
           ! grep -RIn '@AuthenticationPrincipal' backend/application/src/main/java >/dev/null 2>&1 || {
             echo "Generated OpenAPI interfaces do not include @AuthenticationPrincipal parameters; use SecurityContext/AppUserFactory"
+            exit 1
+          }
+          ! grep -Eq 'spring-boot-starter-(security|oauth2-resource-server|web)|spring-security|jakarta.servlet-api|jjwt-' backend/service/pom.xml || {
+            echo "backend/service/pom.xml must not depend on web/security/servlet/JWT libraries"
+            exit 1
+          }
+          ! grep -RInE 'SecurityContextHolder|JwtDecoder|JwtAuthenticationToken|io\.jsonwebtoken|org\.springframework\.security|org\.springframework\.web|jakarta\.servlet' backend/service/src/main/java >/dev/null 2>&1 || {
+            echo "backend/service source must not import web/security/JWT/servlet APIs"
             exit 1
           }
 

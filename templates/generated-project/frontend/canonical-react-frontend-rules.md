@@ -40,7 +40,7 @@ re-hits these three bugs:
    are not runtime aliases. `vite.config.ts` MUST include
    `resolve.alias["@"] = fileURLToPath(new URL("./src", import.meta.url))`.
 
-5. **`openapi-fetch` `baseUrl` set to `/api/v1`** → calls become
+5. **`openapi-fetch` `baseUrl` / `BASE_URL` set to `/api/v1`** → calls become
    `/api/v1/api/v1/...` because OpenAPI path keys already include the prefix.
    Default `apiBaseUrl` is empty; only set a host or servlet context prefix.
 

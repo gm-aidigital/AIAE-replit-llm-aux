@@ -55,7 +55,7 @@ Follow the canonical blueprint. Frontend must:
 
 OpenAPI paths already include `/api/v1/...`. Therefore `openapi-fetch`
 `baseUrl` must be empty by default or a host/context prefix only. Never set
-`baseUrl`/`VITE_API_BASE_URL` to `/api/v1`; that produces
+`baseUrl`/`apiBaseUrl`/`BASE_URL`/`VITE_API_BASE_URL` to `/api/v1`; that produces
 `/api/v1/api/v1/...` and breaks mock login.
 
 `shared/config` reads runtime config from `import.meta.env` and validates it at

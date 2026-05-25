@@ -12,6 +12,24 @@ silently no-ops everywhere.
 → Gate on env-var presence (`DATABASE_URL`), not profile. The provided
 `ReplitDatabaseUrlPostProcessor` does this — don't "improve" it back.
 
+`spring-boot:run` DOES load `EnvironmentPostProcessor` registrations from
+`target/classes/META-INF/spring/org.springframework.boot.env.EnvironmentPostProcessor.imports`.
+If DATABASE_URL is not applied, the fix is registration/classpath/build order,
+not replacing it with `PGHOST`/`PGPORT` YAML. Replit `postgresql-16` exposes
+`DATABASE_URL` as the source of truth; PG* fallbacks are forbidden.
+
+Required registration file:
+
+```text
+backend/application/src/main/resources/META-INF/spring/org.springframework.boot.env.EnvironmentPostProcessor.imports
+```
+
+Content:
+
+```text
+<base-package>.config.ReplitDatabaseUrlPostProcessor
+```
+
 ## OAuth2 Resource Server auto-config triggers on empty properties
 
 `spring-boot-starter-oauth2-resource-server` on classpath → auto-config triggers

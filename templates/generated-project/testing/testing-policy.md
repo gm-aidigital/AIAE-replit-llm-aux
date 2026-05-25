@@ -26,6 +26,8 @@ Allowed:
 Not allowed:
 - Removing JaCoCo plugin from parent POM.
 - Removing existing `src/test/` directories.
+- Deleting a failing test to make the build green; fix dependencies or move
+  the test to the correct module instead.
 - Using `-DskipTests` in the final verification command.
 - Describing the MVP as complete without the Phase 2 safety suite.
 

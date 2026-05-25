@@ -8,6 +8,7 @@ package PACKAGE_REPLACE_ME.service.common.observability;
 import lombok.Builder;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 
 @Builder
 public record UsageEvent(
@@ -21,6 +22,7 @@ public record UsageEvent(
     String userEmail,
     String status,
     long durationMs,
+    Map<String, Object> attributes,
     String errorMessage,
     String correlationId,
     String clientIp,

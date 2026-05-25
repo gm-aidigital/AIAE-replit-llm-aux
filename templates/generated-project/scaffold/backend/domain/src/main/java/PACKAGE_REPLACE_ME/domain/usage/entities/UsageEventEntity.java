@@ -14,8 +14,11 @@ import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 
 /**
  * Persistence model for a usage logging event.
@@ -57,6 +60,10 @@ public class UsageEventEntity {
 
     @Column(name = "duration_ms")
     private Long durationMs;
+
+    @Column(name = "attributes", columnDefinition = "jsonb")
+    @JdbcTypeCode(SqlTypes.JSON)
+    private Map<String, Object> attributes;
 
     @Column(name = "error_message")
     private String errorMessage;

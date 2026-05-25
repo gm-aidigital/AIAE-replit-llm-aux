@@ -110,6 +110,12 @@ by one `try/catch/finally` in the aspect. Disable globally via
   directly (the aspect does), but it lives in service so the aspect (in
   application/) can import it via the application→service direction.
 - `UsageEventEntity` — JPA `@Entity` on `usage_events` (lives in `domain`).
+  **The `attributes` field MUST be declared as
+  `Map<String, Object>` with `@JdbcTypeCode(SqlTypes.JSON)` +
+  `@Column(columnDefinition = "jsonb")` — Hibernate 6 native JSON mapping.**
+  Declaring it as `String` binds null as `varchar`, and Postgres rejects:
+  `column "attributes" is of type jsonb but expression is of type character
+  varying`. Past sessions burned hours on exactly this error.
 - `UsageEventRepository extends JpaRepository<UsageEventEntity, Long>`
   (lives in `domain`).
 - `UsageLogger` — interface, single method `void record(UsageEvent event)`.

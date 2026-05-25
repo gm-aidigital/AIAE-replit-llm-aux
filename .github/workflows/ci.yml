@@ -291,6 +291,12 @@ jobs:
             || { echo ".replit must not run spring-boot:run on the parent reactor"; exit 1; }
           grep -q 'npm run generate:api' .replit \
             || { echo ".replit frontend workflow must generate OpenAPI types before Vite"; exit 1; }
+          grep -q 'PORT = "5000"' .replit \
+            || { echo ".replit [env] must keep PORT = \"5000\""; exit 1; }
+          grep -q 'localPort = 5000' .replit && grep -q 'externalPort = 80' .replit \
+            || { echo ".replit must expose exactly backend 5000 -> externalPort 80"; exit 1; }
+          ! grep -Eq 'npm run dev.*--port 5000|vite.*--port 5000|localPort = 5173' .replit \
+            || { echo "Vite must not run on/expose 5000; backend owns the public Replit port"; exit 1; }
           grep -Eq '^VITE_API_BASE_URL=' templates/generated-project/scaffold/.env.example \
             || { echo "Scaffold .env.example must define VITE_API_BASE_URL"; exit 1; }
           grep -q 'resolve:' templates/generated-project/scaffold/frontend/vite.config.ts \
@@ -299,10 +305,14 @@ jobs:
             || { echo "Vite config missing @ alias"; exit 1; }
           grep -q 'CLERK_PUBLISHABLE_KEY' templates/generated-project/scaffold/frontend/vite.config.ts \
             || { echo "Vite config must map Replit CLERK_PUBLISHABLE_KEY into VITE_CLERK_PUBLISHABLE_KEY"; exit 1; }
-          ! grep -RIn 'baseUrl[[:space:]]*[:=][[:space:]]*["'\'']/api/v1' \
+          ! grep -RInE '(baseUrl|apiBaseUrl|BASE_URL)[[:space:]]*[:=][[:space:]]*["'\'']/api/v1/?["'\'']' \
               templates/generated-project/scaffold/frontend/src/shared/api \
               templates/generated-project/scaffold/frontend/src/shared/config >/dev/null \
-            || { echo "Frontend baseUrl must not duplicate /api/v1"; exit 1; }
+            || { echo "Frontend apiBaseUrl/baseUrl/BASE_URL must not duplicate /api/v1"; exit 1; }
+          ! grep -RInE '^VITE_API_BASE_URL=/api/v1/?$' \
+              templates/generated-project/scaffold/.env.example \
+              templates/generated-project/scaffold/frontend/.env* >/dev/null 2>&1 \
+            || { echo "VITE_API_BASE_URL must not be /api/v1"; exit 1; }
           ! grep -RInE 'fetch[[:space:]]*\(|from[[:space:]]+["'\'']axios["'\'']|axios\.|new[[:space:]]+XMLHttpRequest' \
               --include='*.ts' --include='*.tsx' templates/generated-project/scaffold/frontend/src >/dev/null \
             || { echo "Frontend must use typed shared/api/client.ts, not raw fetch/axios/XMLHttpRequest"; exit 1; }
@@ -332,9 +342,24 @@ jobs:
           ! grep -RIn '^AUTH_[A-Z_]*:[[:space:]]*\${AUTH_' \
               templates/generated-project/scaffold/backend/application/src/main/resources >/dev/null \
             || { echo "AUTH_* top-level YAML placeholders create circular references"; exit 1; }
+          grep -q 'port:[[:space:]]*\${PORT:5000}' \
+              templates/generated-project/scaffold/backend/application/src/main/resources/application-replit.yml \
+            || { echo "application-replit.yml must keep server.port: \${PORT:5000}"; exit 1; }
+          ! grep -RIn 'spring.datasource.url\|spring.datasource.username\|spring.datasource.password' \
+              templates/generated-project/scaffold/backend/application/src/main/resources/application-replit.yml >/dev/null \
+            || { echo "application-replit.yml must not set datasource url/username/password"; exit 1; }
+          ! grep -RInE '^[[:space:]]*(url|username|password):' \
+              templates/generated-project/scaffold/backend/application/src/main/resources/application-replit.yml >/dev/null \
+            || { echo "application-replit.yml must not set datasource url/username/password"; exit 1; }
           ! grep -RIn 'PGHOST\|PGPORT\|PGDATABASE\|PGUSER\|PGPASSWORD' \
               templates/generated-project/scaffold/backend/application/src/main/resources/application-replit.yml >/dev/null \
             || { echo "application-replit.yml must not depend on legacy PG* env vars"; exit 1; }
+          grep -q 'ReplitDatabaseUrlPostProcessor' \
+              templates/generated-project/scaffold/backend/application/src/main/resources/META-INF/spring/org.springframework.boot.env.EnvironmentPostProcessor.imports \
+            || { echo "ReplitDatabaseUrlPostProcessor must be registered"; exit 1; }
+          grep -q '<groupId>org.postgresql</groupId>' templates/generated-project/scaffold/backend/application/pom.xml \
+              && grep -q '<artifactId>postgresql</artifactId>' templates/generated-project/scaffold/backend/application/pom.xml \
+            || { echo "application/pom.xml must declare the PostgreSQL runtime driver"; exit 1; }
           grep -q '<artifactId>h2</artifactId>' templates/generated-project/scaffold/backend/application/pom.xml \
             || { echo "application/pom.xml must keep H2 test dependency for ApplicationSmokeTest"; exit 1; }
           grep -q '/actuator/prometheus' \
@@ -343,6 +368,12 @@ jobs:
           grep -q 'app.auth.sso.jwk-set-uri' \
               templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/security/AuthConstants.java \
             || { echo "AUTH_MODE=auto must require issuer/JWKS before enabling SSO"; exit 1; }
+          ! grep -Eq 'spring-boot-starter-(security|oauth2-resource-server|web)|spring-security|jakarta.servlet-api|jjwt-' \
+              templates/generated-project/scaffold/backend/service/pom.xml \
+            || { echo "service/pom.xml must not depend on web/security/servlet/JWT libraries"; exit 1; }
+          ! grep -RInE 'SecurityContextHolder|JwtDecoder|JwtAuthenticationToken|io\.jsonwebtoken|org\.springframework\.security|org\.springframework\.web|jakarta\.servlet' \
+              templates/generated-project/scaffold/backend/service/src/main/java >/dev/null \
+            || { echo "service source must not import web/security/JWT/servlet APIs"; exit 1; }
 
       - name: No service-account JSON in the template itself
         shell: bash

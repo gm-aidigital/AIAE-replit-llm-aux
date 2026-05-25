@@ -165,8 +165,8 @@ STOP, check the table, copy from scaffold. New requirements get additive
 | `.env.example` (root) | Full enumerated set of `AUTH_*`, `USAGE_LOG_*`, `CLERK_*`, `BACKEND_DEV_PORT`, `VITE_API_BASE_URL`, `VITE_API_CONTEXT_PATH` placeholders |
 | `.gitignore` (root) | Control-plane excludes (`.agents/`, `templates/`, `custom_instruction/`, `AGENTS.md`, `replit.md`) — without these the company repo gets polluted on `git push` |
 | `backend/pom.xml` | `<dependencyManagement>` for all internal modules (`domain`, `db`, `external-services`, `service`); `<pluginManagement>` for spring-boot-maven-plugin, openapi-generator, frontend-maven-plugin, jacoco, checkstyle, git-commit-id; Java 21 + Spring Boot 3.4.0 pinning; lombok 1.18.40 (forward-safe with newer JDKs) |
-| `backend/application/pom.xml` | `<start-class>${project.groupId}.Application`; the REQUIRED `db` dependency (changelogs on fat-jar classpath); spring-boot-maven-plugin activation; openapi-generator activation; jjwt + logbook + commons-csv + observability deps |
-| `backend/service/pom.xml` | Edges to `domain` + `external-services` only — never to `application`; jakarta-validation for `ValidationMessage` |
+| `backend/application/pom.xml` | `<start-class>${project.groupId}.Application`; the REQUIRED `db` dependency (changelogs on fat-jar classpath); spring-boot-maven-plugin activation; openapi-generator activation; PostgreSQL runtime driver; jjwt + logbook + commons-csv + observability deps |
+| `backend/service/pom.xml` | Edges to `domain` + `external-services` only — never to `application`; jakarta-validation for `ValidationMessage`; FORBIDDEN: web/security/servlet/JWT deps |
 | `backend/domain/pom.xml` | `spring-boot-starter-data-jpa` + lombok; LEAF (no internal deps) |
 | `backend/external-services/pom.xml` | LEAF for internal modules; HTTP-client deps live here |
 | `backend/db/pom.xml` | `liquibase-core` only — no Java code |
