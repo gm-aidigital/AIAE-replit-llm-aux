@@ -115,9 +115,9 @@ until it contains real source/resources/tests owned by that module.
 
 **Compile error `cannot find symbol: SecurityContextHolder` in `service/`:**
 do NOT add spring-security to `service/pom.xml`. Remove `SecurityContextHolder`
-from service code; add `AppUser caller` parameter; extract from
-`@AuthenticationPrincipal Jwt jwt` in the controller; pass `AppUser` built
-from JWT claims.
+from service code; add `AppUser caller` parameter; resolve the caller in the
+controller from `SecurityContextHolder.getContext().getAuthentication()` and
+`AppUserFactory.from(auth)`.
 
 Examples: `references/code-patterns.md` → "AppUser pattern" + "Service that
 needs DB + external call".
@@ -129,6 +129,14 @@ Controllers do ONLY four things:
 2. Resolve authenticated user from `SecurityContext` (one line).
 3. Call exactly ONE service method.
 4. MapStruct → generated DTO; return.
+
+Controllers implement generated OpenAPI interfaces exactly. Do not add
+`@AuthenticationPrincipal`, `HttpServletRequest`, `NativeWebRequest`, or other
+framework-only parameters to controller method signatures — the generated
+interface will not have them. Need caller identity? Use `SecurityContextHolder`
+inside the method. Need request metadata? Prefer a filter/aspect; if unavoidable,
+inject/request-scope it outside the generated method signature. Never call
+`getRequest()` on a generated API interface.
 
 No `if`/`switch`, no DB calls, no business validation, no error wrapping,
 no manual DTO construction.
@@ -441,6 +449,10 @@ symptom. Do NOT improvise alternative fixes.
 | Tempted to use `JdbcTemplate` "for speed" | Don't mix JdbcTemplate with JPA |
 | Datasource works in shell but Spring cannot connect | Replit datasource env wiring |
 | Compile mismatch `OffsetDateTime` vs `LocalDateTime` | Time types — `LocalDateTime` only |
+| Controller "fixes" generated interface by adding `@AuthenticationPrincipal` or calls `getRequest()` | Generated OpenAPI interface signatures |
+| Export endpoint returns `byte[]` or wrong generated type | OpenAPI binary exports use Spring `Resource` |
+| Logbook `DefaultSink` constructor compile error | Logbook 3.x sink needs formatter + writer |
+| Checkstyle complains about static final `log` | Use explicit `private static final Logger LOG` |
 | `git-commit-id` plugin failing in workspace without `.git` | git-commit-id blocking in Replit shell |
 | Service signature returns `Entity` (lazy safe but module-bad) | Services still return Records, not Entities |
 | Replit log says `spring-boot:run` is running on parent POM | Run install on parent, then `spring-boot:run` from `backend/application/pom.xml` |

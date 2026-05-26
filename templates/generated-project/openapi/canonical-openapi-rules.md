@@ -107,6 +107,55 @@ Shared schemas under `components.schemas`:
 
 Error payload fields: machine-readable code, human message, timestamp, correlation ID.
 
+### File exports — binary schema -> Spring `Resource`
+
+For CSV/XLSX/PDF/file downloads, model the response as real binary content.
+With the canonical Spring generator, this produces a controller signature using
+`org.springframework.core.io.Resource`.
+
+```yaml
+paths:
+  /api/v1/employees/export:
+    get:
+      tags: [Employees]
+      operationId: exportEmployees
+      summary: Export employees as CSV.
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: CSV file.
+          headers:
+            Content-Disposition:
+              schema: { type: string }
+              example: attachment; filename="employees.csv"
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "500": { $ref: "#/components/responses/InternalServerError" }
+```
+
+Controller implementation:
+
+```java
+@Override
+public ResponseEntity<Resource> exportEmployees() {
+    ByteArrayResource body = new ByteArrayResource(service.exportCsv());
+    return ResponseEntity.ok()
+        .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"employees.csv\"")
+        .contentType(MediaType.parseMediaType("text/csv"))
+        .body(body);
+}
+```
+
+Forbidden:
+- `ResponseEntity<byte[]>` for generated export endpoints;
+- returning `String` for CSV content;
+- calling `getRequest()` from the generated API interface to stream manually.
+
 ## Schema discipline
 
 - Every field has `type` and uses `format` where relevant (`date`, `date-time`, numeric sizes).

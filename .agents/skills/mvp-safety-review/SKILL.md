@@ -306,6 +306,20 @@ Full rule in backend SKILL.
 - [ ] `backend/service/` source contains no `SecurityContextHolder`, `Authentication`,
       `Jwt`, or `@AuthenticationPrincipal`. Service methods that need the caller take an
       `AppUser` parameter; the controller does the JWT → AppUser conversion.
+- [ ] `backend/application/` controllers implement generated OpenAPI
+      signatures exactly: no `@AuthenticationPrincipal` method params and no
+      direct `getRequest()` calls from generated interfaces.
+      ```bash
+      grep -RIn '@AuthenticationPrincipal' backend/application/src/main/java
+      grep -RInE '(^|[^.[:alnum:]_])getRequest[[:space:]]*\(' backend/application/src/main/java
+      ```
+      Expected: empty. Use `SecurityContextHolder` + `AppUserFactory` for caller identity.
+- [ ] File export endpoints use OpenAPI `type: string`, `format: binary` and
+      `ResponseEntity<Resource>`, not `ResponseEntity<byte[]>`.
+      ```bash
+      grep -RInE 'ResponseEntity<[[:space:]]*byte\[\]|ResponseEntity<byte\[\]>' backend/application/src/main/java
+      ```
+      Expected: empty.
 - [ ] If `backend/external-services/pom.xml` exists, it declares no internal-module deps:
       ```bash
       test ! -f backend/external-services/pom.xml || \

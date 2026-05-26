@@ -103,6 +103,9 @@ Generated artifacts:
 - Components do not build URLs; the typed client owns paths.
 - TanStack Query for all backend reads/writes; no ad-hoc global state for server data.
 - Every async surface renders loading / empty / error / success.
+- Debounce/throttle hooks must be real effects. `useDebounce` uses
+  `useEffect` with `setTimeout` and cleanup via `clearTimeout`; `useState`
+  alone only captures the initial value and is rejected.
 - Strict TypeScript; `any` only with isolation + justification.
 - Semantic HTML and keyboard accessibility.
 - **BEM class names** for all styles (`block`, `block__element`, `block--modifier`).

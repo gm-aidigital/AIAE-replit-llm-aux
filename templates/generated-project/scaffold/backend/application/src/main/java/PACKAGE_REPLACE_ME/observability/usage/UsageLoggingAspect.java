@@ -20,6 +20,8 @@ import PACKAGE_REPLACE_ME.service.common.observability.UsageLogger;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.Ordered;
@@ -46,16 +48,18 @@ import java.util.UUID;
                        matchIfMissing = true)
 public class UsageLoggingAspect {
 
+    private static final Logger LOG = LoggerFactory.getLogger(UsageLoggingAspect.class);
+
     private static final String EVENT_TYPE_ERROR = "error";
     private static final String STATUS_SUCCESS = "success";
     private static final String STATUS_ERROR = "error";
     private static final String MDC_CORRELATION = "correlationId";
 
-    private final UsageLogger logger;
+    private final UsageLogger usageLogger;
     private final UsageLoggingProperties props;
 
-    public UsageLoggingAspect(UsageLogger logger, UsageLoggingProperties props) {
-        this.logger = logger;
+    public UsageLoggingAspect(UsageLogger usageLogger, UsageLoggingProperties props) {
+        this.usageLogger = usageLogger;
         this.props = props;
     }
 
@@ -79,13 +83,12 @@ public class UsageLoggingAspect {
         } finally {
             long durationMs = (System.nanoTime() - startNanos) / 1_000_000L;
             try {
-                logger.record(buildEvent(logUsage, thrown, durationMs));
+                usageLogger.record(buildEvent(logUsage, thrown, durationMs));
             } catch (Throwable loggingFailure) {
                 // Last resort: if even assembling/dispatching the event throws,
                 // do NOT propagate into the caller's flow.
-                org.slf4j.LoggerFactory.getLogger(UsageLoggingAspect.class)
-                    .warn("Usage logging failed for action={}: {}",
-                          logUsage.action(), loggingFailure.getMessage());
+                LOG.warn("Usage logging failed for action={}: {}",
+                         logUsage.action(), loggingFailure.getMessage());
             }
         }
     }

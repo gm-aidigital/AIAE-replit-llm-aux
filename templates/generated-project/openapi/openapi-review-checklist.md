@@ -15,6 +15,11 @@ Quick gate for every API change. Detailed rules in
 - [ ] Parameters documented with constraints
 - [ ] Response schema for every declared status code
 - [ ] `Content-Type: application/json` unless otherwise required
+- [ ] File exports/downloads use `type: string`, `format: binary` under the
+      real media type (`text/csv`, XLSX/PDF media type, etc.) so Spring
+      generator emits `ResponseEntity<Resource>`
+- [ ] No export/download controller is expected to return `byte[]` or call
+      generated-interface `getRequest()`
 
 ## Errors
 

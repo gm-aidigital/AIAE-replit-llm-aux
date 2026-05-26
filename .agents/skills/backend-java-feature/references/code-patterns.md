@@ -7,8 +7,10 @@ examples Agent copies and adapts.
 ## AppUser pattern (instead of pulling spring-security into service)
 
 When a service method needs the caller's identity, controllers extract it
-from `@AuthenticationPrincipal Jwt jwt` and pass an `AppUser` value object.
-The service stays free of HTTP / JWT types.
+from the Spring Security context and pass an `AppUser` value object. The
+service stays free of HTTP / JWT types. Do not add `@AuthenticationPrincipal`
+to controller method signatures that implement generated OpenAPI interfaces:
+the generated interface will not include that parameter.
 
 ```java
 // application/.../<domain>/<Domain>Controller.java
@@ -16,11 +18,9 @@ The service stays free of HTTP / JWT types.
 @Transactional
 public ResponseEntity<<Domain>V1> update<Domain>(
         @PathVariable Long id,
-        @RequestBody @Valid Update<Domain>RequestV1 req,
-        @AuthenticationPrincipal Jwt jwt) {                          // ← spring-security HERE
-    AppUser caller = new AppUser(jwt.getSubject(),
-                                 jwt.getClaimAsString("email"),
-                                 jwt.getClaimAsStringList("roles"));
+        @RequestBody @Valid Update<Domain>RequestV1 req) {
+    AppUser caller = AppUserFactory.from(
+        SecurityContextHolder.getContext().getAuthentication());
     <Domain>Record record = service.update(id, mapper.toRecord(req), caller);
     return ResponseEntity.ok(mapper.toDto(record));
 }

@@ -50,7 +50,7 @@ public class UsageLoggingConfig {
     @ConditionalOnProperty(name = "app.usage-logging.enabled",
                            havingValue = "true",
                            matchIfMissing = true)
-    public UsageLogger postgresUsageLogger(UsageEventRepository repo,
+    public UsageLogger postgresUsageLogger(UsageEventPersistenceService persistenceService,
                                            UsageLoggingProperties props) {
         String serviceName = props.getServiceName();
         if (serviceName == null || serviceName.isBlank() || PLACEHOLDERS.contains(serviceName)) {
@@ -60,7 +60,18 @@ public class UsageLoggingConfig {
                 + "or spring.application.name in application.yml. "
                 + "Disabling usage logging? Set app.usage-logging.enabled=false explicitly.");
         }
-        return new PostgresUsageLogger(repo);
+        return new PostgresUsageLogger(persistenceService);
+    }
+
+    /**
+     * Separate bean so @Async and REQUIRES_NEW are applied through Spring proxy.
+     *
+     * @param repo JPA repo for usage-event inserts
+     * @return proxied persistence service
+     */
+    @Bean
+    public UsageEventPersistenceService usageEventPersistenceService(UsageEventRepository repo) {
+        return new UsageEventPersistenceService(repo);
     }
 
     /**

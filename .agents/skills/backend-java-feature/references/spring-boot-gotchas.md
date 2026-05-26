@@ -79,6 +79,72 @@ Three remedies (scaffold uses #1):
 
 Stay consistent across the project.
 
+## Generated OpenAPI interface signatures are exact
+
+When `openapi-generator-maven-plugin` emits `*Api`, the controller method
+signature must match it exactly. Do not add convenience parameters that are
+not in the generated interface:
+
+```java
+// WRONG: generated interface has no Jwt parameter
+public ResponseEntity<EmployeeV1> getEmployee(Long id, @AuthenticationPrincipal Jwt jwt)
+
+// WRONG: many generated interfaces have no getRequest() helper
+getRequest().ifPresent(...)
+```
+
+Canonical fixes:
+- caller identity: `SecurityContextHolder.getContext().getAuthentication()`
+  inside the controller, then `AppUserFactory.from(auth)`;
+- request metadata: prefer filters/aspects (`CorrelationIdFilter`,
+  `UsageLoggingAspect`); if a controller truly needs it, inject
+  `HttpServletRequest` as a field/constructor dependency, not as a generated
+  method parameter;
+- exports/downloads: express the response in OpenAPI as binary content so the
+  generated method returns `ResponseEntity<Resource>`.
+
+CI rejects `@AuthenticationPrincipal` and `getRequest()` in hand-written
+application controllers.
+
+## Binary exports return Spring `Resource`
+
+For CSV/XLSX/PDF/file exports, the OpenAPI response schema must be
+`type: string`, `format: binary`, with the real media type. The generated Spring
+interface then uses `org.springframework.core.io.Resource`.
+
+```yaml
+/api/v1/employees/export:
+  get:
+    operationId: exportEmployees
+    responses:
+      "200":
+        description: CSV export.
+        headers:
+          Content-Disposition:
+            schema: { type: string }
+            example: attachment; filename="employees.csv"
+        content:
+          text/csv:
+            schema:
+              type: string
+              format: binary
+```
+
+Controller shape:
+
+```java
+public ResponseEntity<Resource> exportEmployees() {
+    ByteArrayResource body = new ByteArrayResource(service.exportCsv());
+    return ResponseEntity.ok()
+        .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"employees.csv\"")
+        .contentType(MediaType.parseMediaType("text/csv"))
+        .body(body);
+}
+```
+
+Do not return `ResponseEntity<byte[]>`, `String`, or call `getRequest()` to
+manually push bytes. Let the generated contract drive the type.
+
 ## `openapi-fetch` baseUrl must not duplicate `/api/v1`
 
 The frontend schema keys are the literal OpenAPI paths. If the spec has
@@ -210,6 +276,36 @@ UTC convention (safety):
 - Frontend: treats as UTC, converts to local only at display.
 
 User locale → separate timezone field; never embed in the timestamp.
+
+## Lombok cascade failures in framework glue
+
+Use Lombok for simple service/domain constructors, but avoid it in fragile
+Spring framework glue where annotation-processing failures create misleading
+compile errors.
+
+Hard rules:
+- `@ConfigurationProperties` classes use explicit getters/setters. Do not rely
+  on Lombok-generated `getMock()`, `getSso()`, `getJwkSetUri()`, etc.
+- Framework classes with loggers use explicit
+  `private static final Logger LOG = LoggerFactory.getLogger(X.class);`.
+  Do not use `@Slf4j`; do not name static final loggers `log` because Checkstyle
+  requires `LOG`.
+- If one logger is a business collaborator (`UsageLogger`), name it by purpose
+  (`usageLogger`) so it cannot be confused with an SLF4J logger.
+- Never import both `org.springframework.security.oauth2.jwt.JwtException` and
+  `io.jsonwebtoken.JwtException`. Import Spring's exception, and use the JJWT
+  type fully-qualified in the catch block.
+
+## Logbook 3.x `DefaultSink` constructor
+
+Logbook 3.x requires both formatter and writer:
+
+```java
+new DefaultSink(new JsonHttpLogFormatter(), new DefaultHttpLogWriter())
+```
+
+`new DefaultSink(new JsonHttpLogFormatter())` does not compile. Do not replace
+the sink with text logging; services must emit structured JSON logs.
 
 ## Don't keep `git-commit-id-maven-plugin` blocking in Replit shell
 

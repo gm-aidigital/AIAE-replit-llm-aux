@@ -89,6 +89,7 @@ jobs:
             "templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/observability/CorrelationIdFilter.java"
             "templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/observability/usage/UsageLoggingAspect.java"
             "templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/observability/usage/UsageLoggingConfig.java"
+            "templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/observability/usage/UsageEventPersistenceService.java"
             "templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/observability/usage/UsageLoggingProperties.java"
             "templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/observability/usage/PostgresUsageLogger.java"
             "templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/observability/usage/NoOpUsageLogger.java"
@@ -390,6 +391,42 @@ jobs:
           grep -q 'app.auth.sso.jwk-set-uri' \
               templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/security/AuthConstants.java \
             || { echo "AUTH_MODE=auto must require issuer/JWKS before enabling SSO"; exit 1; }
+          ! grep -RIn '@AuthenticationPrincipal' templates/generated-project/scaffold/backend/application/src/main/java >/dev/null 2>&1 \
+            || { echo "Generated OpenAPI controller signatures must not use @AuthenticationPrincipal"; exit 1; }
+          ! grep -RInE '(^|[^.[:alnum:]_])getRequest[[:space:]]*\(' templates/generated-project/scaffold/backend/application/src/main/java >/dev/null 2>&1 \
+            || { echo "Do not call getRequest() from generated OpenAPI interfaces"; exit 1; }
+          ! grep -RIn '@Slf4j\|private static final Logger log\|Logger log' templates/generated-project/scaffold/backend/application/src/main/java >/dev/null 2>&1 \
+            || { echo "Use explicit private static final Logger LOG in framework glue"; exit 1; }
+          ! grep -RIn 'import io\.jsonwebtoken\.JwtException;' templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/security/MockJwtDecoder.java >/dev/null 2>&1 \
+            || { echo "MockJwtDecoder must import Spring JwtException only; catch JJWT JwtException fully-qualified"; exit 1; }
+          ! grep -RInE '@(Getter|Setter|Data|Value|RequiredArgsConstructor)' templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/security/AuthProperties.java >/dev/null 2>&1 \
+            || { echo "AuthProperties must use explicit getters/setters, not Lombok"; exit 1; }
+          grep -Fq 'new DefaultSink(new JsonHttpLogFormatter(), new DefaultHttpLogWriter())' \
+              templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/config/LogbookConfig.java \
+            || { echo "Logbook DefaultSink must be built with formatter + writer"; exit 1; }
+          ! grep -RInE 'ResponseEntity<[[:space:]]*byte\[\]|ResponseEntity<byte\[\]>' templates/generated-project/scaffold/backend/application/src/main/java >/dev/null 2>&1 \
+            || { echo "Export/download endpoints must use OpenAPI binary schema and ResponseEntity<Resource>, not byte[]"; exit 1; }
+          ! grep -RInE 'React dev server is running|Switch the preview pane to port 5173|Open on port 5173|built React app is served directly from port 5000' \
+              templates/generated-project/scaffold/frontend/src >/dev/null 2>&1 \
+            || { echo "Frontend must render the real app, not a Replit port-switch placeholder"; exit 1; }
+          while IFS= read -r debounce_hook; do
+            grep -q 'useEffect' "${debounce_hook}" \
+                && grep -q 'clearTimeout' "${debounce_hook}" \
+              || { echo "useDebounce hooks must update via useEffect with cleanup: ${debounce_hook}"; exit 1; }
+          done < <(find templates/generated-project/scaffold/frontend/src -type f \( -name '*useDebounce*.ts' -o -name '*useDebounce*.tsx' \))
+          grep -Fq '@Async("usageLoggingExecutor")' \
+              templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/observability/usage/UsageEventPersistenceService.java \
+              && grep -Fq '@Transactional(propagation = Propagation.REQUIRES_NEW)' \
+              templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/observability/usage/UsageEventPersistenceService.java \
+            || { echo "UsageEventPersistenceService must own @Async + REQUIRES_NEW persistence"; exit 1; }
+          ! grep -RIn '@Transactional' \
+              templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/observability/usage/UsageLoggingAspect.java >/dev/null 2>&1 \
+            || { echo "Do not put @Transactional on @Around advice; use UsageEventPersistenceService"; exit 1; }
+          grep -Fq '@JdbcTypeCode(SqlTypes.JSON)' \
+              templates/generated-project/scaffold/backend/domain/src/main/java/PACKAGE_REPLACE_ME/domain/usage/entities/UsageEventEntity.java \
+              && grep -Fq 'Map<String, Object> attributes' \
+              templates/generated-project/scaffold/backend/domain/src/main/java/PACKAGE_REPLACE_ME/domain/usage/entities/UsageEventEntity.java \
+            || { echo "UsageEventEntity.attributes must be JSONB via @JdbcTypeCode(SqlTypes.JSON) Map<String,Object>"; exit 1; }
           ! grep -Eq 'spring-boot-starter-(security|oauth2-resource-server|web)|spring-security|jakarta.servlet-api|jjwt-' \
               templates/generated-project/scaffold/backend/service/pom.xml \
             || { echo "service/pom.xml must not depend on web/security/servlet/JWT libraries"; exit 1; }

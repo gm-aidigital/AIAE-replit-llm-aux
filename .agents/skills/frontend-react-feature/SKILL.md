@@ -81,6 +81,12 @@ boot. Build-time secrets are forbidden.
   `VITE_CLERCK_PUBLISHABLE_KEY` silently rendering `undefined`.
 - **TanStack Query keys are arrays, never strings.** `queryKey: ["users", id]`,
   not `queryKey: "users-" + id`. String keys break query invalidation.
+- **Debounce hooks use `useEffect`, not state initializers.** Canonical
+  `useDebounce<T>(value, delayMs)` has `const [debounced, setDebounced] =
+  useState(value); useEffect(() => { const id = window.setTimeout(() =>
+  setDebounced(value), delayMs); return () => window.clearTimeout(id); },
+  [value, delayMs]); return debounced;`. A hook implemented with `useState`
+  alone never updates after the initial render.
 - **Vite and TypeScript aliases must both be configured.** If `tsconfig.json`
   has `@/*`, `vite.config.ts` must also define `resolve.alias["@"]`.
 - **Path/method drift is a contract violation.** Calls like

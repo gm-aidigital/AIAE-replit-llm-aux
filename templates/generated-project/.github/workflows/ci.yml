@@ -402,7 +402,41 @@ jobs:
             }
           fi
           ! grep -RIn '@AuthenticationPrincipal' backend/application/src/main/java >/dev/null 2>&1 || {
-            echo "Generated OpenAPI interfaces do not include @AuthenticationPrincipal parameters; use SecurityContext/AppUserFactory"
+            echo "Generated OpenAPI interfaces do not include @AuthenticationPrincipal parameters; use SecurityContextHolder/AppUserFactory"
+            exit 1
+          }
+          ! grep -RInE '(^|[^.[:alnum:]_])getRequest[[:space:]]*\(' backend/application/src/main/java >/dev/null 2>&1 || {
+            echo "Do not call getRequest() from generated OpenAPI interfaces"
+            exit 1
+          }
+          ! grep -RIn '@Slf4j\|private static final Logger log\|Logger log' backend/application/src/main/java >/dev/null 2>&1 || {
+            echo "Use explicit private static final Logger LOG in framework glue"
+            exit 1
+          }
+          auth_props="$(find backend/application/src/main/java -path '*/security/AuthProperties.java' -print -quit)"
+          [ -z "${auth_props}" ] || ! grep -RInE '@(Getter|Setter|Data|Value|RequiredArgsConstructor)' "${auth_props}" >/dev/null 2>&1 || {
+            echo "AuthProperties must use explicit getters/setters, not Lombok"
+            exit 1
+          }
+          mock_decoder="$(find backend/application/src/main/java -path '*/security/MockJwtDecoder.java' -print -quit)"
+          [ -z "${mock_decoder}" ] || ! grep -q 'import io\.jsonwebtoken\.JwtException;' "${mock_decoder}" || {
+            echo "MockJwtDecoder must import Spring JwtException only; catch JJWT JwtException fully-qualified"
+            exit 1
+          }
+          logbook_config="$(find backend/application/src/main/java -path '*/config/LogbookConfig.java' -print -quit)"
+          [ -z "${logbook_config}" ] || grep -Fq 'new DefaultSink(new JsonHttpLogFormatter(), new DefaultHttpLogWriter())' "${logbook_config}" || {
+            echo "Logbook DefaultSink must be built with formatter + writer"
+            exit 1
+          }
+          while IFS= read -r debounce_hook; do
+            grep -q 'useEffect' "${debounce_hook}" \
+                && grep -q 'clearTimeout' "${debounce_hook}" || {
+              echo "useDebounce hooks must update via useEffect with cleanup: ${debounce_hook}"
+              exit 1
+            }
+          done < <(find frontend/src -type f \( -name '*useDebounce*.ts' -o -name '*useDebounce*.tsx' \))
+          ! grep -RInE 'ResponseEntity<[[:space:]]*byte\[\]|ResponseEntity<byte\[\]>' backend/application/src/main/java >/dev/null 2>&1 || {
+            echo "Export/download endpoints must use OpenAPI binary schema and ResponseEntity<Resource>, not byte[]"
             exit 1
           }
           ! grep -Eq 'spring-boot-starter-(security|oauth2-resource-server|web)|spring-security|jakarta.servlet-api|jjwt-' backend/service/pom.xml || {
