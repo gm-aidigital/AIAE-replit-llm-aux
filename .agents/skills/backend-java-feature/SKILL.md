@@ -40,8 +40,7 @@ Never replace Java with Node without explicit user approval.
 | Canonical code patterns | `references/code-patterns.md` |
 | HikariCP / JPA runtime config | `references/hikari-jpa-baseline.yml` |
 | Replit profile snippet | `references/application-replit.yml` |
-| DATABASE_URL → JDBC translation | `references/database-url-translation.md` |
-| Replit DataSource post-processor | `references/ReplitDatabaseUrlPostProcessor.java` |
+| Replit datasource env wiring | `references/database-url-translation.md` |
 
 ## Mandatory files
 
@@ -59,16 +58,24 @@ Surefire (UT) + Failsafe (`*IT` suffix), `git-commit-id-maven-plugin`
 in `application/pom.xml`). Canonical inline config:
 `templates/generated-project/scaffold/backend/pom.xml`.
 
-## Architecture (5 modules + strict package layout)
+## Architecture (4 required modules + optional integrations)
 
 Full layout: `templates/generated-project/structure/near-production-project-structure.md`
 → "Backend package layout" + "Backend module dependency graph" + "Forbidden
 module-boundary anti-patterns".
 
 Hard recap:
-- 5 Maven modules: `application`, `service`, `domain`, `db`, `external-services`.
-  No `common` Maven module — cross-cutting types live under
-  `service/<base>/service/common/{error,observability,security}/`.
+- Required Maven modules: `application`, `service`, `domain`, `db`.
+  `external-services` is OPTIONAL and exists only when the project has real
+  outbound integrations (HTTP APIs, queues, vendor SDKs, BigQuery clients,
+  etc.). No empty Maven modules. No `common` Maven module — cross-cutting
+  types live under `service/<base>/service/common/{error,observability,security}/`.
+- If there are no external integrations, do NOT create `external-services`,
+  do NOT list it in parent `<modules>`, do NOT add it to
+  `<dependencyManagement>`, and do NOT depend on it from `service`.
+- When an external integration is added later, add `external-services` in the
+  same change as the first real client/adapter source files and wire
+  `service -> external-services` then.
 - Plural folders (`services/`, `mappers/`, `models/`, `entities/`,
   `repositories/`, `controllers/`) hold many artifacts of one kind. Singular
   (`common/`, `error/`, `observability/`, `security/`, `config/`, `usage/`)
@@ -80,16 +87,17 @@ Hard recap:
 | From ↓ depends on → | application | service | domain | db | external-services |
 |---|---|---|---|---|---|
 | `application` | — | ✓ | ✗ (transitive via service) | ✓ | ✗ |
-| `service` | ✗ | — | ✓ | ✗ | ✓ |
+| `service` | ✗ | — | ✓ | ✗ | ✓ only when module exists |
 | `domain` | ✗ | ✗ | — | ✗ | ✗ |
 | `db` | ✗ | ✗ | ✗ | — | ✗ |
-| `external-services` | ✗ | ✗ | ✗ | ✗ | — |
+| `external-services` optional | ✗ | ✗ | ✗ | ✗ | — |
 
 - `application` calls only `service`; depends on `db` for runtime Liquibase
   changelogs (must land in the fat jar).
-- `service` calls `domain` repos OR `external-services` clients.
-- `domain`, `external-services`, `db` are leaves. External clients throw own
-  `<Provider>ExternalException`; service wraps via `AppException`.
+- `service` calls `domain` repos and, only when needed, `external-services`
+  clients.
+- `domain`, optional `external-services`, and `db` are leaves. External clients
+  throw own `<Provider>ExternalException`; service wraps via `AppException`.
 
 ### Forbidden dependencies per module (hard rule)
 
@@ -98,11 +106,12 @@ Hard recap:
 | `service` | `spring-boot-starter-security`, `spring-boot-starter-oauth2-resource-server`, `spring-boot-starter-web`, `spring-security-*`, `jakarta.servlet-api`, `io.jsonwebtoken:*` / `jjwt-*`, anything `org.springframework.web.*` | Service is business orchestration — no HTTP/JWT/caller knowledge. |
 | `service` | `spring-boot-starter-data-jpa` (direct) | Uses repos from `domain` (transitive JPA is fine). Entities never escape service. |
 | `domain` | `service`, `application`, `external-services`, anything except JPA + validation + Lombok | Pure leaf. |
-| `external-services` | `domain`, `service`, `application`, `spring-boot-starter-data-jpa`, any `*Repository` | True leaf, NO internal deps. Throws own `<Provider>ExternalException`; service wraps. No DB. |
+| `external-services` (optional) | `domain`, `service`, `application`, `spring-boot-starter-data-jpa`, any `*Repository` | True leaf, NO internal deps. Exists only with real external clients. Throws own `<Provider>ExternalException`; service wraps. No DB. |
 | `db` | Anything beyond `liquibase-core` | XML changelogs only. |
 
-`domain` and `external-services` are LEAVES — internal `<dependency>` in
-either pom → reject.
+`domain` and optional `external-services` are LEAVES — internal `<dependency>`
+in either pom → reject. Empty Maven modules are rejected; delete the module
+until it contains real source/resources/tests owned by that module.
 
 **Compile error `cannot find symbol: SecurityContextHolder` in `service/`:**
 do NOT add spring-security to `service/pom.xml`. Remove `SecurityContextHolder`
@@ -301,13 +310,12 @@ Spring serving the production React bundle.
   the frontend was booted against a stale or absent OpenAPI schema.
 - Never invent root `start.sh` — `.replit` parallel tasks run the two commands above + `npm run dev`.
 - Never hard-code `server.port: 8080` in `application-replit.yml` — keep `${PORT:5000}`.
-- Never bypass `ReplitDatabaseUrlPostProcessor`. Don't set `spring.datasource.url`
-  from `PGHOST`/`PGPORT`/etc. — the post-processor parses `DATABASE_URL` (single
-  source on `replit`). `PG*` are legacy, NOT provided by `postgresql-16`.
-  `sslmode` is read from the URL — Replit's production-grade tier ships
-  `sslmode=require`, Helium dev tier omits it; the processor doesn't force
-  `require` anymore. Delete `spring.datasource.url:` from
-  `application-replit.yml` if present.
+- `application-replit.yml` MUST set `spring.datasource.url`, `username`, and
+  `password` directly from Replit's `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`,
+  `PGPASSWORD` env vars. Do not add a custom DataSource bean or an
+  `EnvironmentPostProcessor`. Do not force `sslmode=require`; current Replit
+  Postgres connections work without SSL unless the actual env explicitly says
+  otherwise.
 
 Tempted to "swap Vite onto 5000 so the webview shows the UI"? Stop. On
 Deployment the UI is Spring serving the BUILT React from `/static/`.
@@ -327,7 +335,7 @@ Never handwrite DTOs that duplicate generated schemas.
 | | Replit | Local-dev |
 |---|---|---|
 | Spring profile | `replit` | `local` |
-| PostgreSQL | Replit SQL DB via `DATABASE_URL` (sslmode read from URL — Replit prod tier sets `require`, Helium dev omits); Hikari `2–3` | docker-compose; Hikari `50` |
+| PostgreSQL | Replit SQL DB via `PGHOST`/`PGPORT`/`PGDATABASE`/`PGUSER`/`PGPASSWORD`; no forced SSL; Hikari `2–3` | docker-compose; Hikari `50` |
 | Server port | `5000` → external `80` | `8080` |
 | Build | Maven via `.replit` Run | Maven or `docker compose --profile local up --build` |
 | Deployment | Reserved VM (`gce`) | n/a |
@@ -426,11 +434,12 @@ symptom. Do NOT improvise alternative fixes.
 | Build fails with `TypeTag :: UNKNOWN` | TypeTag UNKNOWN (Lombok/JDK mismatch) |
 | OAuth2 resource-server crashes at startup with empty `issuer-uri` | OAuth2 Resource Server auto-config |
 | `requestMatchers("/<context-path>/...")` matches nothing | Spring Security `requestMatchers` |
+| `/` or `/login` returns 401 after React build | Spring Security `requestMatchers` |
 | Frontend hits `/api/v1/...` and gets 404 from Spring | OpenAPI `servers` not applied to controllers |
 | `LazyInitializationException` in `mapper.toDto(...)` | Lazy init — single rule (`@Transactional` on controller) |
 | Postgres `bytea` error on JPQL `LOWER(CONCAT('%', :search, '%'))` | JPQL bytea crash |
 | Tempted to use `JdbcTemplate` "for speed" | Don't mix JdbcTemplate with JPA |
-| `EnvironmentPostProcessor` profile check no-ops | EnvironmentPostProcessor before profiles |
+| Datasource works in shell but Spring cannot connect | Replit datasource env wiring |
 | Compile mismatch `OffsetDateTime` vs `LocalDateTime` | Time types — `LocalDateTime` only |
 | `git-commit-id` plugin failing in workspace without `.git` | git-commit-id blocking in Replit shell |
 | Service signature returns `Entity` (lazy safe but module-bad) | Services still return Records, not Entities |

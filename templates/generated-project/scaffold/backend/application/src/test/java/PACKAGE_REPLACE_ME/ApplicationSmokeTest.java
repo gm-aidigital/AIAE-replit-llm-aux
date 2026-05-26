@@ -7,7 +7,7 @@ import org.springframework.test.context.ActiveProfiles;
 /**
  * Smoke test — Spring context loads end-to-end with the test profile.
  * Catches the bulk of wiring/regression failures (missing beans, conflicting
- * conditionals, broken @ConfigurationProperties binding, post-processor
+ * conditionals, broken @ConfigurationProperties binding, datasource config
  * crashes) with zero per-bean assertions.
  */
 @SpringBootTest

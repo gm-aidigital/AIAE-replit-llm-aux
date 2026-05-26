@@ -19,9 +19,9 @@ backend/application/src/main/java/<base>/error/
 ```
 
 `AppException`/`ErrorReason`/validation types live in **service** module
-(not `domain`) — error semantics are a service-layer concern. Lets
-`external-services` drop its `domain` dependency (true leaf); `domain`
-stays pure JPA.
+(not `domain`) — error semantics are a service-layer concern. If the optional
+`external-services` module exists, it stays a true leaf and never depends on
+`domain`; `domain` stays pure JPA.
 
 ## Three rules
 

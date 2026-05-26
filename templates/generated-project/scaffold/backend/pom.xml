@@ -5,7 +5,8 @@
   in <dependencyManagement> + <pluginManagement>; children reference by
   <artifactId> only. Extend here, never re-pin in children.
   Replace: <groupId>, <artifactId>, <name>/<description>.
-  Modules: canonical 5 (application/service/domain/db/external-services).
+  Modules: required 4 (application/service/domain/db). Add external-services
+  only when real external integrations exist; never keep empty Maven modules.
   Build: `mvn -f backend/pom.xml ...` or `cd backend && mvn ...`.
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0"
@@ -28,12 +29,12 @@
         <relativePath/>
     </parent>
 
-    <!-- Paths relative to backend/. No `common` Maven module —
+    <!-- Paths relative to backend/. No `common` Maven module and no empty
+         modules. Add `external-services` only with real external client code.
          AppException family lives in service/<base>/service/common/error/. -->
     <modules>
         <module>domain</module>
         <module>db</module>
-        <module>external-services</module>
         <module>service</module>
         <module>application</module>
     </modules>
@@ -90,11 +91,6 @@
             <dependency>
                 <groupId>${project.groupId}</groupId>
                 <artifactId>db</artifactId>
-                <version>${project.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>${project.groupId}</groupId>
-                <artifactId>external-services</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

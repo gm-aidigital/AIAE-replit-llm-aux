@@ -72,6 +72,10 @@ Canonical: `templates/generated-project/observability/usage-logging-rules.md`.
 - [ ] OpenAPI contract updated for any API change; spec at `src/main/resources/api/v1/specs/openapi.yaml` (NOT under `static/`).
 - [ ] `openapi-generator-maven-plugin` configured.
 - [ ] Frontend uses `openapi-typescript` + `openapi-fetch` + TanStack Query.
+- [ ] Frontend follows Elevate visual rules and has no left side menu/sidebar:
+      ```bash
+      grep -RInE 'Sidebar|SideNav|LeftNav|side-nav|side-menu|left-nav|left-menu|app__sidebar|layout__sidebar' frontend/src
+      ```
 - [ ] `frontend/package-lock.json` exists and is committed — enterprise
       reproducibility requires a pinned lockfile, not just version ranges:
       ```bash
@@ -146,25 +150,21 @@ Past runs swapped Vite onto 5000 + Spring to 8080 → broke Reserved-VM Deployme
       ```bash
       grep 'server.port:' backend/application/src/main/resources/application-replit.yml
       ```
-- [ ] `application-replit.yml` does NOT set
-      `spring.datasource.url|username|password|driver-class-name` —
-      `ReplitDatabaseUrlPostProcessor` populates them; yaml entries break it:
+- [ ] `application-replit.yml` sets datasource directly from Replit PG* env vars:
       ```bash
-      grep -E 'spring\.datasource\.(url|username|password|driver-class-name)' \
+      grep -E 'PGHOST|PGPORT|PGDATABASE|PGUSER|PGPASSWORD' \
         backend/application/src/main/resources/application-replit.yml
       ```
-- [ ] No legacy `PG*` env refs (Replit `postgresql-16` exposes `DATABASE_URL` only):
+- [ ] No `ReplitDatabaseUrlPostProcessor`, `.imports`, or `spring.factories`
+      datasource hook. Direct YAML is the canonical Replit path:
       ```bash
-      grep -rE '\$\{PG(HOST|PORT|USER|PASSWORD|DATABASE)[:}]' \
-        backend/application/src/main/resources/
+      grep -rE 'ReplitDatabaseUrlPostProcessor|EnvironmentPostProcessor.imports|spring.factories' \
+        backend/application/src/main/
       ```
-- [ ] No HARDCODED `sslmode=disable` in app config — the
-      `ReplitDatabaseUrlPostProcessor` reads sslmode from the `DATABASE_URL`
-      query string (Replit's production tier carries `require`; Helium dev
-      omits). Hardcoding `disable` in `application-replit.yml` would
-      override prod and break TLS:
+- [ ] No forced `sslmode=require` in app config. Current Replit Postgres works
+      without SSL unless the actual env explicitly requires it:
       ```bash
-      grep -rEn 'sslmode=disable' backend/application/src/main/resources/
+      grep -rEn 'sslmode=require' backend/application/src/main/resources/
       ```
 - [ ] `vite.config.ts` uses `port: 5173 + strictPort: true` (NOT 5000):
       ```bash
@@ -230,6 +230,19 @@ Any match → stack lock violated. Delete offending files/lines, regenerate from
 - [ ] Module paths in `backend/pom.xml` are relative to `backend/`
       (e.g. `<module>application</module>`, not `<module>backend/application</module>`).
 - [ ] Child module poms use `<relativePath>../pom.xml</relativePath>`.
+- [ ] No empty Maven modules. Every `<module>` in `backend/pom.xml` owns
+      real source/resources/tests beyond `pom.xml`:
+      ```bash
+      for m in $(sed -n 's:.*<module>\(.*\)</module>.*:\1:p' backend/pom.xml); do
+        find "backend/$m" -mindepth 2 -type f ! -path "*/target/*" | grep -q . \
+          || echo "EMPTY MODULE: $m"
+      done
+      ```
+      Expected: empty.
+- [ ] `external-services` is optional. If there are no outbound integrations
+      (HTTP APIs, queues, vendor SDKs, BigQuery clients, etc.), there must be
+      no `backend/external-services`, no `<module>external-services</module>`,
+      no dependency-management entry for it, and no `service` dependency on it.
 
 ## Error handling: single `ErrorReason` enum (hard reject)
 
@@ -293,11 +306,12 @@ Full rule in backend SKILL.
 - [ ] `backend/service/` source contains no `SecurityContextHolder`, `Authentication`,
       `Jwt`, or `@AuthenticationPrincipal`. Service methods that need the caller take an
       `AppUser` parameter; the controller does the JWT → AppUser conversion.
-- [ ] `backend/external-services/pom.xml` declares no internal-module deps:
+- [ ] If `backend/external-services/pom.xml` exists, it declares no internal-module deps:
       ```bash
-      grep -E '<artifactId>(domain|service|application|db)</artifactId>' backend/external-services/pom.xml
+      test ! -f backend/external-services/pom.xml || \
+        grep -E '<artifactId>(domain|service|application|db)</artifactId>' backend/external-services/pom.xml
       ```
-      Expected: empty. external-services is a true leaf.
+      Expected: empty. external-services is a true leaf and exists only with real clients.
 - [ ] `backend/domain/pom.xml` does NOT depend on `service` / `application` / `external-services` / `db`.
 - [ ] AppException family lives at `service/<base>/service/common/error/`, not `domain/common/error/`:
       ```bash

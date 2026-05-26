@@ -41,8 +41,9 @@ localPort = 5000
 externalPort = 80
 
 # === Workspace env === [env] does NOT propagate to Deployments; copy
-# CLERK_*/AUTH_*/USAGE_LOG_* into Deployment Secrets. DATABASE_URL auto-injected
-# by postgresql-16. JAVA_HOME unset — `pkgs.jdk21` provides JDK 21 on PATH.
+# CLERK_*/AUTH_*/USAGE_LOG_* and Replit Postgres PG* vars into Deployment
+# Secrets if Replit does not auto-propagate them. JAVA_HOME unset —
+# `pkgs.jdk21` provides JDK 21 on PATH.
 [env]
 PORT = "5000"
 SPRING_PROFILES_ACTIVE = "replit"

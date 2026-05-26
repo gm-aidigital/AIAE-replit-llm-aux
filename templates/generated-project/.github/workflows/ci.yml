@@ -148,8 +148,18 @@ jobs:
           done
           if grep -R --exclude-dir=.git -n '"private_key_id"\|"private_key"\|"type": "service_account"' .; then
             echo "Service account JSON keys must not be committed"
-            exit 1
+              exit 1
           fi
+
+      - name: Verify README describes app and API
+        if: steps.detect.outputs.has_backend == 'true'
+        run: |
+          set -euo pipefail
+          test -f README.md || { echo "README.md is required"; exit 1; }
+          grep -q '^## What this is' README.md || { echo "README must explain what the app does"; exit 1; }
+          grep -q '^## API' README.md || { echo "README must include an API section"; exit 1; }
+          grep -q 'Swagger UI' README.md || { echo "README must link to Swagger UI"; exit 1; }
+          grep -q 'OpenAPI YAML' README.md || { echo "README must link to the OpenAPI YAML"; exit 1; }
 
       - name: Verify usage_events Liquibase changelog exists
         if: |
@@ -251,6 +261,11 @@ jobs:
             echo "Frontend must use shared/api/client.ts (typed openapi-fetch), not raw fetch/axios/XMLHttpRequest"
             exit 1
           }
+          ! grep -RInE 'Sidebar|SideNav|LeftNav|side-nav|side-menu|left-nav|left-menu|app__sidebar|layout__sidebar' \
+              --include='*.ts' --include='*.tsx' --include='*.css' frontend/src >/dev/null 2>&1 || {
+            echo "Frontend must not use a left side menu/sidebar; use top navigation, tabs, filters, and toolbars"
+            exit 1
+          }
           ruby <<'RUBY'
           require "yaml"
 
@@ -317,12 +332,16 @@ jobs:
             echo "application-replit.yml must keep server.port: \${PORT:5000}"
             exit 1
           }
-          ! grep -RIn 'spring.datasource.url\|spring.datasource.username\|spring.datasource.password' backend/application/src/main/resources/application-replit.yml >/dev/null 2>&1 || {
-            echo "application-replit.yml must not set datasource url/username/password; DATABASE_URL post-processor owns them"
+          grep -Fq 'url: jdbc:postgresql://${PGHOST' backend/application/src/main/resources/application-replit.yml || {
+            echo "application-replit.yml must set datasource URL from PGHOST/PGPORT/PGDATABASE"
             exit 1
           }
-          ! grep -RInE '^[[:space:]]*(url|username|password):' backend/application/src/main/resources/application-replit.yml >/dev/null 2>&1 || {
-            echo "application-replit.yml must not set datasource url/username/password; DATABASE_URL post-processor owns them"
+          grep -Fq 'username: ${PGUSER' backend/application/src/main/resources/application-replit.yml || {
+            echo "application-replit.yml must set datasource username from PGUSER"
+            exit 1
+          }
+          grep -Fq 'password: ${PGPASSWORD' backend/application/src/main/resources/application-replit.yml || {
+            echo "application-replit.yml must set datasource password from PGPASSWORD"
             exit 1
           }
           ! grep -RIn '^AUTH_[A-Z_]*:[[:space:]]*\${AUTH_' backend/application/src/main/resources >/dev/null 2>&1 || {
@@ -333,13 +352,12 @@ jobs:
             echo "Do not configure spring.security.oauth2.resourceserver.jwt.* in YAML; SecurityConfig owns JwtDecoder"
             exit 1
           }
-          ! grep -RIn 'PGHOST\|PGPORT\|PGDATABASE\|PGUSER\|PGPASSWORD' backend/application/src/main/resources/application-replit.yml >/dev/null 2>&1 || {
-            echo "application-replit.yml must use DATABASE_URL via ReplitDatabaseUrlPostProcessor, not PG* vars"
+          ! grep -RIn 'sslmode=require' backend/application/src/main/resources/application-replit.yml >/dev/null 2>&1 || {
+            echo "application-replit.yml must not force sslmode=require for Replit Postgres"
             exit 1
           }
-          imports_file="backend/application/src/main/resources/META-INF/spring/org.springframework.boot.env.EnvironmentPostProcessor.imports"
-          [ -f "${imports_file}" ] && grep -q 'ReplitDatabaseUrlPostProcessor' "${imports_file}" || {
-            echo "ReplitDatabaseUrlPostProcessor must be registered in META-INF/spring/org.springframework.boot.env.EnvironmentPostProcessor.imports"
+          ! grep -RInE 'ReplitDatabaseUrlPostProcessor|EnvironmentPostProcessor.imports|spring.factories' backend/application/src/main >/dev/null 2>&1 || {
+            echo "Do not use ReplitDatabaseUrlPostProcessor or EnvironmentPostProcessor registration; application-replit.yml owns datasource"
             exit 1
           }
           grep -q '<groupId>org.postgresql</groupId>' backend/application/pom.xml \
@@ -358,10 +376,31 @@ jobs:
           auth_constants="$(find backend/application/src/main/java -path '*/security/AuthConstants.java' -print -quit)"
           [ -n "${auth_constants}" ] \
               && grep -q 'CLERK_SECRET_KEY' "${auth_constants}" \
-              && grep -q 'app.auth.sso.jwk-set-uri' "${auth_constants}" || {
-            echo "AUTH_MODE=auto must require Clerk secret plus issuer/JWKS before enabling SSO"
+              && grep -q 'app.auth.sso.jwk-set-uri' "${auth_constants}" \
+              && grep -Fq '"/"' "${auth_constants}" \
+              && grep -Fq '"/assets/**"' "${auth_constants}" || {
+            echo "AuthConstants must require Clerk secret plus issuer/JWKS and keep React shell/static assets public"
             exit 1
           }
+          for module in $(sed -n 's:.*<module>\(.*\)</module>.*:\1:p' backend/pom.xml); do
+            module_dir="backend/${module}"
+            [ -d "${module_dir}" ] || {
+              echo "backend/pom.xml lists missing module: ${module}"
+              exit 1
+            }
+            [ -d "${module_dir}/src" ] \
+                && find "${module_dir}/src" -type f ! -path '*/target/*' | grep -q . || {
+              echo "Maven module must not be empty/POM-only: ${module}"
+              exit 1
+            }
+          done
+          if [ ! -f backend/external-services/pom.xml ]; then
+            ! grep -RIn '<artifactId>external-services</artifactId>\|<module>external-services</module>' \
+                backend/pom.xml backend/service/pom.xml >/dev/null 2>&1 || {
+              echo "external-services is optional; do not reference it when no module exists"
+              exit 1
+            }
+          fi
           ! grep -RIn '@AuthenticationPrincipal' backend/application/src/main/java >/dev/null 2>&1 || {
             echo "Generated OpenAPI interfaces do not include @AuthenticationPrincipal parameters; use SecurityContext/AppUserFactory"
             exit 1

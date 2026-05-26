@@ -346,7 +346,7 @@ GRANT SELECT ON usage_events TO usage_reader;
 
 Then build the dashboard's `DATABASE_URL` as:
 ```
-postgresql://usage_reader:<password>@<host>:<port>/<db>?sslmode=require
+postgresql://usage_reader:<password>@<host>:<port>/<db>
 ```
 
 ## Future migration (only when needed)

@@ -18,7 +18,7 @@ pass before this skill applies.
 ## Handoff package
 
 - [ ] README: purpose, owner, run/deploy steps for both Replit and local-dev,
-      known limitations.
+      API overview, Swagger/OpenAPI links, known limitations.
 - [ ] `.env.example` with safe placeholders for every consumed variable.
 - [ ] Architecture summary (one page).
 - [ ] List of mocked components and what must replace each one.

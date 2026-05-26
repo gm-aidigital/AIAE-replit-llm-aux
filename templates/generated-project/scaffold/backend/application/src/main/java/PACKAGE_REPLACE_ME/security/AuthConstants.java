@@ -37,6 +37,17 @@ public final class AuthConstants {
 
     /** Path patterns that must remain public. */
     public static final String[] PUBLIC_PATHS = {
+        "/",
+        "/index.html",
+        "/favicon.ico",
+        "/assets/**",
+        "/error",
+        "/*.css",
+        "/*.js",
+        "/*.png",
+        "/*.svg",
+        "/login",
+        "/login/**",
         "/actuator/health",
         "/actuator/prometheus",
         "/api/v1/auth/mock/login",

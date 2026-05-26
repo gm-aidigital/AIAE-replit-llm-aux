@@ -12,6 +12,7 @@ Use for any frontend change in a generated MVP project.
 ## Canonical references
 
 - Frontend rules: `templates/generated-project/frontend/canonical-react-frontend-rules.md`
+- Elevate design guidelines: `templates/generated-project/frontend/elevate-design-guidelines.md`
 - BEM naming (CSS class convention): `templates/generated-project/frontend/bem-naming-rules.md`
 - Auth blueprint: `templates/generated-project/auth/google-sso-clerk-blueprint.md`
 - Project structure: `templates/generated-project/structure/near-production-project-structure.md`
@@ -33,6 +34,11 @@ Clerk React SDK when SSO is enabled · Vitest + Testing Library.
 - **BEM class names** for every style (`block__element--modifier`). Plain
   `.css` files, no CSS Modules / Tailwind / styled-components. One block
   per directory. Blocks have no external margins. See `bem-naming-rules.md`.
+- **No left side menu / sidebar / left rail.** Use top app header, page tabs,
+  filter bars, segmented controls, and contextual toolbars.
+- Follow Elevate tokens: compact Inter typography, primary `239 100% 43%`,
+  secondary/accent lavender surfaces, one primary CTA per view, status colors
+  only for state, 12px card radius and 10px controls.
 - Frontend never reaches the DB, service-account keys, or any secrets directly — backend APIs only.
 
 ## Auth UX

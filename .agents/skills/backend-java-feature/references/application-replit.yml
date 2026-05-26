@@ -1,19 +1,13 @@
 # application-replit.yml — Replit profile overrides.
 #
-# This file does NOT configure spring.datasource.url/username/password.
-# Those are set by ReplitDatabaseUrlPostProcessor, which runs as a Spring
-# Boot EnvironmentPostProcessor BEFORE the application context is built and
-# translates DATABASE_URL into standard Spring properties.
-#
-# After the post-processor runs, Spring Boot's auto-configuration builds
-# the HikariDataSource as usual; this YAML just supplies pool sizing.
-#
-# See:
-#   - .agents/skills/backend-java-feature/references/ReplitDatabaseUrlPostProcessor.java
-#   - .agents/skills/backend-java-feature/references/database-url-translation.md
+# Replit's postgresql-16 module exposes individual PG* env vars. Use them
+# directly; do not add a custom EnvironmentPostProcessor or force sslmode.
 
 spring:
   datasource:
+    url: jdbc:postgresql://${PGHOST:${POSTGRES_HOST:localhost}}:${PGPORT:${POSTGRES_PORT:5432}}/${PGDATABASE:${POSTGRES_DB:app}}
+    username: ${PGUSER:${POSTGRES_USER:app}}
+    password: ${PGPASSWORD:${POSTGRES_PASSWORD:app}}
     hikari:
       maximum-pool-size: 3       # Replit's managed SQL DB has a low conn ceiling
       minimum-idle: 0

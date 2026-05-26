@@ -22,6 +22,7 @@ Authoritative rules: `custom_instruction/instructions.md`. Workflows:
 - Default: dual-mode auth (Clerk + mock fallback), mocked/approved-only data,
   Replit Secrets for real keys.
 - Code: simple over clever; canonical artifacts over hand-written boilerplate.
+- UI: Elevate design system, compact product surfaces, no left side menu.
 - Generation budget: reference canonical files, never paste — see
   `templates/generated-project/generation/token-efficient-generation-rules.md`.
 - When in doubt: smallest demo that publishes on Replit; document what
@@ -45,12 +46,16 @@ templates/generated-project/*              # canonical artifacts + scaffold/
 
 - **Backend**: Java 21 LTS + Spring Boot 3.x + Maven multi-module + PostgreSQL +
   Liquibase + HikariCP + Lombok + Checkstyle + JaCoCo. OpenAPI contract-first.
+  Required modules are `application`, `service`, `domain`, `db`; optional
+  `external-services` is generated only for real outbound integrations, never
+  as an empty/POM-only module.
 - **Frontend**: React + TypeScript + Vite + TanStack Query, typed via
   `openapi-typescript` + `openapi-fetch` from the backend OpenAPI YAML.
 - **Auth**: dual-mode `AUTH_MODE=auto|sso|mock` (Clerk + backend-signed mock JWT).
 - **Observability**: structured JSON logs to stdout, Actuator
   (`health`, `prometheus`), Postgres `usage_events` for usage estimation.
-- **Runtime split**: Replit → profile `replit`, port `5000`, `DATABASE_URL`;
+- **Runtime split**: Replit → profile `replit`, port `5000`, Replit Postgres
+  env vars (`PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGPASSWORD`);
   Local-dev → profile `local`, port `8080`, `docker-compose --profile local`.
 
 Authoritative-references table: `custom_instruction/instructions.md` →
@@ -65,8 +70,9 @@ Authoritative-references table: `custom_instruction/instructions.md` →
   workspace-preview only.
 - `onBoot` runs `templates/generated-project/scaffold/scripts/setup-project.sh`.
 - Workspace `[env]` does NOT propagate to Deployments. Before publish, copy
-  `SPRING_PROFILES_ACTIVE`, `CLERK_*`, `AUTH_*`, `USAGE_LOG_*` (and any
-  `DATABASE_URL` override) into the deployment Secrets pane.
+  `SPRING_PROFILES_ACTIVE`, `CLERK_*`, `AUTH_*`, `USAGE_LOG_*`, and any Replit
+  Postgres env vars shown in the Secrets pane into Deployment Secrets when
+  Replit does not auto-propagate them.
 
 ### Replit-only auth alternative
 
@@ -84,7 +90,7 @@ All optional in MVP mode — generated projects must run on Replit with none set
 | **Clerk** | Google SSO. | `CLERK_PUBLISHABLE_KEY` + `CLERK_SECRET_KEY` in Replit Secrets. |
 | **Google OAuth** (via Clerk) | Backing IdP. | Configured in Clerk Dashboard. |
 | **Usage logging** | Telemetry → app's `usage_events` Postgres table. | `USAGE_LOGGING_ENABLED=true` + `USAGE_LOG_SERVICE_NAME`. |
-| **PostgreSQL** | Persistence. | Replit `postgresql-16` injects `DATABASE_URL`; backend converts to JDBC at startup. Local-dev: docker-compose. See `.agents/skills/backend-java-feature/references/database-url-translation.md`. |
+| **PostgreSQL** | Persistence. | Replit `postgresql-16` injects Postgres env vars (`PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGPASSWORD`; `DATABASE_URL` may also exist). Backend config uses the individual vars directly; no custom post-processor and no forced SSL. Local-dev: docker-compose. See `.agents/skills/backend-java-feature/references/database-url-translation.md`. |
 
 ### Required env placeholders (`.env.example`)
 

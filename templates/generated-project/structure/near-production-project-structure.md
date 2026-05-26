@@ -1,7 +1,7 @@
 # Near-Production Project Structure
 
 Structured for engineering handoff. Runs on Replit (`postgresql-16` injects
-`DATABASE_URL`, backend 5000 → external 80, Replit Secrets) AND local-dev
+Postgres env vars, backend 5000 → external 80, Replit Secrets) AND local-dev
 (`docker-compose --profile local`). Docker is local-dev only.
 
 ## Root layout
@@ -26,7 +26,7 @@ Structured for engineering handoff. Runs on Replit (`postgresql-16` injects
 │   ├── service/                          # Business logic + MapStruct Entity↔Record + AppException family + LogUsage
 │   ├── domain/                           # JPA entities + repositories ONLY (leaf)
 │   ├── db/                               # Liquibase changelogs only
-│   └── external-services/                # External clients, true leaf — no internal deps
+│   └── external-services/                # OPTIONAL: external clients, only when non-empty
 └── frontend/                             # React + TypeScript + Vite
     ├── package.json
     ├── vite.config.ts
@@ -48,8 +48,9 @@ Build: `mvn -f backend/pom.xml ...` from root, or `cd backend && mvn ...`.
 
 ## Backend modules
 
-Maven parent + 5 modules. NO `common` Maven module — cross-cutting types
-(AppException, ErrorReason, LogUsage) live under `service/common/`.
+Maven parent + 4 required modules. NO `common` Maven module and NO empty
+Maven modules — cross-cutting types (AppException, ErrorReason, LogUsage)
+live under `service/common/`.
 
 - `application` — Spring Boot entrypoint, REST controllers, generated API
   impls, security, GlobalExceptionHandler, observability glue.
@@ -57,8 +58,16 @@ Maven parent + 5 modules. NO `common` Maven module — cross-cutting types
   AppException family + LogUsage under `<base>/service/common/`.
 - `domain` — JPA entities + repositories ONLY. Leaf.
 - `db` — Liquibase changelogs + seed data.
-- `external-services` — external API adapters. TRUE LEAF (no internal deps).
-  Throws own `<Provider>ExternalException`; service wraps into `AppException`.
+- `external-services` — OPTIONAL external API adapters. Add this module only
+  when the project has real outbound integrations (HTTP APIs, queues, vendor
+  SDKs, BigQuery clients, etc.). TRUE LEAF (no internal deps). Throws own
+  `<Provider>ExternalException`; service wraps into `AppException`.
+
+If there are no external integrations, do not create
+`backend/external-services/`, do not list it in parent `<modules>`, do not add
+it to `<dependencyManagement>`, and do not depend on it from `service`.
+When adding it later, add the module in the same change as the first real
+client/adapter source files. A POM-only module is rejected.
 
 ## Backend module dependency graph (REQUIRED edges)
 
@@ -66,14 +75,13 @@ Dropping an edge is the #1 cause of "build passes but runtime breaks".
 
 ```
 application ──► service ──► domain
-            │           └─► external-services
             └─► db                                (runtime-only — see below)
 
 service     ──► domain
-            └─► external-services
+            └─► external-services                 (optional, only when needed)
 
 domain                                            (LEAF)
-external-services                                 (LEAF)
+external-services                                 (OPTIONAL LEAF)
 db          ──► liquibase-core                    (LEAF internally)
 ```
 
@@ -81,6 +89,11 @@ db          ──► liquibase-core                    (LEAF internally)
 Boot's Liquibase auto-config; changelog XMLs only land in the fat jar if
 `application` depends on `db`. Drop this edge → green build + runtime crash
 `Liquibase: changelog 'db/changelog/master.xml' not found`.
+
+**Optional edge: `service → external-services`.** Add it only when
+`external-services` exists and contains real external client code. A POM-only
+`external-services` module is worse than no module because it trains future
+edits to preserve dead structure.
 
 **Forbidden edges:**
 - `application → domain` or `application → external-services` directly (via `service`).
@@ -160,7 +173,7 @@ domain/src/main/java/<base>/domain/
     entities/<X>Entity.java                         # @Entity, JPA-mapped
     repositories/<X>Repository.java                 # extends JpaRepository
 
-external-services/src/main/java/<base>/external/
+external-services/src/main/java/<base>/external/        # OPTIONAL; only when non-empty
   <provider>/                                       # ONE folder per external API
     <Provider>Client.java                           # interface
     <Provider>ClientImpl.java                       # Feign/RestClient impl
@@ -292,7 +305,7 @@ frontend/src/shared/config
 
 | | Replit | Local-dev |
 |---|---|---|
-| PostgreSQL | `DATABASE_URL` → `ReplitDatabaseUrlPostProcessor` → HikariDataSource | docker-compose Postgres |
+| PostgreSQL | `PGHOST`/`PGPORT`/`PGDATABASE`/`PGUSER`/`PGPASSWORD` → HikariDataSource; no forced SSL | docker-compose Postgres |
 | Backend port | `5000` → external `80` | `8080` |
 | Frontend dev | Vite `5173` (preview only) | Vite `5173` |
 | Frontend in Deployment | Spring serves `frontend/dist/` from `src/main/resources/static/` | n/a |

@@ -68,18 +68,19 @@ restate elsewhere.
 
 Generated projects must run in both environments without code changes:
 
-- **Replit** — profile `replit`, port `5000`, Replit SQL Database via
-  `DATABASE_URL` (libpq URL; `PG*` legacy vars NOT provided by
-  `postgresql-16`). `sslmode` is NOT forced — `ReplitDatabaseUrlPostProcessor`
-  respects whatever the URL carries (Replit's production-grade tier sets
-  `sslmode=require`; Helium dev tier omits it). Secrets from Replit Secrets pane.
+- **Replit** — profile `replit`, port `5000`, Replit SQL Database via Replit's
+  injected Postgres env vars (`PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`,
+  `PGPASSWORD`). `DATABASE_URL` may also exist, but generated Spring apps use
+  the individual vars directly in `application-replit.yml`. Do not force
+  `sslmode=require`; the default Replit Postgres path works without SSL.
+  Secrets from Replit Secrets pane.
 - **Local-dev** — profile `local`, port `8080`, `docker-compose --profile
   local`, `.env` (gitignored).
 
 Docker is local-dev only. Deployment: **Reserved VM** (`deploymentTarget = "gce"`)
 when persistence is used — Autoscale cold starts unsuitable for Java + JDBC.
 
-`DATABASE_URL` → JDBC: see
+Replit datasource env wiring: see
 `.agents/skills/backend-java-feature/references/database-url-translation.md`.
 
 ## Stack policy (Java baseline)
@@ -159,16 +160,16 @@ STOP, check the table, copy from scaffold. New requirements get additive
 
 | File | Replit-specific settings that disappear on regenerate |
 |---|---|
-| `.replit` (root) | Backend workflow MUST be `mvn -f backend/pom.xml -DskipTests -Dskip.frontend=true install && mvn -f backend/application/pom.xml -DskipTests -Dskip.frontend=true spring-boot:run` — never `spring-boot:run` on the parent reactor; frontend workflow MUST run `npm run generate:api` before Vite; `[deployment]` GCE Reserved-VM with `scripts/replit-build.sh` + `scripts/replit-run.sh`; one public port `5000` → externalPort `80`; Vite `5173` is workspace-only, not a `[[ports]]` entry; `onBoot` runs `setup-project.sh`; workflow has FATAL guard against Python files |
+| `.replit` (root) | Backend workflow MUST be `mvn -f backend/pom.xml -DskipTests -Dskip.frontend=true install && mvn -f backend/application/pom.xml -DskipTests -Dskip.frontend=true spring-boot:run` — never `spring-boot:run` on the parent reactor; frontend workflow MUST run `npm run generate:api` before Vite; `[deployment]` GCE Reserved-VM with `scripts/replit-build.sh` + `scripts/replit-run.sh`; one public port `5000` → externalPort `80`; Vite `5173` is workspace-only, not a `[[ports]]` entry; `onBoot` runs `setup-project.sh`; Replit Postgres vars (`PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGPASSWORD`) flow through the process env; workflow has FATAL guard against Python files |
 | `replit.nix` (root) | Pinned `pkgs.jdk21` + `pkgs.nodejs_22` + `pkgs.postgresql_16`; channel `stable-24_11` |
 | `docker-compose.yml` (root) | `--profile local` gating, port `8080` for backend (local), standard `POSTGRES_*` env wiring to the compose Postgres service, health-check depends_on |
 | `.env.example` (root) | Full enumerated set of `AUTH_*`, `USAGE_LOG_*`, `CLERK_*`, `BACKEND_DEV_PORT`, `VITE_API_BASE_URL`, `VITE_API_CONTEXT_PATH` placeholders |
 | `.gitignore` (root) | Control-plane excludes (`.agents/`, `templates/`, `custom_instruction/`, `AGENTS.md`, `replit.md`) — without these the company repo gets polluted on `git push` |
-| `backend/pom.xml` | `<dependencyManagement>` for all internal modules (`domain`, `db`, `external-services`, `service`); `<pluginManagement>` for spring-boot-maven-plugin, openapi-generator, frontend-maven-plugin, jacoco, checkstyle, git-commit-id; Java 21 + Spring Boot 3.4.0 pinning; lombok 1.18.40 (forward-safe with newer JDKs) |
+| `backend/pom.xml` | `<dependencyManagement>` for required internal modules (`domain`, `db`, `service`) and optional `external-services` only when real integrations exist; `<pluginManagement>` for spring-boot-maven-plugin, openapi-generator, frontend-maven-plugin, jacoco, checkstyle, git-commit-id; Java 21 + Spring Boot 3.4.0 pinning; lombok 1.18.40 (forward-safe with newer JDKs); no empty Maven modules |
 | `backend/application/pom.xml` | `<start-class>${project.groupId}.Application`; the REQUIRED `db` dependency (changelogs on fat-jar classpath); spring-boot-maven-plugin activation; openapi-generator activation; PostgreSQL runtime driver; jjwt + logbook + commons-csv + observability deps |
-| `backend/service/pom.xml` | Edges to `domain` + `external-services` only — never to `application`; jakarta-validation for `ValidationMessage`; FORBIDDEN: web/security/servlet/JWT deps |
+| `backend/service/pom.xml` | Edge to `domain`; add edge to `external-services` only when that optional module exists and contains real external client code — never depend on `application`; jakarta-validation for `ValidationMessage`; FORBIDDEN: web/security/servlet/JWT deps |
 | `backend/domain/pom.xml` | `spring-boot-starter-data-jpa` + lombok; LEAF (no internal deps) |
-| `backend/external-services/pom.xml` | LEAF for internal modules; HTTP-client deps live here |
+| `backend/external-services/pom.xml` | OPTIONAL; create only for real external integrations; LEAF for internal modules; HTTP-client/vendor SDK deps live here; never leave as a POM-only module |
 | `backend/db/pom.xml` | `liquibase-core` only — no Java code |
 | `backend/Dockerfile` | Multi-stage Java 21 build, `mvn -B -DskipTests package`, exec form `java -jar /app/app.jar`, port `8080` (local-dev image) |
 | `backend/lombok.config` | `lombok.addLombokGeneratedAnnotation = true` (required for jacoco to exclude generated code) |
@@ -194,6 +195,7 @@ Each topic has one canonical file. Read before generating; never duplicate.
 | OpenAPI rules | `templates/generated-project/openapi/canonical-openapi-rules.md` |
 | OpenAPI review checklist | `templates/generated-project/openapi/openapi-review-checklist.md` |
 | Frontend rules | `templates/generated-project/frontend/canonical-react-frontend-rules.md` |
+| Elevate design guidelines | `templates/generated-project/frontend/elevate-design-guidelines.md` |
 | Auth (dual-mode) | `templates/generated-project/auth/google-sso-clerk-blueprint.md` |
 | Usage logging | `templates/generated-project/observability/usage-logging-rules.md` |
 | HTTP request/response logging | `templates/generated-project/observability/logbook-http-logging-rules.md` |
@@ -208,7 +210,6 @@ Each topic has one canonical file. Read before generating; never duplicate.
 | Frontend workflow | `.agents/skills/frontend-react-feature/SKILL.md` |
 | Safety review (pre-publish) | `.agents/skills/mvp-safety-review/SKILL.md` |
 | Engineering handoff | `.agents/skills/engineering-handoff/SKILL.md` |
-| Replit DataSource post-processor | `.agents/skills/backend-java-feature/references/ReplitDatabaseUrlPostProcessor.java` |
 | Replit profile YAML | `.agents/skills/backend-java-feature/references/application-replit.yml` |
 | Starter scaffold | `templates/generated-project/scaffold/` |
 
@@ -268,9 +269,13 @@ service-account JSON, usage-logging env placeholders.
 ## Frontend policy
 
 See `templates/generated-project/frontend/canonical-react-frontend-rules.md`.
+Generated UI follows Elevate design guidelines and must not use a left side
+menu/sidebar/left rail. Navigation is top/header-first with tabs, filters,
+segmented controls and contextual toolbars.
 
 ## Code ownership
 
-Every MVP ships: README (purpose, owner, data sources, env vars, run/deploy
-steps, MVP limitations), `.env.example` (placeholders only, incl. auth +
-usage-logging), GitHub Actions CI, exportable code.
+Every MVP ships: README (purpose, owner, full functional description, API
+overview, Swagger/OpenAPI links, data sources, env vars, run/deploy steps, MVP
+limitations), `.env.example` (placeholders only, incl. auth + usage-logging),
+GitHub Actions CI, exportable code.

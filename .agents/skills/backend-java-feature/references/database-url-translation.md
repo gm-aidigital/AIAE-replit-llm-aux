@@ -1,76 +1,70 @@
-# Translating Replit's DATABASE_URL for the Java backend
+# Replit Datasource Env Wiring
 
-Replit's managed SQL Database injects only:
+Replit's `postgresql-16` module exposes Postgres connection details to the
+process environment. In current generated projects, configure Spring directly
+from the individual variables:
 
-```
-DATABASE_URL=postgresql://<user>:<password>@<host>:<port>/<db>[?sslmode=...]
-```
-
-The `sslmode` parameter is tier-specific: Replit's production-grade tier
-sets `sslmode=require`; the Helium development tier omits it (no TLS).
-The processor reads sslmode from the URL and applies it as-is — do NOT
-force `require` in app config (used to be the default; broke Helium).
-
-(`PGHOST`, `PGUSER`, `PGPASSWORD`, `PGDATABASE`, `PGPORT` are legacy Neon-only
-and NOT injected by current Replit SQL Database.)
-
-Spring Boot expects:
-```
-spring.datasource.url      = jdbc:postgresql://host:port/db
-spring.datasource.username = user
-spring.datasource.password = pass
+```text
+PGHOST
+PGPORT
+PGDATABASE
+PGUSER
+PGPASSWORD
 ```
 
-Spring can't decompose a libpq URL. We use a Spring Boot
-`EnvironmentPostProcessor` that runs before context build, parses
-`DATABASE_URL`, and adds the standard properties. Spring Boot's auto-config
-then builds HikariDataSource as if you set them yourself — no custom
-`@Bean`, no override.
+`DATABASE_URL` may also be present in the Replit shell, but the canonical
+Spring configuration does not parse it and does not require a custom
+`EnvironmentPostProcessor`.
 
-## Canonical: `ReplitDatabaseUrlPostProcessor`
+## Canonical `application-replit.yml`
 
-Copy `ReplitDatabaseUrlPostProcessor.java` (next to this file) into
-`backend/application/src/main/java/<your.base.package>/config/`; adjust package.
+Use this shape in `backend/application/src/main/resources/application-replit.yml`:
 
-The class:
-- implements `EnvironmentPostProcessor`,
-- early-returns when `DATABASE_URL` is absent (gate on env-var presence, NOT
-  profile — `getActiveProfiles()` is empty before profiles resolve),
-- parses `DATABASE_URL` via `java.net.URI`,
-- reads `sslmode` from the URL query string when present; if the URL omits it,
-  the processor does not force TLS properties (`disable` produces `ssl=false`),
-- adds `spring.datasource.url`/`username`/`password` + Hikari SSL props to a
-  high-priority `MapPropertySource`,
-- fails fast with a readable message on missing `DATABASE_URL`.
-
-Register via:
+```yaml
+spring:
+  datasource:
+    url: jdbc:postgresql://${PGHOST:${POSTGRES_HOST:localhost}}:${PGPORT:${POSTGRES_PORT:5432}}/${PGDATABASE:${POSTGRES_DB:app}}
+    username: ${PGUSER:${POSTGRES_USER:app}}
+    password: ${PGPASSWORD:${POSTGRES_PASSWORD:app}}
+    hikari:
+      maximum-pool-size: 3
+      minimum-idle: 0
+      idle-timeout: 30000
+      connection-timeout: 5000
+      auto-commit: false
 ```
-backend/application/src/main/resources/META-INF/spring/org.springframework.boot.env.EnvironmentPostProcessor.imports
-```
-One line: FQN of the class.
 
-`application-replit.yml` declares only Hikari pool size, port, usage-logging
-defaults — no datasource block.
+Rules:
+- Keep `maximum-pool-size` at `2-3` on Replit. Do not copy the local-dev `50`.
+- Do not append `?sslmode=require` by default. Current Replit Postgres works
+  without SSL; forcing SSL broke real generated apps.
+- Do not add `ReplitDatabaseUrlPostProcessor`, `spring.factories`,
+  `EnvironmentPostProcessor.imports`, or a custom `DataSource` bean for the
+  Replit profile.
+- If a future Replit tier explicitly requires SSL, add it only after verifying
+  the actual env values and document the reason in README.
 
-## Why not `@Bean DataSource` or a `prestart.sh`
+## Why not `EnvironmentPostProcessor`
 
-- `@Bean DataSource` overrides Spring's auto-config; pool sizing moves out
-  of YAML; tests must manage bean override; HikariCP construction is
-  reimplemented from scratch.
-- A `prestart.sh` parsing `DATABASE_URL` ran only in the Run workflow
-  (deployments would fail to connect), required `set -euo pipefail`, was
-  fragile around special chars in passwords, and YAML alone couldn't apply
-  Hikari SSL data-source-properties cleanly.
+Spring Boot 3.x still loads `EnvironmentPostProcessor` implementations from
+`META-INF/spring.factories`. The `META-INF/spring/...imports` pattern is for
+auto-configuration imports, not this hook. Past generated apps registered the
+post-processor in the wrong place, so the class was correct but never ran.
 
-`EnvironmentPostProcessor` runs in every environment and is testable.
+The direct YAML approach is simpler and observable: `env | grep '^PG'` shows the
+same values Spring consumes.
 
 ## Local-dev profile
 
-`application-local.yml` sets `spring.datasource.url`/`username`/`password`
-for the docker-compose Postgres directly. Hikari pool can be `50`.
-Post-processor is inactive (no `DATABASE_URL`).
+`application-local.yml` uses the same property names via `.env` /
+docker-compose values:
 
-## Tests
+```yaml
+spring:
+  datasource:
+    url: jdbc:postgresql://${POSTGRES_HOST:localhost}:${POSTGRES_PORT:5432}/${POSTGRES_DB:app}
+    username: ${POSTGRES_USER:app}
+    password: ${POSTGRES_PASSWORD:app}
+```
 
-Run on default profile (no `replit`/`local`). Post-processor inactive;
-tests use Testcontainers Postgres or embedded `application-test.yml`.
+Local-dev may use Hikari `maximum-pool-size: 50`.

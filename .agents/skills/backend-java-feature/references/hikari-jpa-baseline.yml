@@ -2,7 +2,7 @@
 #
 # Drop this into application.yml as the default; override pool-size and
 # data-source URL per profile:
-#   - application-replit.yml → max-pool-size: 2-3, DATABASE_URL → JDBC translation
+#   - application-replit.yml → max-pool-size: 2-3, Replit PG* env vars
 #   - application-local.yml  → max-pool-size: 50 (this baseline)
 #
 # See references/application-replit.yml and references/database-url-translation.md

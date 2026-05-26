@@ -3,32 +3,26 @@
 Read BEFORE writing controllers, security config, or any DataSource hook.
 The main `SKILL.md` has a one-line summary; long fixes live here.
 
-## `EnvironmentPostProcessor` runs before profiles are resolved
+## Replit datasource env wiring
 
-`postProcessEnvironment()` runs BEFORE `SPRING_PROFILES_ACTIVE` is resolved
-— `env.getActiveProfiles()` returns empty. Any `if (!profiles.contains("replit")) return;`
-silently no-ops everywhere.
+Past scaffold versions used `ReplitDatabaseUrlPostProcessor` and registered it
+via `META-INF/spring/org.springframework.boot.env.EnvironmentPostProcessor.imports`.
+That is the wrong hook for Spring Boot 3.x: `EnvironmentPostProcessor` still
+requires `META-INF/spring.factories`; `.imports` is for auto-configuration.
 
-→ Gate on env-var presence (`DATABASE_URL`), not profile. The provided
-`ReplitDatabaseUrlPostProcessor` does this — don't "improve" it back.
+Do not add the post-processor back. Generated apps configure the Replit profile
+directly from env vars:
 
-`spring-boot:run` DOES load `EnvironmentPostProcessor` registrations from
-`target/classes/META-INF/spring/org.springframework.boot.env.EnvironmentPostProcessor.imports`.
-If DATABASE_URL is not applied, the fix is registration/classpath/build order,
-not replacing it with `PGHOST`/`PGPORT` YAML. Replit `postgresql-16` exposes
-`DATABASE_URL` as the source of truth; PG* fallbacks are forbidden.
-
-Required registration file:
-
-```text
-backend/application/src/main/resources/META-INF/spring/org.springframework.boot.env.EnvironmentPostProcessor.imports
+```yaml
+spring:
+  datasource:
+    url: jdbc:postgresql://${PGHOST:${POSTGRES_HOST:localhost}}:${PGPORT:${POSTGRES_PORT:5432}}/${PGDATABASE:${POSTGRES_DB:app}}
+    username: ${PGUSER:${POSTGRES_USER:app}}
+    password: ${PGPASSWORD:${POSTGRES_PASSWORD:app}}
 ```
 
-Content:
-
-```text
-<base-package>.config.ReplitDatabaseUrlPostProcessor
-```
+Do not force `sslmode=require`. Real Replit Postgres instances have been seen
+working without SSL, and forcing SSL broke app startup.
 
 ## OAuth2 Resource Server auto-config triggers on empty properties
 
@@ -49,6 +43,25 @@ Fix (both required):
 
 → Path literals in `requestMatchers` look like `/api/v1/auth/me`, never
 `/<context-path>/api/v1/auth/me`. See `AuthConstants.PUBLIC_PATHS`.
+
+Spring also protects the React shell unless you explicitly permit it. Keep these
+public when Spring Boot serves the built SPA:
+
+```text
+/
+/index.html
+/assets/**
+/login
+/login/**
+/*.css
+/*.js
+/*.png
+/*.svg
+```
+
+Backend APIs stay protected by default. When adding a new BrowserRouter route,
+add the route shell to `PUBLIC_PATHS` if it must load before the frontend can
+decide whether to redirect to login.
 
 ## OpenAPI `servers: [{ url: /api/v1 }]` is NOT applied to controllers
 

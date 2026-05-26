@@ -35,9 +35,11 @@ stays clean and service tests don't need `@WithMockUser`.
 
 ## Service that needs DB + external call
 
-`service` is the only module that can talk to both `domain` and
-`external-services`. External clients NEVER inject repositories themselves —
-they return data; service writes via the repository.
+`external-services` is optional. Add it only when the project has a real
+outbound integration and commit the first real client/adapter source files in
+the same change. Once it exists, `service` is the only module that can talk to
+both `domain` and `external-services`. External clients NEVER inject
+repositories themselves — they return data; service writes via the repository.
 
 ```java
 @Service

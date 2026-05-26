@@ -2,8 +2,8 @@
 <!--
   Application module — the ONLY module with @SpringBootApplication and the
   ONLY one activating spring-boot-maven-plugin (repackage). <start-class>
-  points repackage at the main class. Pulls in service (+ domain +
-  external-services transitively) and db (Liquibase changelogs in fat jar).
+  points repackage at the main class. Pulls in service (+ domain transitively)
+  and db (Liquibase changelogs in fat jar).
   Generated OpenAPI sources in target/generated-sources/openapi.
 -->
 <project xmlns="http://maven.apache.org/POM/4.0.0"
@@ -31,7 +31,7 @@
 
     <dependencies>
         <!-- REQUIRED edges (drop either → broken):
-               application → service (transitively brings domain + external-services)
+               application → service (transitively brings domain)
                application → db      (Liquibase changelogs MUST be in fat jar) -->
         <dependency>
             <groupId>${project.groupId}</groupId>

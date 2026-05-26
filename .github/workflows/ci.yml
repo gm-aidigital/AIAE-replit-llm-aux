@@ -31,7 +31,6 @@ jobs:
             ".agents/skills/backend-java-feature/references/hikari-jpa-baseline.yml"
             ".agents/skills/backend-java-feature/references/application-replit.yml"
             ".agents/skills/backend-java-feature/references/database-url-translation.md"
-            ".agents/skills/backend-java-feature/references/ReplitDatabaseUrlPostProcessor.java"
             ".agents/skills/backend-java-feature/references/spring-boot-gotchas.md"
             ".agents/skills/backend-java-feature/references/code-patterns.md"
             ".agents/skills/openapi-contract-first/SKILL.md"
@@ -45,6 +44,7 @@ jobs:
             "templates/generated-project/openapi/canonical-openapi-rules.md"
             "templates/generated-project/auth/google-sso-clerk-blueprint.md"
             "templates/generated-project/frontend/canonical-react-frontend-rules.md"
+            "templates/generated-project/frontend/elevate-design-guidelines.md"
             "templates/generated-project/frontend/bem-naming-rules.md"
             "templates/generated-project/structure/near-production-project-structure.md"
             "templates/generated-project/generation/token-efficient-generation-rules.md"
@@ -72,14 +72,12 @@ jobs:
             "templates/generated-project/scaffold/backend/service/pom.xml"
             "templates/generated-project/scaffold/backend/domain/pom.xml"
             "templates/generated-project/scaffold/backend/db/pom.xml"
-            "templates/generated-project/scaffold/backend/external-services/pom.xml"
 
             # === Scaffold application module (Java) ===
             "templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/Application.java"
             "templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/config/ApplicationMapperConfig.java"
             "templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/config/LogbookConfig.java"
             "templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/config/OpenApiSpecConfig.java"
-            "templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/config/ReplitDatabaseUrlPostProcessor.java"
             "templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/security/SecurityConfig.java"
             "templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/security/MockJwtDecoder.java"
             "templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/security/AuthConstants.java"
@@ -126,7 +124,6 @@ jobs:
             "templates/generated-project/scaffold/backend/service/src/main/java/PACKAGE_REPLACE_ME/service/sample/models/SampleUpdate.java"
 
             # === Scaffold application resources ===
-            "templates/generated-project/scaffold/backend/application/src/main/resources/META-INF/spring/org.springframework.boot.env.EnvironmentPostProcessor.imports"
             "templates/generated-project/scaffold/backend/application/src/main/resources/application.yml"
             "templates/generated-project/scaffold/backend/application/src/main/resources/application-replit.yml"
             "templates/generated-project/scaffold/backend/application/src/main/resources/application-local.yml"
@@ -265,8 +262,7 @@ jobs:
           # PACKAGE_REPLACE_ME is the only allowed Java-package placeholder
           # token. Anywhere else it appears, treat as drift.
           for f in templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/Application.java \
-                   templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/config/OpenApiSpecConfig.java \
-                   templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/config/ReplitDatabaseUrlPostProcessor.java; do
+                   templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/config/OpenApiSpecConfig.java; do
             grep -q 'PACKAGE_REPLACE_ME' "$f" || { echo "Scaffold $f lost the PACKAGE_REPLACE_ME placeholder"; exit 1; }
           done
           test -f templates/generated-project/scaffold/backend/application/src/main/resources/api/v1/specs/openapi.yaml \
@@ -283,6 +279,10 @@ jobs:
           pj='templates/generated-project/scaffold/frontend/package.json'
           for k in '"generate:api"' '"check:api"' '"test"' 'openapi-typescript' 'openapi-fetch' '@tanstack/react-query' '@clerk/clerk-react' 'vitest' '@testing-library/react'; do
             grep -q "$k" "$pj" || { echo "Scaffold frontend/package.json missing $k"; exit 1; }
+          done
+          readme='templates/generated-project/scaffold/README.md.template'
+          for k in '^## What this is' '^## API' 'Swagger UI' 'OpenAPI YAML'; do
+            grep -q "$k" "$readme" || { echo "Scaffold README template missing $k"; exit 1; }
           done
           # Guard Replit failures seen in generated projects.
           grep -q 'mvn -f backend/application/pom.xml' .replit \
@@ -316,6 +316,9 @@ jobs:
           ! grep -RInE 'fetch[[:space:]]*\(|from[[:space:]]+["'\'']axios["'\'']|axios\.|new[[:space:]]+XMLHttpRequest' \
               --include='*.ts' --include='*.tsx' templates/generated-project/scaffold/frontend/src >/dev/null \
             || { echo "Frontend must use typed shared/api/client.ts, not raw fetch/axios/XMLHttpRequest"; exit 1; }
+          ! grep -RInE 'Sidebar|SideNav|LeftNav|side-nav|side-menu|left-nav|left-menu|app__sidebar|layout__sidebar' \
+              --include='*.ts' --include='*.tsx' --include='*.css' templates/generated-project/scaffold/frontend/src >/dev/null \
+            || { echo "Frontend scaffold must not include a left side menu/sidebar"; exit 1; }
           ruby <<'RUBY'
           require "yaml"
 
@@ -345,18 +348,21 @@ jobs:
           grep -q 'port:[[:space:]]*\${PORT:5000}' \
               templates/generated-project/scaffold/backend/application/src/main/resources/application-replit.yml \
             || { echo "application-replit.yml must keep server.port: \${PORT:5000}"; exit 1; }
-          ! grep -RIn 'spring.datasource.url\|spring.datasource.username\|spring.datasource.password' \
+          grep -Fq 'url: jdbc:postgresql://${PGHOST' \
+              templates/generated-project/scaffold/backend/application/src/main/resources/application-replit.yml \
+            || { echo "application-replit.yml must set datasource URL from PGHOST/PGPORT/PGDATABASE"; exit 1; }
+          grep -Fq 'username: ${PGUSER' \
+              templates/generated-project/scaffold/backend/application/src/main/resources/application-replit.yml \
+            || { echo "application-replit.yml must set datasource username from PGUSER"; exit 1; }
+          grep -Fq 'password: ${PGPASSWORD' \
+              templates/generated-project/scaffold/backend/application/src/main/resources/application-replit.yml \
+            || { echo "application-replit.yml must set datasource password from PGPASSWORD"; exit 1; }
+          ! grep -RIn 'sslmode=require' \
               templates/generated-project/scaffold/backend/application/src/main/resources/application-replit.yml >/dev/null \
-            || { echo "application-replit.yml must not set datasource url/username/password"; exit 1; }
-          ! grep -RInE '^[[:space:]]*(url|username|password):' \
-              templates/generated-project/scaffold/backend/application/src/main/resources/application-replit.yml >/dev/null \
-            || { echo "application-replit.yml must not set datasource url/username/password"; exit 1; }
-          ! grep -RIn 'PGHOST\|PGPORT\|PGDATABASE\|PGUSER\|PGPASSWORD' \
-              templates/generated-project/scaffold/backend/application/src/main/resources/application-replit.yml >/dev/null \
-            || { echo "application-replit.yml must not depend on legacy PG* env vars"; exit 1; }
-          grep -q 'ReplitDatabaseUrlPostProcessor' \
-              templates/generated-project/scaffold/backend/application/src/main/resources/META-INF/spring/org.springframework.boot.env.EnvironmentPostProcessor.imports \
-            || { echo "ReplitDatabaseUrlPostProcessor must be registered"; exit 1; }
+            || { echo "application-replit.yml must not force sslmode=require"; exit 1; }
+          ! grep -RInE 'ReplitDatabaseUrlPostProcessor|EnvironmentPostProcessor.imports|spring.factories' \
+              templates/generated-project/scaffold/backend/application/src/main >/dev/null \
+            || { echo "Scaffold must not use datasource EnvironmentPostProcessor registration"; exit 1; }
           grep -q '<groupId>org.postgresql</groupId>' templates/generated-project/scaffold/backend/application/pom.xml \
               && grep -q '<artifactId>postgresql</artifactId>' templates/generated-project/scaffold/backend/application/pom.xml \
             || { echo "application/pom.xml must declare the PostgreSQL runtime driver"; exit 1; }
@@ -365,6 +371,22 @@ jobs:
           grep -q '/actuator/prometheus' \
               templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/security/AuthConstants.java \
             || { echo "/actuator/prometheus must stay public"; exit 1; }
+          grep -Fq '"/"' templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/security/AuthConstants.java \
+              && grep -Fq '"/assets/**"' templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/security/AuthConstants.java \
+            || { echo "React shell and static assets must stay public in AuthConstants"; exit 1; }
+          backend_dir="templates/generated-project/scaffold/backend"
+          for module in $(sed -n 's:.*<module>\(.*\)</module>.*:\1:p' "${backend_dir}/pom.xml"); do
+            module_dir="${backend_dir}/${module}"
+            [ -d "${module_dir}" ] || { echo "backend/pom.xml lists missing module: ${module}"; exit 1; }
+            [ -d "${module_dir}/src" ] \
+                && find "${module_dir}/src" -type f ! -path '*/target/*' | grep -q . \
+              || { echo "Maven module must not be empty/POM-only: ${module}"; exit 1; }
+          done
+          if [ ! -f "${backend_dir}/external-services/pom.xml" ]; then
+            ! grep -RIn '<artifactId>external-services</artifactId>\|<module>external-services</module>' \
+                "${backend_dir}/pom.xml" "${backend_dir}/service/pom.xml" >/dev/null 2>&1 \
+              || { echo "external-services is optional; do not reference it when no module exists"; exit 1; }
+          fi
           grep -q 'app.auth.sso.jwk-set-uri' \
               templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/security/AuthConstants.java \
             || { echo "AUTH_MODE=auto must require issuer/JWKS before enabling SSO"; exit 1; }

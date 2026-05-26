@@ -1,12 +1,14 @@
 # application-replit.yml
 #
-# Replit-specific overrides. The actual datasource URL/username/password are
-# derived from DATABASE_URL by ReplitDatabaseUrlPostProcessor BEFORE Spring
-# builds the application context — so we don't need to set them here. We
-# only declare Hikari pool sizing and any other Replit-only tuning.
+# Replit-specific overrides. Replit's postgresql-16 module exposes individual
+# PG* env vars to the app process. Configure Spring directly from those values;
+# no EnvironmentPostProcessor and no forced sslmode.
 
 spring:
   datasource:
+    url: jdbc:postgresql://${PGHOST:${POSTGRES_HOST:localhost}}:${PGPORT:${POSTGRES_PORT:5432}}/${PGDATABASE:${POSTGRES_DB:app}}
+    username: ${PGUSER:${POSTGRES_USER:app}}
+    password: ${PGPASSWORD:${POSTGRES_PASSWORD:app}}
     hikari:
       maximum-pool-size: 3       # Replit's managed SQL DB has a low conn ceiling
       minimum-idle: 0

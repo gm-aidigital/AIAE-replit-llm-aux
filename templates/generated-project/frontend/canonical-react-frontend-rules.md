@@ -7,6 +7,8 @@ adapted for MVP→handoff.
 
 - React + TypeScript (strict).
 - Vite (other frameworks only on explicit user request).
+- Elevate visual system via
+  `templates/generated-project/frontend/elevate-design-guidelines.md`.
 
 ## Bootstrap rule — copy the scaffold, do NOT regenerate
 
@@ -61,6 +63,10 @@ Regeneration (major Vite upgrade): diff against scaffold MUST preserve all six.
 - **Plain CSS files with BEM naming** for styling — NOT CSS Modules,
   Tailwind, styled-components, Emotion, or CSS-in-JS. See
   `templates/generated-project/frontend/bem-naming-rules.md`.
+- **No left side menu**. Use a top app header, page tabs, filter bars,
+  segmented controls, and contextual toolbars. Do not generate `Sidebar`,
+  `SideNav`, `LeftNav`, drawer-as-navigation, or a permanent left rail unless
+  the user explicitly overrides this template rule.
 
 ## Folder layout
 
@@ -102,6 +108,13 @@ Generated artifacts:
 - **BEM class names** for all styles (`block`, `block__element`, `block--modifier`).
   Plain CSS only; no CSS Modules / Tailwind / styled-components.
   See `bem-naming-rules.md` for the full convention and examples.
+- Follow Elevate tokens: primary `239 100% 43%`, secondary surface
+  `240 78% 98%`, accent surface `237 76% 94%`, compact Inter typography,
+  12px card radius, 10px controls, one primary CTA per view, status colors only
+  for state.
+- Never hard-code colors in component CSS. Colors live in
+  `src/shared/ui/base/tokens.css`; components consume semantic variables.
+- Navigation is top/header-first. Left side menu/sidebar patterns are forbidden.
 - One block per directory: `<block-name>.tsx` + `<block-name>.css` + optional `components/`.
 - Frontend never accesses the DB, service-account keys, or any secrets directly — backend APIs only.
 - No secrets in frontend env vars.
