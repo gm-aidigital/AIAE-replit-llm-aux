@@ -419,7 +419,7 @@ jobs:
               && grep -Fq '@Transactional(propagation = Propagation.REQUIRES_NEW)' \
               templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/observability/usage/UsageEventPersistenceService.java \
             || { echo "UsageEventPersistenceService must own @Async + REQUIRES_NEW persistence"; exit 1; }
-          ! grep -RIn '@Transactional' \
+          ! grep -RIn '^[[:space:]]*@Transactional' \
               templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/observability/usage/UsageLoggingAspect.java >/dev/null 2>&1 \
             || { echo "Do not put @Transactional on @Around advice; use UsageEventPersistenceService"; exit 1; }
           grep -Fq '@JdbcTypeCode(SqlTypes.JSON)' \
@@ -427,6 +427,10 @@ jobs:
               && grep -Fq 'Map<String, Object> attributes' \
               templates/generated-project/scaffold/backend/domain/src/main/java/PACKAGE_REPLACE_ME/domain/usage/entities/UsageEventEntity.java \
             || { echo "UsageEventEntity.attributes must be JSONB via @JdbcTypeCode(SqlTypes.JSON) Map<String,Object>"; exit 1; }
+          ! grep -RInE "LOWER\\(CONCAT\\('%',[[:space:]]*:[A-Za-z0-9_]+" \
+              templates/generated-project/scaffold/backend/domain/src/main/java \
+              templates/generated-project/scaffold/backend/service/src/main/java >/dev/null 2>&1 \
+            || { echo "Nullable JPQL LIKE params must use prebuilt patterns or cast(:param as string), not LOWER(CONCAT('%', :param, ...))"; exit 1; }
           ! grep -Eq 'spring-boot-starter-(security|oauth2-resource-server|web)|spring-security|jakarta.servlet-api|jjwt-' \
               templates/generated-project/scaffold/backend/service/pom.xml \
             || { echo "service/pom.xml must not depend on web/security/servlet/JWT libraries"; exit 1; }
@@ -475,7 +479,11 @@ jobs:
           cp -r templates/generated-project/scaffold/backend /tmp/scaffold-test/backend
           cd /tmp/scaffold-test
           # Rename PACKAGE_REPLACE_ME dirs and replace token in file contents.
-          find backend -depth -name PACKAGE_REPLACE_ME -execdir mv {} replitmvp \;
+          while IFS= read -r dir; do
+            parent="$(dirname "${dir}")"
+            mkdir -p "${parent}/com/aidigital"
+            mv "${dir}" "${parent}/com/aidigital/replitmvp"
+          done < <(find backend -depth -type d -name PACKAGE_REPLACE_ME)
           find backend -type f \( -name '*.java' -o -name '*.xml' -o -name '*.yml' -o -name '*.yaml' \) \
-            -exec sed -i 's/PACKAGE_REPLACE_ME/replitmvp/g' {} +
+            -exec sed -i 's/PACKAGE_REPLACE_ME/com.aidigital.replitmvp/g' {} +
           mvn -f backend/pom.xml -B -Dskip.frontend=true -DskipTests -Dgit-commit-id.skip=true compile

@@ -20,6 +20,13 @@ context-path · `git-commit-id-maven-plugin`.
 
 Never replace Java with Node without explicit user approval.
 
+Package root is fixed: `com.aidigital.<app-name-package>.*`. Set the parent
+`backend/pom.xml` `<groupId>` to the same value and replace every
+`PACKAGE_REPLACE_ME` with it. `<app-name-package>` is lowercase alphanumeric
+derived from the app display name (`Employee Directory` →
+`com.aidigital.employeedirectory`). Never use `com.example`, `org.example`,
+`io.replit`, `demo`, or a one-segment package.
+
 ## Canonical references (do not duplicate)
 
 | Topic | Canonical file |

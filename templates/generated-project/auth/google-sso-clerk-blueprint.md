@@ -42,20 +42,87 @@ Resource Server. JWT validation code path is identical for managed vs standalone
 
 Direct Google OIDC without Clerk only when project standards require it.
 
-## Skip Clerk entirely — use Replit Auth
+## Replit Auth as a fourth mode (`AUTH_MODE=replit`)
 
-For Replit-only demos (no local-dev export, no handoff),
-[Replit Auth](https://docs.replit.com/references/auth-and-identity/authentication)
-is zero-config — identity handled by Replit. Accept that exporting later
-means rewriting the auth layer.
+[Replit Auth](https://docs.replit.com/additional-resources/replit-auth) is
+zero-config inside a Replit workspace: `REPL_ID` (UUID) is the pre-registered
+OIDC public client id and `REPLIT_DOMAINS` carries the registered host list.
+No client secret, no Clerk Dashboard, no Google OAuth toggling.
+
+Trade-off vs Clerk modes: Replit Auth credentials are **tied to the Replit
+workspace**, so the auth layer must be rewritten when exporting to local
+docker-compose or a non-Replit deployment. Choose `replit` for fast demos
+that won't leave Replit; choose Clerk (managed or standalone) when handoff
+includes local-dev parity.
+
+### Replit-mode chain (session cookie, not Bearer)
+
+Unlike Clerk/mock which are stateless Bearer JWTs, Replit mode is
+**session-cookie + CSRF** (`JSESSIONID` + `XSRF-TOKEN`). The
+`oauth2Login` filter chain replaces the stateless resource-server chain.
+Both can't run together — the resource-server chain is gated off by
+`AuthConstants.NON_REPLIT_MODE_CONDITION` (SpEL on `app.auth.mode != replit`)
+on every JwtDecoder bean and the resource-server `SecurityFilterChain`.
+
+The dedicated `application/security/ReplitOidcSecurityConfig.java` carries:
+
+1. `ClientRegistrations.fromIssuerLocation("https://replit.com/oidc")` for
+   OIDC discovery — **never** the static
+   `ClientRegistration.withRegistrationId(...).issuerUri(...)` builder (it
+   throws `authorizationUri cannot be empty`; the setter only stores the
+   issuer claim, it does not trigger discovery).
+2. `clientId(REPL_ID)` + `clientAuthenticationMethod(NONE)` → PKCE public client.
+3. SPA-friendly CSRF: `CookieCsrfTokenRepository.withHttpOnlyFalse()` +
+   plain `CsrfTokenRequestAttributeHandler` (NOT the default `Xor…` one — the
+   XOR mask makes the cookie value ≠ header value and every POST 403s).
+4. `htmlVsApiEntryPoint`: browser navigations get a 302 to
+   `/oauth2/authorization/replit`; XHR/JSON gets `401` so the SPA AuthGate
+   can render the sign-in screen without a hard navigation.
+5. Tight `PUBLIC_PATHS` (SPA shell + static + `/oauth2/**` + `/login/oauth2/**`
+   + `/actuator/health`). When "gate the whole app" is the requirement do NOT
+   leave `/actuator/prometheus`, `/swagger-ui/**`, `/v3/api-docs/**`,
+   `/api/v1/specs/**` open — unauthenticated visitors can scrape metrics
+   and the full OpenAPI surface otherwise.
+
+### Required Spring config for Replit mode
+
+`application.yml` MUST contain:
+
+```yaml
+server:
+  forward-headers-strategy: framework
+```
+
+Spring resolves `{baseUrl}` from the raw servlet request, which inside the
+Replit container is `http://localhost:5000`. The IdP rejects the resulting
+`redirect_uri` and you get a login loop. `framework` makes Spring honour
+`X-Forwarded-Proto` / `X-Forwarded-Host` so `{baseUrl}` resolves to the
+public `https://*.replit.dev` host. Harmless when `AUTH_MODE != replit`,
+leave it always on.
+
+### Frontend for Replit mode
+
+- No `ClerkProvider`, no token getter. `AuthProvider.tsx`'s `usesClerkAuth()`
+  guard already short-circuits to `<>{children}</>` when AUTH_MODE is not SSO.
+- All fetches send `credentials: "include"` so the session cookie travels.
+- Non-GET fetches read `XSRF-TOKEN` cookie and echo it as `X-XSRF-TOKEN`
+  header (see `spring-security-spa-csrf` memory for the canonical snippet).
+- On `401` JSON response, the AuthGate component navigates to
+  `/oauth2/authorization/replit` (full-page nav, NOT XHR) — Replit's IdP
+  redirects back to `/login/oauth2/code/replit` and Spring lands on `/`.
+- The mock-mode `pages/Login.tsx` is still shipped (Replit deletes it
+  otherwise); it is simply unreachable in Replit mode because the
+  authentication entry point redirects to the IdP before the SPA router
+  ever sees `/login`.
 
 ## Modes (`AUTH_MODE`)
 
-| Value | Behavior |
-|---|---|
-| `auto` (default) | Use Clerk SSO when `CLERK_SECRET_KEY` plus `AUTH_ISSUER_URI` or `AUTH_JWKS_URI` are set; fall back to mock otherwise. |
-| `sso` | Require Clerk keys; fail startup if missing. |
-| `mock` | Skip external IdP; expose local mock login. |
+| Value | Behavior | Token transport |
+|---|---|---|
+| `auto` (default) | Use Clerk SSO when `CLERK_SECRET_KEY` plus `AUTH_ISSUER_URI` or `AUTH_JWKS_URI` are set; fall back to mock otherwise. | Bearer JWT |
+| `sso` | Require Clerk keys; fail startup if missing. | Bearer JWT |
+| `mock` | Skip external IdP; expose local mock login. | Bearer JWT (backend-signed HS256) |
+| `replit` | Replit OIDC (public client + PKCE). Requires `REPL_ID`; no client secret. Session cookie + CSRF, NOT Bearer. | `JSESSIONID` + `X-XSRF-TOKEN` |
 
 Generated projects start in both `mock` and `sso` without code rewrites.
 Managed Clerk: keys may be auto-present, but Spring still needs
@@ -121,6 +188,30 @@ Provider-specific:
 - **Direct Google OIDC**: `iss` = Google issuer; `aud` = `GOOGLE_CLIENT_ID`.
 
 Map trusted claims (`sub`, `email`, roles/groups) into the application principal.
+
+### Authorization roles (REQUIRED for admin/role-based apps)
+
+JWT validation answers "who is this user?". Application authorization answers
+"what can this user do?". Do not rely on Spring's default
+`JwtGrantedAuthoritiesConverter`: it reads `scope`/`scp`, while mock tokens and
+many Clerk JWT templates do not contain those claims. Past generated apps
+logged in correctly but returned `403 insufficient_scope` for
+`/api/v1/admin/**`.
+
+When the app has roles, admin screens, HR/manager flows, or any
+`hasRole(...)`/`hasAuthority(...)` rule:
+
+1. Configure a custom `JwtAuthenticationConverter`.
+2. Resolve the canonical user id from the validated JWT email.
+3. Load roles server-side from the app role source, normally
+   `user_roles.user_id = lower(email)`.
+4. Convert them to Spring authorities with the `ROLE_` prefix
+   (`ROLE_HR_MANAGER`, `ROLE_EMPLOYEE`, etc.).
+5. Use the same converter for mock and SSO tokens.
+
+Frontend role state is display-only. Backend endpoints must authorize from the
+validated JWT plus backend role lookup. If no role table exists yet, seed one
+with Liquibase before protecting admin endpoints.
 
 ### Principal-key contract (REQUIRED)
 
@@ -191,6 +282,13 @@ CLERK_PUBLISHABLE_KEY    # auto
 CLERK_SECRET_KEY         # auto
 ```
 
+Replit Workspace (when `AUTH_MODE=replit`):
+```
+# Auto-injected by Replit — do not set manually
+REPL_ID                  # auto — pre-registered OIDC client_id
+REPLIT_DOMAINS           # auto — comma-separated registered host list
+```
+
 Backend (read in `application.yml` / `application-<profile>.yml`):
 ```
 AUTH_MODE                # auto|sso|mock
@@ -243,6 +341,35 @@ Never inject the Google client secret into the browser.
 **SSO mode — standalone Clerk Dashboard**
 Same as above; Clerk keys pasted manually into Replit Secrets / `.env`
 from the Clerk Dashboard; tenant on the company's account.
+
+**Replit Auth mode (`AUTH_MODE=replit`)**
+1. Inside a Replit workspace `REPL_ID` is auto-provisioned; start with `AUTH_MODE=replit`.
+2. Navigate to any protected page → 302 to `/oauth2/authorization/replit` → Replit IdP → callback to `/login/oauth2/code/replit` → land on `/`.
+3. `GET /api/v1/auth/me` → `200` (session cookie carries identity).
+4. Sign out: `POST /logout` with `X-XSRF-TOKEN` header → 302 to `/`, `JSESSIONID` + `XSRF-TOKEN` cookies cleared.
+5. Unauthenticated XHR to a protected endpoint → `401` JSON (NOT a redirect), so the SPA can render the sign-in CTA.
+
+## Replit Auth (`AUTH_MODE=replit`): hard rules
+
+- **Do NOT** add a Bearer-JWT path for the same chain — the OAuth2 login
+  filter and resource-server filter chains cannot both apply. The mock/SSO
+  `JwtDecoder` beans MUST be gated off via `NON_REPLIT_MODE_CONDITION`.
+- **Do NOT** remove `server.forward-headers-strategy=framework` from
+  `application.yml` — login loop guaranteed otherwise.
+- **Do NOT** widen `PUBLIC_PATHS` in `ReplitOidcSecurityConfig` to include
+  `/actuator/prometheus`, `/swagger-ui/**`, `/v3/api-docs/**`, `/api/v1/specs/**`
+  unless the spec explicitly says "metrics and OpenAPI are public" —
+  scraping risk.
+- **Do NOT** disable CSRF — the chain is session-cookie based; CSRF disable
+  opens cross-site request forgery against any authenticated user. Use the
+  non-XOR `CsrfTokenRequestAttributeHandler` as documented.
+- **Do NOT** key `user_roles.user_id` on `sub` — Replit's `sub` is the
+  Replit user id, opaque and not portable. Use `email` (lowercased) like the
+  Clerk/mock principal contract above; falls under the same canonical-claim
+  rule.
+- **Do NOT** rebuild `ClientRegistration` from `withRegistrationId(...).issuerUri(...)`
+  — only `ClientRegistrations.fromIssuerLocation(...)` triggers OIDC discovery.
+  The static builder leaves authorization/token endpoints empty and Spring throws.
 
 ## Replit-managed Clerk: hard rules
 

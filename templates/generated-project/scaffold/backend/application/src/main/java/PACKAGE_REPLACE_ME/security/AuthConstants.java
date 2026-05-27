@@ -18,6 +18,20 @@ public final class AuthConstants {
     public static final String AUTH_MODE_AUTO = "auto";
     public static final String AUTH_MODE_SSO = "sso";
     public static final String AUTH_MODE_MOCK = "mock";
+    /** Replit OIDC mode — public client, PKCE, session cookie. Separate filter chain. */
+    public static final String AUTH_MODE_REPLIT = "replit";
+
+    /**
+     * SpEL: "AUTH_MODE != replit". Gates the stateless resource-server chain
+     * and every {@code JwtDecoder} bean off when Replit OIDC is active —
+     * Replit mode runs a session-cookie {@code oauth2Login} chain in
+     * {@code ReplitOidcSecurityConfig} and the two filter chains MUST NOT
+     * both apply (Bearer + session cookie on the same path = ambiguous
+     * principal, plus the OAuth2 resource-server auto-config crashes startup
+     * when no decoder is needed but the chain is wired).
+     */
+    public static final String NON_REPLIT_MODE_CONDITION =
+        "'${app.auth.mode:auto}' != 'replit'";
 
     /**
      * SpEL expression for "AUTH_MODE=auto AND Clerk keys plus issuer/JWKS are present".

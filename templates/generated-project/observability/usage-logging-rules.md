@@ -121,9 +121,14 @@ by one `try/catch/finally` in the aspect. Disable globally via
 - `UsageLogger` — interface, single method `void record(UsageEvent event)`.
   Lives in `service/common/observability/`; impls (`PostgresUsageLogger`,
   `NoOpUsageLogger`) live in `application/observability/usage/`.
-- `PostgresUsageLogger` — implementation, `@Async("usageLoggingExecutor")`
-  so the DB write runs off the request thread. Repository `save()` opens its
-  own short transaction.
+- `PostgresUsageLogger` — thin dispatcher only. It calls
+  `UsageEventPersistenceService.persist(event)`. It does NOT save directly
+  and does NOT own `@Transactional`; otherwise Spring proxying is bypassed.
+- `UsageEventPersistenceService` — separate Spring bean that owns the actual
+  insert. Method `persist(UsageEvent)` MUST be annotated with both
+  `@Async("usageLoggingExecutor")` and
+  `@Transactional(propagation = Propagation.REQUIRES_NEW)`, then catch/log/drop
+  any insert failure.
 - `NoOpUsageLogger` — bound only when `enabled=false`.
 
 ### Critical invariants (preserve on every edit)
@@ -136,9 +141,10 @@ by one `try/catch/finally` in the aspect. Disable globally via
    Spring's `@Transactional` (`LOWEST_PRECEDENCE`). Usage event is logged
    AFTER the controller's transaction commits/rolls back; the `status`
    field reflects the final outcome.
-3. **Logger is `@Async`** — the aspect hands off the event and returns
-   immediately. Logger's own writer opens `REQUIRES_NEW` so it isn't
-   bound to the caller's tx.
+3. **Persistence service is `@Async` + `REQUIRES_NEW`** — the aspect hands
+   off the event and returns immediately. The INSERT runs in a separate Spring
+   proxy and a separate transaction, so it is not bound to a controller's
+   read-only transaction or rollback.
 4. **No raw args** — the aspect deliberately ignores `joinPoint.getArgs()`.
    `action`/`eventType` from the annotation + auth context + duration +
    status is the entire payload. Anything sensitive is unreachable through
@@ -200,8 +206,14 @@ public class UsageLoggingConfig {
     @Bean
     @ConditionalOnProperty(name = "app.usage-logging.enabled", havingValue = "true")
     @ConditionalOnProperty(name = "app.usage-logging.service-name")
-    UsageLogger postgresUsageLogger(UsageEventRepository repo, UsageLoggingProperties props) {
-        return new PostgresUsageLogger(repo, props);
+    UsageLogger postgresUsageLogger(UsageEventPersistenceService persistenceService,
+                                    UsageLoggingProperties props) {
+        return new PostgresUsageLogger(persistenceService);
+    }
+
+    @Bean
+    UsageEventPersistenceService usageEventPersistenceService(UsageEventRepository repo) {
+        return new UsageEventPersistenceService(repo);
     }
 
     @Bean
@@ -213,16 +225,24 @@ public class UsageLoggingConfig {
 ```
 
 Implementation rules for `PostgresUsageLogger`:
-- `@Async("usageLoggingExecutor")` on the `record` method — runs off-thread.
+- `record(UsageEvent)` delegates to `UsageEventPersistenceService.persist(event)`.
+- No direct repository field and no `repo.save(...)` in `PostgresUsageLogger`.
+- No `@Async` or `@Transactional` on `PostgresUsageLogger.record`; these must
+  live on the separate persistence bean so Spring proxying applies.
+
+Implementation rules for `UsageEventPersistenceService`:
+- `@Async("usageLoggingExecutor")` and
+  `@Transactional(propagation = Propagation.REQUIRES_NEW)` on `persist`.
 - Inside the method body: `repo.save(toEntity(event))` wrapped in
-  `try/catch (Exception)`. On failure: log via SLF4J, **swallow** — never
+  `try/catch (Throwable)`. On failure: log via SLF4J, **swallow** — never
   rethrow into the request flow.
 - Provide a `TaskExecutor` bean `usageLoggingExecutor` with a bounded queue
   (e.g. `ThreadPoolTaskExecutor` with `corePoolSize=1, queueCapacity=200`)
   + `RejectedExecutionHandler` that logs+drops.
-- Never `@Transactional` on the logger — opens an outer-transaction trap.
-  If the calling request is in a transaction and async picks up its rollback,
-  events disappear. The repo's `save` opens its own short transaction.
+- Never `@Transactional` on `UsageLoggingAspect` / `@Around` advice. Spring
+  applies transactions via proxies; advice methods are not called through the
+  controller's proxy. Past generated apps inherited the controller's read-only
+  transaction and blocked INSERTs. The separate persistence bean is mandatory.
 
 ## Liquibase changelog
 

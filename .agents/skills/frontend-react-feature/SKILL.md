@@ -67,6 +67,12 @@ OpenAPI paths already include `/api/v1/...`. Therefore `openapi-fetch`
 `shared/config` reads runtime config from `import.meta.env` and validates it at
 boot. Build-time secrets are forbidden.
 
+The React app must never show a Replit port-switch placeholder as product UI
+(`"React dev server is running on port 5173"`, `"Switch the preview pane"`,
+`"Open on port 5173"`). In the workspace the developer can open preview 5173;
+in deployment Spring serves the built React app from 5000. User-facing screens
+must be the actual app in both cases.
+
 ## React common gotchas (real past failures)
 
 - **Never call `navigate()` during render.** `useNavigate()` is a setter
@@ -95,6 +101,10 @@ boot. Build-time secrets are forbidden.
   Use only `shared/api/client.ts` (`openapi-fetch`) under `frontend/src`.
   Raw `fetch`, `axios`, and `XMLHttpRequest` are forbidden because they bypass
   generated OpenAPI path/method types and recreate the Replit log failures.
+- **Reference/status enums are exhaustive.** Labels, badge variants, filters,
+  and toggle/segmented controls must cover every value in the generated OpenAPI
+  enum. If the spec has `ACTIVE`, `ON_LEAVE`, `ON_VACATION`, the UI cannot be a
+  two-way active/leave toggle.
 
 ## Testing requirements
 

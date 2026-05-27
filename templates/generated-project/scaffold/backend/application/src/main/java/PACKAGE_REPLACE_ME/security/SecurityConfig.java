@@ -1,8 +1,12 @@
-// SecurityConfig — dual-mode auth chain.
-// AUTH_MODE=sso  → Clerk JwtDecoder against issuer JWKS.
-// AUTH_MODE=mock → MockJwtDecoder (HS256, backend-signed).
-// AUTH_MODE=auto → SSO if CLERK_SECRET_KEY plus issuer/JWKS are set, else mock.
-// Single SecurityFilterChain; only JwtDecoder bean differs per mode.
+// SecurityConfig — stateless Bearer-JWT auth chain.
+// AUTH_MODE=sso    → Clerk JwtDecoder against issuer JWKS.
+// AUTH_MODE=mock   → MockJwtDecoder (HS256, backend-signed).
+// AUTH_MODE=auto   → SSO if CLERK_SECRET_KEY plus issuer/JWKS are set, else mock.
+// AUTH_MODE=replit → DISABLED HERE; ReplitOidcSecurityConfig owns the chain
+//                    (session-cookie oauth2Login, not Bearer). Every bean
+//                    below is gated by AuthConstants.NON_REPLIT_MODE_CONDITION
+//                    so the two chains never coexist.
+// Single SecurityFilterChain; only JwtDecoder bean differs per Bearer mode.
 //
 // GOTCHA: OAuth2 resource-server auto-config triggers on empty issuer-uri
 // and crashes startup. Fix: always provide @Bean JwtDecoder (hard-fallback
@@ -73,6 +77,7 @@ public class SecurityConfig {
      * @throws Exception propagated by Spring Security when the chain cannot be built
      */
     @Bean
+    @ConditionalOnExpression(AuthConstants.NON_REPLIT_MODE_CONDITION)
     SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         return http
             .csrf(AbstractHttpConfigurer::disable)
@@ -148,6 +153,7 @@ public class SecurityConfig {
     @Bean
     @ConditionalOnProperty(name = AuthConstants.AUTH_MODE_PROPERTY,
                            havingValue = AuthConstants.AUTH_MODE_SSO)
+    @ConditionalOnExpression(AuthConstants.NON_REPLIT_MODE_CONDITION)
     JwtDecoder ssoJwtDecoder(AuthProperties props) {
         return buildSsoDecoder(props);
     }
@@ -225,6 +231,7 @@ public class SecurityConfig {
      */
     @Bean
     @ConditionalOnMissingBean(JwtDecoder.class)
+    @ConditionalOnExpression(AuthConstants.NON_REPLIT_MODE_CONDITION)
     JwtDecoder mockJwtDecoderFallback(AuthProperties props) {
         return new MockJwtDecoder(props.getMock().getJwtSecret());
     }

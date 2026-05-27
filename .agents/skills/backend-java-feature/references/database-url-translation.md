@@ -1,8 +1,8 @@
 # Replit Datasource Env Wiring
 
 Replit's `postgresql-16` module exposes Postgres connection details to the
-process environment. In current generated projects, configure Spring directly
-from the individual variables:
+process environment. Generated Spring apps configure the Replit profile
+directly from the individual variables:
 
 ```text
 PGHOST
@@ -12,9 +12,8 @@ PGUSER
 PGPASSWORD
 ```
 
-`DATABASE_URL` may also be present in the Replit shell, but the canonical
-Spring configuration does not parse it and does not require a custom
-`EnvironmentPostProcessor`.
+`DATABASE_URL` may also exist, but the canonical Spring configuration does not
+parse it and does not require a custom `EnvironmentPostProcessor`.
 
 ## Canonical `application-replit.yml`
 

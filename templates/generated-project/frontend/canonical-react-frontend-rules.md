@@ -33,6 +33,10 @@ re-hits these three bugs:
 2. **Port set to 5000** → collides with Spring backend. Vite stays on `5173`;
    backend owns `5000`. Reversing breaks Replit Deployment (serves published
    port from Spring's built static files).
+   The app UI must never render a "React dev server is running on port 5173"
+   placeholder, "Switch the preview pane", or "Open on port 5173" screen.
+   Port instructions belong in README only. First screen is always the actual
+   product UI.
 
 3. **Proxy `target` hardcoded `http://localhost:8080`** → wrong port in
    Replit workspace (backend on `5000`). Read from `BACKEND_DEV_PORT`,
@@ -121,6 +125,10 @@ Generated artifacts:
 - One block per directory: `<block-name>.tsx` + `<block-name>.css` + optional `components/`.
 - Frontend never accesses the DB, service-account keys, or any secrets directly — backend APIs only.
 - No secrets in frontend env vars.
+- Status/reference UI is generated from the typed OpenAPI enum mapping. If an
+  enum has three values, the UI cannot render a two-way toggle. Keep labels,
+  badge colors, filters, and mutation controls exhaustive over the generated
+  enum type so values like `ON_VACATION` cannot compile as "unknown".
 
 ## Auth
 

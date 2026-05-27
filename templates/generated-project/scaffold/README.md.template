@@ -94,6 +94,7 @@ Integration tests run on `workflow_dispatch` with `run_integration_tests=true`.
 ## Architecture
 
 - Backend: Java 21 LTS + Spring Boot 3.x, multi-module Maven.
+- Java package root: `com.aidigital.<app-name-package>`.
 - Frontend: React + TypeScript + Vite, typed via `openapi-typescript`.
 - Auth: dual-mode (`AUTH_MODE=auto|sso|mock`), real path via Clerk + Google.
 - Persistence: PostgreSQL (Replit SQL Database on workspace, docker-compose locally).

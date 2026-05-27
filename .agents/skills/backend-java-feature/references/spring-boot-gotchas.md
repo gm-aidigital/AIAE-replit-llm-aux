@@ -36,6 +36,26 @@ Fix (both required):
 2. Do NOT put `spring.security.oauth2.resourceserver.jwt.*` in `application.yml`.
    Scaffolded `application.yml` omits them — don't add "for completeness".
 
+## OAuth2 client (OIDC login) needs a SEPARATE starter
+
+`spring-boot-starter-oauth2-resource-server` does NOT pull in
+`org.springframework.security.oauth2.client.*`. Any code using
+`ClientRegistration`, `ClientRegistrationRepository`,
+`ClientRegistrations.fromIssuerLocation(...)`,
+`InMemoryClientRegistrationRepository`, or the `oauth2Login(...)` DSL on
+`HttpSecurity` needs `spring-boot-starter-oauth2-client` as an additional
+dependency in `application/pom.xml`.
+
+Past failure: `ReplitOidcSecurityConfig` (added for `AUTH_MODE=replit`)
+compiled fine locally but CI failed with
+`package org.springframework.security.oauth2.client.registration does not exist`
+because resource-server starter doesn't transitively pull
+`spring-security-oauth2-client`. The scaffold now declares both starters
+in `application/pom.xml`; leaving the client starter in unconditionally
+is harmless when `AUTH_MODE != replit` — the auto-config stays dormant
+without a `ClientRegistrationRepository` bean, and that bean is gated by
+`@ConditionalOnProperty(AUTH_MODE_REPLIT)`.
+
 ## Spring Security `requestMatchers` does NOT include the context path
 
 `server.servlet.context-path: /my-app` + `requestMatchers("/my-app/api/v1/...")`
@@ -215,7 +235,10 @@ boundaries (not lazy safety) — entities leaking from `service/` lets
 ## JPQL `LOWER(CONCAT('%', :search, '%'))` Postgres `bytea` crash
 
 When `:search` is `null`/untyped, Hibernate may bind as `bytea` → Postgres
-rejects the concat. Build the pattern in Java, pass as single `String`:
+rejects the concat/LIKE expression. This appears in optional filters like
+`(:nameSearch IS NULL OR LOWER(e.name) LIKE ...)`.
+
+Preferred fix: build the pattern in Java, pass as single `String`:
 
 ```java
 String pattern = (search == null || search.isBlank()) ? "%" : "%" + search.toLowerCase() + "%";
@@ -223,6 +246,76 @@ return repo.findByNameLike(pattern);
 ```
 
 JPQL becomes `WHERE LOWER(e.name) LIKE :pattern`.
+
+If the query must keep nullable params in JPQL, cast every nullable String
+parameter at the point of use:
+
+```java
+@Query("""
+    select e
+    from EmployeeEntity e
+    where (:nameSearch is null
+        or lower(e.fullName) like lower(concat('%', cast(:nameSearch as string), '%')))
+    """)
+List<EmployeeEntity> search(@Param("nameSearch") String nameSearch);
+```
+
+Do not write `LOWER(CONCAT('%', :search, '%'))` with a nullable param. Either
+pass a prebuilt `String` pattern or use `cast(:search as string)` consistently
+in `LIKE`, `LOWER`, and `CONCAT` expressions.
+
+## `@Around` advice transaction is not a persistence transaction
+
+`@Transactional` on an aspect advice method is a trap. Spring applies
+transactions through proxies, while the advice runs inside the intercepted
+call. If a controller is `@Transactional(readOnly = true)`, the aspect can
+share that read-only tx and inserts fail or disappear.
+
+Usage logging therefore uses a separate bean:
+
+```java
+class PostgresUsageLogger implements UsageLogger {
+    private final UsageEventPersistenceService persistenceService;
+
+    public void record(UsageEvent event) {
+        persistenceService.persist(event);
+    }
+}
+
+class UsageEventPersistenceService {
+    @Async("usageLoggingExecutor")
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void persist(UsageEvent event) { ... }
+}
+```
+
+Never put `@Transactional` on `UsageLoggingAspect` or rely on repository
+`save()` inside the advice.
+
+## JSONB fields need Hibernate JSON mapping, not `String`
+
+PostgreSQL `jsonb` columns must be mapped as structured JSON:
+
+```java
+@JdbcTypeCode(SqlTypes.JSON)
+@Column(name = "attributes", columnDefinition = "jsonb")
+private Map<String, Object> attributes;
+```
+
+Mapping `jsonb` as a plain `String` makes Hibernate bind `varchar`; Postgres
+rejects inserts with `column is of type jsonb but expression is of type
+character varying`.
+
+## Role auth must not rely on the JWT `scope` claim
+
+Spring's default `JwtGrantedAuthoritiesConverter` reads `scope`/`scp`. Mock
+JWTs and many Clerk templates do not carry those claims. Result: login works,
+admin endpoints return `403 insufficient_scope`.
+
+When the app has roles/admin endpoints, configure a custom
+`JwtAuthenticationConverter` that maps authorities from the application's
+canonical role source (usually `user_roles` by lowercased email) into
+`ROLE_*`. The JWT proves identity; the backend decides app roles.
 
 ## Don't mix `JdbcTemplate` with JPA
 

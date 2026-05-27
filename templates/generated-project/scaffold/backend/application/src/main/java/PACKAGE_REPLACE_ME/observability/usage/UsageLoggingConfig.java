@@ -41,7 +41,7 @@ public class UsageLoggingConfig {
     /**
      * Primary logger when enabled. Fails fast on empty/placeholder service-name.
      *
-     * @param repo  JPA repo for persistence
+     * @param persistenceService proxied service for async, isolated inserts
      * @param props bound app.usage-logging.* properties
      * @return Postgres-backed logger
      * @throws IllegalStateException when service-name is blank or still the placeholder

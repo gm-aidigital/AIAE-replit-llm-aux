@@ -83,6 +83,67 @@ components:
 Protected operations must declare `security: [{ bearerAuth: [] }]` and document
 `401` and `403` responses with examples.
 
+## Backend contract boundary (controllers MUST implement generated interfaces)
+
+Every backend controller MUST `implements <Tag>Api` (the interface emitted
+by `openapi-generator-maven-plugin` from each `tags:` entry) and override
+its methods with `@Override`. Raw `@GetMapping` / `@PostMapping` /
+`@RequestMapping` annotations directly on a controller class (or its
+methods) are **forbidden** — they bypass the generated path / method /
+parameter / response-type contract.
+
+```java
+// CORRECT — implements generated interface, no method-level routing annotations
+@RestController
+public class EmployeesController implements EmployeesApi {
+    @Override
+    public ResponseEntity<EmployeeV1> getEmployee(UUID id) { ... }
+}
+
+// CORRECT — file exports keyed off `format: binary` in spec → Resource
+@RestController
+public class SheetsController implements SheetsApi {
+    @Override
+    public ResponseEntity<Resource> fetchGoogleSheetCsv(String url) { ... }
+}
+
+// FORBIDDEN — hand-written routing, no interface
+@RestController
+@RequestMapping("/api/v1/sheets")              // FORBIDDEN at class level
+public class SheetsProxyController {
+    @GetMapping("/fetch")                       // FORBIDDEN — bypasses spec
+    public ResponseEntity<String> fetch(@RequestParam String url) { ... }
+}
+```
+
+**Why:** the generated interface is the in-code contract surface — it
+encodes every path, verb, parameter, response status, content type, and
+security requirement from `openapi.yaml`. When a controller skips the
+interface, the spec and the running code drift silently. The frontend's
+`openapi-fetch` client keeps believing the spec; the backend serves
+something else; the gap surfaces as 404 / 415 / type mismatches at the
+worst possible moment.
+
+Past failure mode: proxy endpoint authored as
+`@RestController @RequestMapping("/api/v1/<aggregate>")` with method-level
+`@GetMapping` instead of `implements <Tag>Api`. Spec existed; the
+generated interface was just ignored. Frontend `openapi-fetch` calls
+happened to line up only because the path string was hand-copied identically
+into the controller. The next spec change silently desyncs the two.
+
+**Review check (grep-able):** zero matches across the controllers folder.
+
+```bash
+# Method-level routing annotations inside controllers/ are the forbidden form;
+# class-level @RequestMapping on a controller class is also banned.
+grep -rn '@GetMapping\|@PostMapping\|@PutMapping\|@PatchMapping\|@DeleteMapping\|@RequestMapping' \
+  backend/application/src/main/java/*/application/*/controllers/ \
+  backend/application/src/main/java/*/*/controllers/
+```
+
+The only acceptable annotations on a generated-interface implementor are
+`@RestController` (class) and `@Override` (each method).
+
 ## Frontend contract boundary
 
 Frontend code must call backend operations through the generated
@@ -154,7 +215,14 @@ public ResponseEntity<Resource> exportEmployees() {
 Forbidden:
 - `ResponseEntity<byte[]>` for generated export endpoints;
 - returning `String` for CSV content;
-- calling `getRequest()` from the generated API interface to stream manually.
+- calling `getRequest()` from the generated API interface to stream manually;
+- "fixing" a `ResponseEntity<String>` generator output by switching the
+  controller to hand-written `@GetMapping` instead. Past failure: a `text/csv`
+  response declared as `schema: { type: string }` (without `format: binary`)
+  made the generator emit `ResponseEntity<String>`; the agent then ditched
+  the generated `SheetsApi` interface and wrote raw `@GetMapping` rather
+  than fixing the spec. Correct response: add `format: binary` to the spec,
+  regenerate, implement the now-`Resource`-typed interface.
 
 ## Schema discipline
 
@@ -224,6 +292,27 @@ EmployeeV1:
 **Naming.** Enum schema = `<Noun>V1` (version suffix as for DTOs).
 Examples: `EmployeeStatusV1`, `PriorityV1`, `AuthModeV1`. Generator emits
 Java enum with that exact name.
+
+### Enum/reference-data synchronization
+
+Every enum-like value must be synchronized across four places in the same
+change:
+
+- OpenAPI named enum schema (`components.schemas.<StatusV1>.enum`).
+- Database reference data / Liquibase seed table, when the value is stored as
+  a FK or code row.
+- Backend constants/mappers/query filters.
+- Frontend labels, badge colors, filters, segmented controls, and mutation UI.
+
+If OpenAPI declares `ACTIVE`, `ON_LEAVE`, `ON_VACATION`, the Liquibase seed
+must contain all three reference rows and the frontend cannot render a two-way
+toggle. Adding a status only in the UI or only in the DB is a contract bug:
+generated clients reject it, backend validation rejects it, or the UI displays
+an unknown state.
+
+When statuses live in lookup tables, OpenAPI enum values are the public code
+strings and DB rows use the same `code TEXT UNIQUE` values. Never use
+PostgreSQL `CREATE TYPE ... AS ENUM`.
 
 **Review check (grep-able):**
 ```bash

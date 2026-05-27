@@ -4,7 +4,9 @@
   Java 21 LTS + Spring Boot 3.4.0. All versions + plugin config centralised
   in <dependencyManagement> + <pluginManagement>; children reference by
   <artifactId> only. Extend here, never re-pin in children.
-  Replace: <groupId>, <artifactId>, <name>/<description>.
+  Replace <groupId> with com.aidigital.<app-name-package> (lowercase
+  alphanumeric app name; e.g. Employee Directory -> com.aidigital.employeedirectory).
+  Replace <artifactId>, <name>/<description>.
   Modules: required 4 (application/service/domain/db). Add external-services
   only when real external integrations exist; never keep empty Maven modules.
   Build: `mvn -f backend/pom.xml ...` or `cd backend && mvn ...`.

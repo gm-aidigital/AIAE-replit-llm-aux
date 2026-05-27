@@ -1,6 +1,6 @@
 // Spring Boot entrypoint. Generated apps put this in
-//   backend/application/src/main/java/<your.base.package>/Application.java
-// Replace PACKAGE_REPLACE_ME with the actual base package.
+//   backend/application/src/main/java/com/aidigital/<appname>/Application.java
+// Replace PACKAGE_REPLACE_ME with com.aidigital.<app-name-package>.
 
 package PACKAGE_REPLACE_ME;
 

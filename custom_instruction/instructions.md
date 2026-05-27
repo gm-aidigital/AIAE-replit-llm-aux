@@ -5,6 +5,7 @@
 **Backend: Java 21 LTS + Spring Boot 3.x + Maven multi-module + PostgreSQL.**
 **Frontend: React + TypeScript + Vite.**
 **Auth: dual-mode (Clerk SSO + mock fallback) with backend JWT validation.**
+**Java package root: `com.aidigital.<app-name-package>.*` only.**
 
 Forbidden in every generated project:
 
@@ -86,6 +87,12 @@ Replit datasource env wiring: see
 ## Stack policy (Java baseline)
 
 - Java 21 LTS · Spring Boot 3.x · Maven multi-module
+- Maven parent `<groupId>` and every Java package MUST start with
+  `com.aidigital.<app-name-package>`, where `<app-name-package>` is derived
+  from the application name by lowercasing and removing spaces, hyphens, and
+  other non-alphanumeric characters. Example: `Employee Directory` →
+  `com.aidigital.employeedirectory`. Do not use `org.example`, `com.example`,
+  `io.replit`, `demo`, or a one-segment package.
 - REST APIs, OpenAPI contract-first
 - Liquibase, PostgreSQL, HikariCP
 - JUnit 5 + Mockito + AssertJ + Spring Boot Test
@@ -152,6 +159,11 @@ fixes and force re-deriving every fix from failure logs ("db not in fat jar",
 documented placeholders (`PACKAGE_REPLACE_ME`, `/some-path-by-app-name`,
 project name). Never overwrite from a generator.
 
+`PACKAGE_REPLACE_ME` is not free-form. Replace it with
+`com.aidigital.<app-name-package>` and set `backend/pom.xml` `<groupId>` to the
+same value. The OpenAPI generator packages derive from `${project.groupId}`;
+wrong groupId creates wrong generated packages throughout the app.
+
 Before `npm create`, `spring initializr`, `mvn archetype`, `npx create-*`:
 STOP, check the table, copy from scaffold. New requirements get additive
 `Edit`s — preserve every existing block.
@@ -178,6 +190,7 @@ STOP, check the table, copy from scaffold. New requirements get additive
 | `frontend/package.json` | scripts `generate:api` + `check:api` + `test`; React + Vite + TanStack Query + Clerk + Vitest/Testing Library version pins |
 | `frontend/tsconfig.json` | Strict mode + path alias `@/*` → `./src/*` |
 | `frontend/src/shared/api/client.ts` | Single backend HTTP boundary using `openapi-fetch`; raw `fetch`, `axios`, and `XMLHttpRequest` are forbidden in `frontend/src` so path/method drift is caught by generated OpenAPI types |
+| `frontend/src/**` | First screen must be the actual product UI. FORBIDDEN in app UI: "React dev server is running on port 5173", "Switch the preview pane", "Open on port 5173"; port notes belong in README only |
 | `frontend/Dockerfile` | nginx-based multi-stage (build → nginx serve), correct `nginx.conf` location |
 | `frontend/nginx.conf` | SPA fallback (`try_files $uri /index.html`), `/api` proxy to backend service in local-dev compose, gzip + cache headers |
 | `scripts/setup-project.sh` | Runs on `onBoot`; installs the canonical `.gitignore`, removes Replit's Python auto-injection, untracks the control plane from git index, strips `python-*` from `.replit` `modules` |

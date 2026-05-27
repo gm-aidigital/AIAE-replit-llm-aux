@@ -1,3 +1,9 @@
+// ─────────────────────────────────────────────────────────────────────────
+// SCAFFOLD EXAMPLE — REFERENCE ONLY. DELETE before the first real aggregate
+// lands. Run `scripts/strip-scaffold-samples.sh` for one-shot removal.
+// See structure/near-production-project-structure.md → "Scaffold sample
+// aggregate (reference fixture — MUST be stripped)" for the contract.
+// ─────────────────────────────────────────────────────────────────────────
 // SampleMapper — reference Entity ↔ Record mapper. One mapper per entity
 // per layer (this is the service-layer mapper).
 //

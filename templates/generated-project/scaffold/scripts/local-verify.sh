@@ -68,6 +68,11 @@ if [ -f frontend/src/shared/api/client.ts ]; then
 fi
 
 if [ -d frontend/src ]; then
+  ! grep -RInE 'React dev server is running|Switch the preview pane to port 5173|Open on port 5173|built React app is served directly from port 5000' \
+      frontend/src >/dev/null 2>&1 || {
+    echo "Frontend must render the real app, not a Replit port-switch placeholder"
+    exit 1
+  }
   ! grep -RInE 'Sidebar|SideNav|LeftNav|side-nav|side-menu|left-nav|left-menu|app__sidebar|layout__sidebar' \
       --include='*.ts' --include='*.tsx' --include='*.css' frontend/src >/dev/null || {
     echo "Frontend must not use a left side menu/sidebar; use top navigation, tabs, filters, and toolbars"
@@ -113,6 +118,26 @@ if [ -f frontend/vite.config.ts ] && grep -q '"@/\*"' frontend/tsconfig.json 2>/
 fi
 
 if [ -d backend/application/src/main/resources ]; then
+  group_id="$(sed -n 's:.*<groupId>\(.*\)</groupId>.*:\1:p' backend/pom.xml | head -n 1)"
+  if [ "${group_id}" = "PACKAGE_REPLACE_ME" ] && [[ "$(pwd)" == */templates/generated-project/scaffold ]]; then
+    echo "    scaffold placeholder package allowed in template source"
+  else
+    [[ "${group_id}" =~ ^com\.aidigital\.[a-z][a-z0-9]*$ ]] || {
+      echo "backend/pom.xml groupId must be com.aidigital.<app-name-package> (lowercase alphanumeric): got ${group_id}"
+      exit 1
+    }
+    ! grep -RInE '^package[[:space:]]+(org\.example|com\.example|io\.replit|demo|[a-z][a-z0-9_]*);' \
+        backend/application/src/main/java backend/service/src/main/java backend/domain/src/main/java >/dev/null 2>&1 || {
+      echo "Java packages must use com.aidigital.<app-name-package>.*, not example/replit/demo/one-segment packages"
+      exit 1
+    }
+    ! grep -RInE '^package[[:space:]]+' \
+        backend/application/src/main/java backend/service/src/main/java backend/domain/src/main/java \
+        | grep -Ev '^.*:package[[:space:]]+com\.aidigital\.' >/dev/null 2>&1 || {
+      echo "Every application/service/domain Java package must start with com.aidigital."
+      exit 1
+    }
+  fi
   grep -q 'port:[[:space:]]*\${PORT:5000}' backend/application/src/main/resources/application-replit.yml || {
     echo "application-replit.yml must keep server.port: \${PORT:5000}"
     exit 1
@@ -199,6 +224,31 @@ if [ -d backend/application/src/main/resources ]; then
   logbook_config="$(find backend/application/src/main/java -path '*/config/LogbookConfig.java' -print -quit)"
   [ -z "${logbook_config}" ] || grep -Fq 'new DefaultSink(new JsonHttpLogFormatter(), new DefaultHttpLogWriter())' "${logbook_config}" || {
     echo "Logbook DefaultSink must be built with formatter + writer"
+    exit 1
+  }
+  usage_persistence="$(find backend/application/src/main/java -path '*/observability/usage/UsageEventPersistenceService.java' -print -quit)"
+  [ -n "${usage_persistence}" ] \
+      && grep -Fq '@Async("usageLoggingExecutor")' "${usage_persistence}" \
+      && grep -Fq '@Transactional(propagation = Propagation.REQUIRES_NEW)' "${usage_persistence}" || {
+    echo "UsageEventPersistenceService must own @Async + REQUIRES_NEW persistence"
+    exit 1
+  }
+  usage_aspect="$(find backend/application/src/main/java -path '*/observability/usage/UsageLoggingAspect.java' -print -quit)"
+  [ -z "${usage_aspect}" ] || ! grep -q '^[[:space:]]*@Transactional' "${usage_aspect}" || {
+    echo "Do not put @Transactional on @Around advice; use UsageEventPersistenceService"
+    exit 1
+  }
+  usage_entity="$(find backend/domain/src/main/java -path '*/domain/usage/entities/UsageEventEntity.java' -print -quit)"
+  [ -z "${usage_entity}" ] || {
+    grep -Fq '@JdbcTypeCode(SqlTypes.JSON)' "${usage_entity}" \
+        && grep -Fq 'Map<String, Object> attributes' "${usage_entity}" || {
+      echo "UsageEventEntity.attributes must be JSONB via @JdbcTypeCode(SqlTypes.JSON) Map<String,Object>"
+      exit 1
+    }
+  }
+  ! grep -RInE "LOWER\\(CONCAT\\('%',[[:space:]]*:[A-Za-z0-9_]+" \
+      backend/domain/src/main/java backend/service/src/main/java >/dev/null 2>&1 || {
+    echo "Nullable JPQL LIKE params must use prebuilt patterns or cast(:param as string), not LOWER(CONCAT('%', :param, ...))"
     exit 1
   }
   ! grep -RInE 'ResponseEntity<[[:space:]]*byte\[\]|ResponseEntity<byte\[\]>' backend/application/src/main/java >/dev/null 2>&1 || {

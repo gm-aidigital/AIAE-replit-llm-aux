@@ -32,6 +32,11 @@ spring:
 
 server:
   port: ${PORT:8080}
+  # Replit + Reserved VM terminate TLS at the edge and forward X-Forwarded-*
+  # headers. `framework` makes Spring resolve {baseUrl} (used by the OIDC
+  # redirect_uri) to the public https://*.replit.dev origin rather than
+  # http://localhost:5000 — required for AUTH_MODE=replit, harmless otherwise.
+  forward-headers-strategy: framework
   servlet:
     # Default empty (root) — Spring serves /api/v1/... directly. Set a
     # path-prefix only when a deployment specifically needs one; if you

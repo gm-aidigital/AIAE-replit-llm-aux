@@ -25,6 +25,9 @@ Canonical: `templates/generated-project/auth/google-sso-clerk-blueprint.md`.
 - [ ] Login UI usable in mock mode; switches to real SSO when keys present.
 - [ ] Backend validates Bearer JWT (JWKS signature; `iss`, `aud`, `exp`, `nbf`).
 - [ ] `401` missing/invalid token; `403` unauthorized.
+- [ ] Role-protected endpoints do not rely on JWT `scope`/`scp`. A custom
+      `JwtAuthenticationConverter` loads app roles from the backend role source
+      and maps them to `ROLE_*` authorities.
 - [ ] No hardcoded auth secrets.
 
 Reject if README claims SSO with only mock impl, or backend trusts frontend
@@ -39,6 +42,11 @@ Canonical: `templates/generated-project/observability/usage-logging-rules.md`.
 - [ ] `spring-boot-starter-aop` declared (enables `UsageLoggingAspect`).
 - [ ] `UsageLoggingAspect` + `@LogUsage` annotation files present.
 - [ ] `PostgresUsageLogger` binds when enabled; `NoOpUsageLogger` otherwise.
+- [ ] Usage persistence runs through a separate bean with
+      `@Async("usageLoggingExecutor")` and `@Transactional(REQUIRES_NEW)`;
+      `@Transactional` is NOT on `UsageLoggingAspect`.
+- [ ] `usage_events.attributes` is `jsonb` in Liquibase and
+      `Map<String,Object>` + `@JdbcTypeCode(SqlTypes.JSON)` in JPA.
 - [ ] Logger never blocks / fails user requests; insert errors are swallowed.
 - [ ] `app.usage-logging.service-name` resolves to a real, non-placeholder
       value (NOT empty, NOT `replit-mvp-template`). Empty service-name +
@@ -76,6 +84,14 @@ Canonical: `templates/generated-project/observability/usage-logging-rules.md`.
       ```bash
       grep -RInE 'Sidebar|SideNav|LeftNav|side-nav|side-menu|left-nav|left-menu|app__sidebar|layout__sidebar' frontend/src
       ```
+- [ ] Frontend renders the actual app, not a Replit port-switch placeholder:
+      ```bash
+      grep -RInE 'React dev server is running|Switch the preview pane to port 5173|Open on port 5173' frontend/src
+      ```
+      Expected: empty.
+- [ ] Reference/status values are synchronized across OpenAPI enum, Liquibase
+      seed/reference data, backend mappers/constants, and frontend labels/badges
+      / controls. A three-value enum must not have a two-way toggle.
 - [ ] `frontend/package-lock.json` exists and is committed — enterprise
       reproducibility requires a pinned lockfile, not just version ranges:
       ```bash
@@ -226,6 +242,14 @@ Any match → stack lock violated. Delete offending files/lines, regenerate from
 
 ## Parent pom location
 
+- [ ] Parent `<groupId>` and every application Java package use the fixed
+      namespace `com.aidigital.<app-name-package>.*`:
+      ```bash
+      sed -n 's:.*<groupId>\(.*\)</groupId>.*:\1:p' backend/pom.xml | head -n 1
+      grep -RInE '^package (org\.example|com\.example|io\.replit|demo|[a-z][a-z0-9_]*);' \
+        backend/application/src/main/java backend/service/src/main/java backend/domain/src/main/java
+      ```
+      Expected for grep: empty.
 - [ ] Parent `pom.xml` at `backend/pom.xml` — **not** at project root.
 - [ ] Module paths in `backend/pom.xml` are relative to `backend/`
       (e.g. `<module>application</module>`, not `<module>backend/application</module>`).
