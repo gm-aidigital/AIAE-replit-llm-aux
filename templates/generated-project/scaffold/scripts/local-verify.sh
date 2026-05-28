@@ -226,19 +226,19 @@ if [ -d backend/application/src/main/resources ]; then
     echo "Logbook DefaultSink must be built with formatter + writer"
     exit 1
   }
-  usage_persistence="$(find backend/application/src/main/java -path '*/observability/usage/UsageEventPersistenceService.java' -print -quit)"
+  usage_persistence="$(find backend/event-logging-to-db-feature/src/main/java -path '*/usagelogging/UsageEventPersistenceService.java' -print -quit)"
   [ -n "${usage_persistence}" ] \
       && grep -Fq '@Async("usageLoggingExecutor")' "${usage_persistence}" \
       && grep -Fq '@Transactional(propagation = Propagation.REQUIRES_NEW)' "${usage_persistence}" || {
     echo "UsageEventPersistenceService must own @Async + REQUIRES_NEW persistence"
     exit 1
   }
-  usage_aspect="$(find backend/application/src/main/java -path '*/observability/usage/UsageLoggingAspect.java' -print -quit)"
+  usage_aspect="$(find backend/event-logging-to-db-feature/src/main/java -path '*/usagelogging/UsageLoggingAspect.java' -print -quit)"
   [ -z "${usage_aspect}" ] || ! grep -q '^[[:space:]]*@Transactional' "${usage_aspect}" || {
     echo "Do not put @Transactional on @Around advice; use UsageEventPersistenceService"
     exit 1
   }
-  usage_entity="$(find backend/domain/src/main/java -path '*/domain/usage/entities/UsageEventEntity.java' -print -quit)"
+  usage_entity="$(find backend/event-logging-to-db-feature/src/main/java -path '*/usagelogging/entities/UsageEventEntity.java' -print -quit)"
   [ -z "${usage_entity}" ] || {
     grep -Fq '@JdbcTypeCode(SqlTypes.JSON)' "${usage_entity}" \
         && grep -Fq 'Map<String, Object> attributes' "${usage_entity}" || {

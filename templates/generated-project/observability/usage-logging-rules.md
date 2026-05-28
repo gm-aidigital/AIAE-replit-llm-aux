@@ -5,6 +5,37 @@ One fire-and-forget event per meaningful user action → app's PostgreSQL
 
 One sink, one table, the same DB the app already uses.
 
+## Module layout
+
+The Java surface of the feature ships as a single Maven module:
+`backend/event-logging-to-db-feature/`. That module owns the `@LogUsage`
+annotation, the `UsageAttributes` helper, the `UsageEvent` value record,
+the `UsageLogger` sink interface, both impls (`PostgresUsageLogger`,
+`NoOpUsageLogger`), the `UsageLoggingAspect`, the `@ConfigurationProperties`
+bean, and the JPA entity + repository. Java package root inside the module:
+`<base>.usagelogging` (entity + repo live in `entities/` and
+`repositories/` sub-packages). `service` depends on
+`event-logging-to-db-feature` so `*ServiceImpl` classes can carry
+`@LogUsage`; `application` picks it up transitively.
+
+**Migrations stay in the `db` module.** The Liquibase changelog
+`0001-usage-events.xml` lives at
+`backend/db/src/main/resources/db/changelog/changes/0001-usage-events.xml`,
+referenced from `db.changelog-master.xml` exactly like every other migration
+in the project. Feature modules NEVER ship their own
+`src/main/resources/db/` tree — splitting migrations across modules hides
+the schema-change contract from the migration owner and makes cross-module
+classpath includes a long-term footgun. One source of truth for the
+schema; the feature module's `@Entity` simply maps the table the migration
+creates. To disable: see "Disabling" below.
+
+## Disabling
+
+| Path | What it leaves behind |
+|---|---|
+| `app.usage-logging.enabled=false` (env `USAGE_LOGGING_ENABLED=false`) | `NoOpUsageLogger` binds; aspect drops via `@ConditionalOnProperty`; `usage_events` table stays; `@LogUsage` annotations stay as inert markers. **No code edits, no rebuild required.** |
+| Full removal | Drop `<module>event-logging-to-db-feature</module>` from `backend/pom.xml`, drop the `event-logging-to-db-feature` dep line from `backend/service/pom.xml`, remove every `@LogUsage` import + annotation from `*ServiceImpl`, remove the `<include file="db/changelog/changes/0001-usage-events.xml"/>` line from `backend/db/.../db.changelog-master.xml`. Optionally drop the table with a follow-up changelog. |
+
 ## Default behavior
 
 Ships with `USAGE_LOGGING_ENABLED=true` + `PostgresUsageLogger`. Binding
@@ -68,22 +99,62 @@ reserved for the explicit opt-out path (`enabled=false`).
 
 ## Event payload
 
-| Field | Postgres type | Notes |
-|---|---|---|
-| `event_id` | `TEXT UNIQUE` | UUID v4 per event |
-| `event_timestamp` | `TIMESTAMPTZ` | UTC, ISO 8601 |
-| `service` | `TEXT` | stable lowercase hyphen-separated service name |
-| `environment` | `TEXT` | `prod` / `staging` / `dev` |
-| `event_type` | `TEXT` | `api_request` / `auth` / `error` / `custom` |
-| `action` | `TEXT` | dotted lowercase, e.g. `forecast.create` |
-| `user_id` | `TEXT` | when authenticated |
-| `user_email` | `TEXT` | when authenticated |
-| `status` | `TEXT` | `success` / `error` / HTTP code as string |
-| `duration_ms` | `BIGINT` | operation latency |
-| `attributes` | `JSONB` | sanitized structured payload |
-| `error_message` | `TEXT` | short error description for failures |
-| `client_ip` | `TEXT` | first `X-Forwarded-For` entry |
-| `user_agent` | `TEXT` | request UA |
+Schema is intentionally **1:1 with the AI Digital BigQuery
+`usage_logging_ai_services_table`** so a future BQ exporter can ship rows
+without remapping. NOT NULL constraints follow BQ's REQUIRED set
+(`event_id`, `event_timestamp`, `service`, `event_type`); everything else
+is nullable so partial / fire-and-forget events still land.
+
+| Field | Postgres type | Required | Notes |
+|---|---|---|---|
+| `event_id` | `TEXT UNIQUE` | yes | UUID v4 per event |
+| `event_timestamp` | `TIMESTAMPTZ` | yes | UTC, ISO 8601 |
+| `service` | `TEXT` | yes | stable lowercase hyphen-separated service name |
+| `environment` | `TEXT` | no | `prod` / `staging` / `dev` |
+| `event_type` | `TEXT` | yes | `api_request` / `auth` / `error` / `custom` |
+| `action` | `TEXT` | no | dotted lowercase, e.g. `forecast.create` |
+| `user_id` | `TEXT` | no | stable subject from JWT/OIDC, when authenticated |
+| `user_email` | `TEXT` | no | extracted from `email` / `email_address` / `primary_email_address` claim |
+| `status` | `TEXT` | no | `success` / `error` / HTTP code as string |
+| `duration_ms` | `BIGINT` | no | operation latency |
+| `attributes` | `JSONB` | no | sanitized structured payload — see "Per-row attributes" below |
+| `error_message` | `TEXT` | no | short error description for failures |
+| `client_ip` | `TEXT` | no | first `X-Forwarded-For` entry |
+| `user_agent` | `TEXT` | no | request UA |
+
+There is no dedicated `correlation_id` column — the BQ guide schema doesn't
+have one. The aspect embeds the MDC correlation id inside `attributes`
+under the `correlation_id` key alongside any caller-supplied attributes.
+
+## Per-row attributes
+
+Anything beyond the fixed columns lives in `attributes` (JSONB). The aspect
+always seeds `{"correlation_id": "<mdc>"}` and merges in whatever the
+caller pushed via `UsageAttributes.put(...)` from inside the
+`@LogUsage`-annotated method:
+
+```java
+@LogUsage(action = "forecast.create")
+public ForecastRecord create(ForecastRequest req, AppUser caller) {
+    UsageAttributes.put("geo", req.geo());
+    UsageAttributes.put("channel", req.channel());
+    return ...;
+}
+```
+
+Rules:
+- `UsageAttributes` is ThreadLocal — works for synchronous controller →
+  service calls (the common path). For `@Async` methods, use
+  `SecurityContextHolder.MODE_INHERITABLETHREADLOCAL` /
+  `DelegatingSecurityContextRunnable` and the same applies here.
+- The aspect drains the bag inside its `finally{}` and clears it; the next
+  request on the same worker thread starts clean.
+- Values must be JSON-serialisable (`String`, `Number`, `Boolean`,
+  `Map`, `List`). Hibernate maps the column with
+  `@JdbcTypeCode(SqlTypes.JSON)` + Jackson.
+- **Never PII**: emails of third parties, raw doc bodies, credentials,
+  full request/response payloads, JWTs. Same rule as for the BQ-shared
+  table — see "Sensitive data" below.
 
 ## Java backend contract — AOP-driven, single annotation
 
@@ -98,29 +169,30 @@ by one `try/catch/finally` in the aspect. Disable globally via
 - `LogUsage` annotation (`@Retention(RUNTIME) @Target(METHOD)`) carrying
   `action` (mandatory, dotted lowercase like `employee.update`) and
   `eventType` (default `api_request`). Lives in
-  `service/src/main/java/<base>/service/common/observability/LogUsage.java` —
-  in the service module so all `*ServiceImpl` classes can see it without
-  service depending on application.
+  `backend/event-logging-to-db-feature/src/main/java/<base>/usagelogging/LogUsage.java`.
+  `*ServiceImpl` classes import it via `import <base>.usagelogging.LogUsage;`
+  — `service` depends on `event-logging-to-db-feature` for exactly this reason.
 - `UsageLoggingAspect` — `@Aspect @Component @Order(LOWEST_PRECEDENCE - 100)`,
   bound to `@annotation(logUsage)`, wraps target with `try/catch/finally`.
 - `UsageLoggingProperties` — `@ConfigurationProperties("app.usage-logging")`
   binding `enabled`, `service-name`, `environment`. NO magic strings.
-- `UsageEvent` — immutable value type (`@Builder` Lombok record), also in
-  `service/common/observability/`. Service classes don't construct it
-  directly (the aspect does), but it lives in service so the aspect (in
-  application/) can import it via the application→service direction.
-- `UsageEventEntity` — JPA `@Entity` on `usage_events` (lives in `domain`).
+- `UsageEvent` — immutable value type (`@Builder` Lombok record), in
+  `<base>/usagelogging/UsageEvent.java`. Service classes don't construct
+  it directly; the aspect does.
+- `UsageEventEntity` — JPA `@Entity` on `usage_events`, lives in
+  `<base>/usagelogging/entities/`.
   **The `attributes` field MUST be declared as
   `Map<String, Object>` with `@JdbcTypeCode(SqlTypes.JSON)` +
   `@Column(columnDefinition = "jsonb")` — Hibernate 6 native JSON mapping.**
   Declaring it as `String` binds null as `varchar`, and Postgres rejects:
   `column "attributes" is of type jsonb but expression is of type character
   varying`. Past sessions burned hours on exactly this error.
-- `UsageEventRepository extends JpaRepository<UsageEventEntity, Long>`
-  (lives in `domain`).
+- `UsageEventRepository extends JpaRepository<UsageEventEntity, Long>`,
+  lives in `<base>/usagelogging/repositories/`.
 - `UsageLogger` — interface, single method `void record(UsageEvent event)`.
-  Lives in `service/common/observability/`; impls (`PostgresUsageLogger`,
-  `NoOpUsageLogger`) live in `application/observability/usage/`.
+  Lives in `<base>/usagelogging/UsageLogger.java`; impls
+  (`PostgresUsageLogger`, `NoOpUsageLogger`) sit alongside it in the same
+  module so the whole feature ships as one cohesive unit.
 - `PostgresUsageLogger` — thin dispatcher only. It calls
   `UsageEventPersistenceService.persist(event)`. It does NOT save directly
   and does NOT own `@Transactional`; otherwise Spring proxying is bypassed.
@@ -244,9 +316,32 @@ Implementation rules for `UsageEventPersistenceService`:
   controller's proxy. Past generated apps inherited the controller's read-only
   transaction and blocked INSERTs. The separate persistence bean is mandatory.
 
+### Auth principal coverage
+
+The aspect's `extractEmail` MUST handle every live principal type the
+template ships with. Lookup walks a fixed list of claim names —
+`email`, `email_address`, `primary_email_address`, `mail` — first hit wins:
+
+| AUTH_MODE | Principal class | Source |
+|---|---|---|
+| `mock` / `auto` (mock fallback) | `org.springframework.security.oauth2.jwt.Jwt` | `jwt.getClaims().get(<name>)` — `MockTokenService` sets `email`. |
+| `sso` / `auto` (Clerk) | `org.springframework.security.oauth2.jwt.Jwt` | `jwt.getClaims().get(<name>)`. Populates only if the Clerk JWT carries an email claim — Clerk-side configuration is out of scope here. |
+| `replit` | `org.springframework.security.oauth2.core.oidc.user.OidcUser` | `oidc.getEmail()` first (OIDC standard), then fall back through the claim list. |
+| Any other oauth2Login | `org.springframework.security.oauth2.core.user.OAuth2User` | `oauth.getAttributes().get(<name>)`. |
+
+Past breakage (caught in prod data): under `AUTH_MODE=replit`, only the
+`Jwt` branch existed → `user_email` was always null. Adding `OidcUser`
+handling fixed it. The multi-claim fallback (`email`, `email_address`,
+`primary_email_address`, `mail`) is defensive against varied IdP claim
+naming and adds no Clerk-side or provider-side requirements to the
+template.
+
 ## Liquibase changelog
 
-Place under `backend/db/src/main/resources/db/changelog/`:
+Lives at `backend/db/src/main/resources/db/changelog/changes/0001-usage-events.xml`,
+referenced from `db.changelog-master.xml` like every other migration.
+The feature module owns the `@Entity` that maps the table, but the
+schema-change contract sits in `db/` — that's the project-wide rule.
 
 ```xml
 <changeSet id="usage-events-initial" author="agent">
@@ -257,14 +352,14 @@ Place under `backend/db/src/main/resources/db/changelog/`:
     <column name="event_id"         type="TEXT"        ><constraints nullable="false" unique="true"/></column>
     <column name="event_timestamp"  type="TIMESTAMPTZ" ><constraints nullable="false"/></column>
     <column name="service"          type="TEXT"        ><constraints nullable="false"/></column>
-    <column name="environment"      type="TEXT"        ><constraints nullable="false"/></column>
+    <column name="environment"      type="TEXT"        />                                <!-- BQ NULLABLE -->
     <column name="event_type"       type="TEXT"        ><constraints nullable="false"/></column>
-    <column name="action"           type="TEXT"        ><constraints nullable="false"/></column>
+    <column name="action"           type="TEXT"        />                                <!-- BQ NULLABLE -->
     <column name="user_id"          type="TEXT"        />
     <column name="user_email"       type="TEXT"        />
-    <column name="status"           type="TEXT"        ><constraints nullable="false"/></column>
+    <column name="status"           type="TEXT"        />                                <!-- BQ NULLABLE -->
     <column name="duration_ms"      type="BIGINT"      />
-    <column name="attributes"       type="JSONB"       />
+    <column name="attributes"       type="JSONB"       />                                <!-- BQ JSON; includes correlation_id -->
     <column name="error_message"    type="TEXT"        />
     <column name="client_ip"        type="TEXT"        />
     <column name="user_agent"       type="TEXT"        />

@@ -7,10 +7,9 @@
 //     startup, do NOT silently bind NoOp (past sessions shipped projects
 //     with zero events in the DB and no error anywhere).
 
-package PACKAGE_REPLACE_ME.observability.usage;
+package PACKAGE_REPLACE_ME.usagelogging;
 
-import PACKAGE_REPLACE_ME.domain.usage.repositories.UsageEventRepository;
-import PACKAGE_REPLACE_ME.service.common.observability.UsageLogger;
+import PACKAGE_REPLACE_ME.usagelogging.repositories.UsageEventRepository;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -66,7 +65,7 @@ public class UsageLoggingConfig {
     /**
      * Separate bean so @Async and REQUIRES_NEW are applied through Spring proxy.
      *
-     * @param repo JPA repo for usage-event inserts
+     * @param repo JPA repo for usage event inserts
      * @return proxied persistence service
      */
     @Bean

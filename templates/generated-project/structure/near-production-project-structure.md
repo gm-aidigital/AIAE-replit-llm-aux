@@ -22,10 +22,11 @@ Postgres env vars, backend 5000 → external 80, Replit Secrets) AND local-dev
 │   ├── config/                           # Checkstyle config referenced by parent pom
 │   │   ├── checkstyle.xml
 │   │   └── checkstyle-suppressions.xml
-│   ├── application/                      # REST + security + GlobalExceptionHandler + UsageLoggingAspect
-│   ├── service/                          # Business logic + MapStruct Entity↔Record + AppException family + LogUsage
+│   ├── application/                      # REST + security + GlobalExceptionHandler
+│   ├── service/                          # Business logic + MapStruct Entity↔Record + AppException family
 │   ├── domain/                           # JPA entities + repositories ONLY (leaf)
 │   ├── db/                               # Liquibase changelogs only
+│   ├── event-logging-to-db-feature/                      # self-contained usage logging: @LogUsage + aspect + entity + repo + changelog (drop module + dep lines to remove)
 │   └── external-services/                # external clients — MANDATORY for any outbound HTTP/SDK/queue call; omit only if app has none
 └── frontend/                             # React + TypeScript + Vite
     ├── package.json
@@ -100,7 +101,8 @@ one step. The script is idempotent and safe to run before the first real
 aggregate exists (it just deletes the sample, leaving the project still
 compilable because the `usage_events` changelog `0001-usage-events.xml` and
 its corresponding `UsageEventEntity`/`UsageEventRepository` are NOT sample
-fixtures — they back real `@LogUsage` infrastructure).
+fixtures — they back real `@LogUsage` infrastructure, all living together
+inside the dedicated `event-logging-to-db-feature` Maven module).
 
 **Forbidden:**
 - Shipping a generated project with any `sample/` package surviving under
@@ -143,16 +145,24 @@ the raw app name with hyphens, or any package outside `com.aidigital.*`.
 
 ## Backend modules
 
-Maven parent + 4 required modules. NO `common` Maven module and NO empty
-Maven modules — cross-cutting types (AppException, ErrorReason, LogUsage)
-live under `service/common/`.
+Maven parent + 4 required modules + the self-contained `event-logging-to-db-feature`
+feature module. NO `common` Maven module and NO empty Maven modules —
+cross-cutting service-layer types (AppException, ErrorReason) live under
+`service/common/`. Usage-logging types live in `event-logging-to-db-feature`.
 
 - `application` — Spring Boot entrypoint, REST controllers, generated API
   impls, security, GlobalExceptionHandler, observability glue.
 - `service` — business orchestration, validation, tx boundaries. HOSTS
-  AppException family + LogUsage under `<base>/service/common/`.
+  AppException family under `<base>/service/common/`. Depends on
+  `event-logging-to-db-feature` so `*ServiceImpl` methods can carry `@LogUsage`.
 - `domain` — JPA entities + repositories ONLY. Leaf.
 - `db` — Liquibase changelogs + seed data.
+- `event-logging-to-db-feature` — self-contained usage logging feature: `@LogUsage`
+  annotation, `UsageEvent` record, `UsageLogger` interface +
+  Postgres/NoOp impls, the AOP aspect, configs, `UsageEventEntity` +
+  repository AND the `0001-usage-events.xml` Liquibase changelog. Living
+  in one module makes the feature easy to identify, toggle, or fully
+  remove — see "Disabling usage logging" below.
 - `external-services` — external API adapters. **MANDATORY the moment the
   application makes ANY outbound network call.** Concrete triggers — if you
   catch yourself writing any of these from `application/` or `service/`,
@@ -202,12 +212,31 @@ application ──► service ──► domain
             └─► db                                (runtime-only — see below)
 
 service     ──► domain
+            ──► event-logging-to-db-feature       (brings @LogUsage onto *ServiceImpl)
             └─► external-services                 (when external-services exists)
 
+event-logging-to-db-feature
+            ──► (JPA + AOP + spring-security)     (LEAF internally — no internal deps)
 domain                                            (LEAF)
 external-services                                 (LEAF; present iff app has outbound calls)
 db          ──► liquibase-core                    (LEAF internally)
 ```
+
+### Disabling usage logging
+
+Two paths, in increasing aggressiveness:
+
+1. **Runtime toggle (no rebuild):** set `app.usage-logging.enabled=false`
+   (env `USAGE_LOGGING_ENABLED=false`). The aspect's
+   `@ConditionalOnProperty` drops out; `NoOpUsageLogger` binds; the
+   `usage_events` table stays. `@LogUsage` annotations remain inert markers.
+2. **Full removal:** drop `<module>event-logging-to-db-feature</module>` from
+   `backend/pom.xml`, drop the `event-logging-to-db-feature` dependency line from
+   `backend/service/pom.xml`, delete `@LogUsage` usages from `*ServiceImpl`,
+   and remove the `<include file="db/changelog/changes/0001-usage-events.xml"/>`
+   line from `backend/db/src/main/resources/db/changelog/db.changelog-master.xml`.
+   (`application` picks up `event-logging-to-db-feature` transitively through `service`, so
+   no explicit application/pom edit is required.)
 
 **Critical edge: `application → db`.** Migrations run at RUNTIME via Spring
 Boot's Liquibase auto-config; changelog XMLs only land in the fat jar if
@@ -244,8 +273,9 @@ build because they sit in the wrong module:
 | Controller directly under `application/<aggregate>/` (e.g. `application/sheets/SheetsProxyController.java`) instead of `application/<aggregate>/controllers/<X>Controller.java` | Breaks the "plural = collections" folder contract; future second controller for the same aggregate has nowhere consistent to land. Past sessions then "fix" by adding it next to the first — spreading inconsistency. | `application/<aggregate>/controllers/<X>Controller.java` (plural folder, always) |
 | `@RestController` class with `@RequestMapping("/api/v1/...")` and method-level `@GetMapping`/`@PostMapping` instead of `implements <Tag>Api` | Bypasses the generated OpenAPI interface contract — spec and runtime drift silently; frontend `openapi-fetch` and backend serve different paths until the first mismatch ships to prod. | `class <X>Controller implements <Tag>Api` with `@Override` on every method; only annotation on class is `@RestController`. See `openapi/canonical-openapi-rules.md` → "Backend contract boundary". |
 | `@Entity` in `service/` or `application/` | JPA annotations require `spring-data-jpa`, only in `domain`. Even if it compiles, Hibernate scans only `domain` packages. | `domain/<aggregate>/entities/<X>Entity.java` |
-| `AppException` / `ErrorReason` / `LogUsage` in `application/` or per-aggregate folders | They are cross-cutting service contracts; controllers throw via service. Splitting them creates duplicate `ErrorReason` enums and ambiguous catches in `GlobalExceptionHandler`. | `service/<base>/service/common/error/` and `…/common/observability/` — SINGLE source |
-| `AppUser` / `CurrentUser` / any authenticated-principal value object in `application/security/` | Service-impl methods need the principal (`@LogUsage`, audit, authorisation). If it lives in `application/`, service can't import it without a reverse-edge cycle. Past sessions tried to "fix" by extending the record (Java records are final) or re-exporting — both dead ends. | `service/<base>/service/common/security/AppUser.java` — declared in service, used by both application's `SecurityConfig` and service-impl methods. The minimal `spring-security-core` dep can be added to `service/pom.xml` if needed for `Authentication`/`GrantedAuthority` types. |
+| `AppException` / `ErrorReason` in `application/` or per-aggregate folders | They are cross-cutting service contracts; controllers throw via service. Splitting them creates duplicate `ErrorReason` enums and ambiguous catches in `GlobalExceptionHandler`. | `service/<base>/service/common/error/` — SINGLE source |
+| `LogUsage` / `UsageEvent` / `UsageLogger` outside `event-logging-to-db-feature/` (e.g. service/common/observability or application/observability) | Past sessions scattered usage-logging code across 4 modules; killing the feature meant editing each one. The annotation, aspect, sink interface, entity and repo all live together in the `event-logging-to-db-feature` Maven module — that's the contract. | `event-logging-to-db-feature/src/main/java/<base>/usagelogging/…` (entity + repository in sub-packages). Note: the Liquibase changelog `0001-usage-events.xml` does NOT live here — all migrations sit in `backend/db/src/main/resources/db/changelog/changes/`, per the single-source rule. |
+| `AppUser` / `CurrentUser` / any authenticated-principal value object in `application/security/` | Service-impl methods need the principal (audit, authorisation). If it lives in `application/`, service can't import it without a reverse-edge cycle. Past sessions tried to "fix" by extending the record (Java records are final) or re-exporting — both dead ends. | `service/<base>/service/common/security/AppUser.java` — declared in service, used by both application's `SecurityConfig` and service-impl methods. The minimal `spring-security-core` dep can be added to `service/pom.xml` if needed for `Authentication`/`GrantedAuthority` types. |
 | `<Provider>Client` in `service/` | External HTTP-client deps live in `external-services` only. Service catches the provider's exception and wraps. | `external-services/<provider>/<Provider>Client.java` |
 | Java source files in `db/src/main/java/` | `db` is changelog-only. Adding Java code there means you've reinvented something that should live in `domain`/`service`. | Delete; rebuild the concern in the correct module |
 | Two `@ConfigurationProperties` classes with the same prefix, or duplicate `@ConditionalOnProperty` on the same bean | Spring fails at startup with "more than one bean of type X". Symptom of agent copy-pasting a config from one aggregate to another. | Single `@Configuration` per concern; conditional logic lives on one bean, not on duplicates |
@@ -278,7 +308,7 @@ application/src/main/java/<base>/
   config/                                           # Spring config beans
   security/                                         # SecurityConfig, JwtDecoders, AuthProperties
   error/                                            # GlobalExceptionHandler (@RestControllerAdvice)
-  observability/usage/                              # UsageLoggingAspect, PostgresUsageLogger, UsageLoggingConfig
+  observability/                                    # CorrelationIdFilter, etc. (usage logging lives in event-logging-to-db-feature/)
   <aggregate>/                                      # ONE folder per domain aggregate
     controllers/<X>Controller.java
     mappers/<X>ApiMapper.java                       # ServiceRecord ↔ V1 DTO, ONE per entity
@@ -291,10 +321,6 @@ service/src/main/java/<base>/service/
       ValidationMessage.java
       ValidationParameter.java
       ValidationMessageType.java
-    observability/
-      LogUsage.java                                 # annotation
-      UsageEvent.java                               # value object
-      UsageLogger.java                              # interface (impl in application/)
   <aggregate>/                                      # ONE folder per domain aggregate
     services/<X>Service.java                        # interface
     services/impl/<X>ServiceImpl.java               # @Service impl, @LogUsage on each public method
@@ -309,14 +335,36 @@ domain/src/main/java/<base>/domain/
     entities/<X>Entity.java                         # @Entity, JPA-mapped
     repositories/<X>Repository.java                 # extends JpaRepository
 
+event-logging-to-db-feature/src/main/java/<base>/usagelogging/      # usage-logging Java surface (NO migrations — those live in db/)
+  LogUsage.java                                     # annotation (import from here)
+  UsageAttributes.java                              # ThreadLocal helper; caller fills the JSONB `attributes`
+  UsageEvent.java                                   # value record
+  UsageLogger.java                                  # sink interface
+  PostgresUsageLogger.java                          # @Postgres sink impl
+  NoOpUsageLogger.java                              # used when app.usage-logging.enabled=false
+  UsageEventPersistenceService.java                 # @Async + REQUIRES_NEW INSERT bean
+  UsageLoggingAspect.java                           # @Aspect, intercepts @LogUsage
+  UsageLoggingConfig.java                           # @Configuration: binds sink + executor
+  UsageLoggingProperties.java                       # app.usage-logging.* binding
+  entities/UsageEventEntity.java                    # JPA mapping for usage_events (BQ-aligned schema)
+  repositories/UsageEventRepository.java            # JpaRepository
+
 external-services/src/main/java/<base>/external/        # present iff app makes outbound calls; never POM-only
   <provider>/                                       # ONE folder per external API
     <Provider>Client.java                           # interface
     <Provider>ClientImpl.java                       # Feign/RestClient impl
     <Provider>ExternalException.java                # thrown OUT — service module wraps it
 
-db/src/main/resources/db/changelog/                 # Liquibase XML only, NO Java
+db/src/main/resources/db/changelog/                 # Liquibase XML only, NO Java — ALL migrations live here, including feature-module tables (e.g. 0001-usage-events.xml backs the usage_events table)
 ```
+
+**Migration single-source rule:** every Liquibase changelog in the project
+lives under `backend/db/src/main/resources/db/changelog/changes/` and is
+referenced from `db.changelog-master.xml`. Feature modules
+(`event-logging-to-db-feature`, future ones) own their `@Entity` /
+`@Repository` Java code, but never their own `src/main/resources/db/`. One
+place for migrations means one classpath, one tool to grep, one location to
+review when answering "what's the current schema?".
 
 ## Testing layout (MVP safety suite)
 

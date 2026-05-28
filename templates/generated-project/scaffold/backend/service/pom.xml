@@ -15,12 +15,22 @@
 
     <!-- Business orchestration. Depends on domain; add external-services only
          when real external integrations exist. NEVER depend on application.
-         Hosts AppException family + LogUsage under service/common/{error,
-         observability}/ (service-layer concerns). -->
+         Hosts AppException family under service/common/error/. @LogUsage
+         lives in the `event-logging-to-db-feature` module — declared here
+         so *ServiceImpl classes can annotate methods; application/ picks
+         the module up transitively through this edge. To fully remove
+         usage logging: drop this dep, drop
+         `<module>event-logging-to-db-feature</module>` from the parent,
+         and delete the `<include file="db/changelog/changes/0001-usage-events.xml"/>`
+         line from db.changelog-master.xml. -->
     <dependencies>
         <dependency>
             <groupId>${project.groupId}</groupId>
             <artifactId>domain</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>event-logging-to-db-feature</artifactId>
         </dependency>
         <dependency>
             <groupId>org.projectlombok</groupId>

@@ -1,4 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Aligned with the AI Digital BigQuery usage-logging schema. Required cols:
+  event_id, event_timestamp, service, event_type. Everything else nullable
+  so a partial / fire-and-forget event still lands. correlation_id is NOT
+  a top-level column here (BQ guide doesn't have one) — the aspect writes
+  it inside `attributes` JSON instead.
+-->
 <databaseChangeLog
         xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -19,26 +26,22 @@
             <column name="service" type="TEXT">
                 <constraints nullable="false"/>
             </column>
-            <column name="environment" type="TEXT">
-                <constraints nullable="false"/>
-            </column>
+            <!-- nullable per BQ guide -->
+            <column name="environment" type="TEXT"/>
             <column name="event_type" type="TEXT">
                 <constraints nullable="false"/>
             </column>
-            <column name="action" type="TEXT">
-                <constraints nullable="false"/>
-            </column>
+            <!-- nullable per BQ guide -->
+            <column name="action"     type="TEXT"/>
             <column name="user_id"    type="TEXT"/>
             <column name="user_email" type="TEXT"/>
-            <column name="status"     type="TEXT">
-                <constraints nullable="false"/>
-            </column>
-            <column name="duration_ms"  type="BIGINT"/>
-            <column name="attributes"   type="JSONB"/>
+            <!-- nullable per BQ guide -->
+            <column name="status"     type="TEXT"/>
+            <column name="duration_ms"   type="BIGINT"/>
+            <column name="attributes"    type="JSONB"/>
             <column name="error_message" type="TEXT"/>
-            <column name="correlation_id" type="TEXT"/>
-            <column name="client_ip"   type="TEXT"/>
-            <column name="user_agent"  type="TEXT"/>
+            <column name="client_ip"     type="TEXT"/>
+            <column name="user_agent"    type="TEXT"/>
         </createTable>
 
         <createIndex tableName="usage_events" indexName="idx_usage_events_service_ts">

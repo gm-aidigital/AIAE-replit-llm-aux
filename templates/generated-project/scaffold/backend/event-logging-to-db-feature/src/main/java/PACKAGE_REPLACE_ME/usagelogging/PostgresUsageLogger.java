@@ -2,10 +2,8 @@
 // Spring bean. The actual INSERT lives in UsageEventPersistenceService so
 // @Transactional(REQUIRES_NEW) and @Async are applied through a proxy.
 
-package PACKAGE_REPLACE_ME.observability.usage;
+package PACKAGE_REPLACE_ME.usagelogging;
 
-import PACKAGE_REPLACE_ME.service.common.observability.UsageEvent;
-import PACKAGE_REPLACE_ME.service.common.observability.UsageLogger;
 import lombok.RequiredArgsConstructor;
 
 /**

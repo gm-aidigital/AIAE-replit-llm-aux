@@ -5,18 +5,29 @@
 //     usage event reflects final commit/rollback outcome.
 //  3. try { proceed() } catch (Throwable) { rethrow } finally { log }
 //     — logs success + failure, never swallows.
-//  4. SecurityContextHolder is ThreadLocal; for @Async paths use
-//     MODE_INHERITABLETHREADLOCAL or DelegatingSecurityContextRunnable.
+//  4. SecurityContextHolder + UsageAttributes are ThreadLocal; for @Async
+//     paths use MODE_INHERITABLETHREADLOCAL or DelegatingSecurityContextRunnable.
 //  5. Logger is @Async (off-thread DB write). Aspect only assembles + hands off
 //     — assembly must be cheap (no I/O).
 //  6. joinPoint.getArgs() deliberately ignored — no payload/JWT/PII leakage.
+//     Callers populate per-row attributes via UsageAttributes.put(...).
+//  7. user_email extraction covers EVERY supported AUTH_MODE:
+//        Bearer-JWT (sso/mock/auto) → principal is Jwt, scan known claim
+//          names (email, email_address, primary_email_address, mail) —
+//          first non-blank wins. IdP-side claim configuration is out of
+//          scope for this template.
+//        AUTH_MODE=replit → principal is OidcUser; prefer OidcUser#getEmail()
+//          then fall back to the claim names.
+//        Any other oauth2Login → principal is OAuth2User; same claim names.
+//     Adding a new auth backend? Extend extractEmail() — do not introduce a
+//     parallel pipeline.
+//  8. correlation_id is NOT a top-level column anymore (BQ guide doesn't
+//     have one). The aspect embeds it inside `attributes` JSON under the
+//     `correlation_id` key alongside any caller-supplied attributes.
 // Full contract: `templates/generated-project/observability/usage-logging-rules.md`.
 
-package PACKAGE_REPLACE_ME.observability.usage;
+package PACKAGE_REPLACE_ME.usagelogging;
 
-import PACKAGE_REPLACE_ME.service.common.observability.LogUsage;
-import PACKAGE_REPLACE_ME.service.common.observability.UsageEvent;
-import PACKAGE_REPLACE_ME.service.common.observability.UsageLogger;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
@@ -28,6 +39,9 @@ import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.oauth2.core.oidc.user.OidcUser;
+import org.springframework.security.oauth2.core.user.OAuth2User;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Component;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
@@ -35,7 +49,10 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.UUID;
+import java.util.function.Function;
 
 /**
  * Captures {@link LogUsage} service calls and emits structured usage events.
@@ -54,6 +71,18 @@ public class UsageLoggingAspect {
     private static final String STATUS_SUCCESS = "success";
     private static final String STATUS_ERROR = "error";
     private static final String MDC_CORRELATION = "correlationId";
+    private static final String ATTR_CORRELATION_ID = "correlation_id";
+
+    /**
+     * Claim names checked, in order, when reading the user email from a JWT
+     * or OIDC/OAuth2 user. The list covers the names different identity
+     * providers commonly use; the first non-blank value wins. IdP-side
+     * configuration to surface email under one of these names is out of
+     * scope for the template.
+     */
+    private static final String[] EMAIL_CLAIM_NAMES = {
+        "email", "email_address", "primary_email_address", "mail"
+    };
 
     private final UsageLogger usageLogger;
     private final UsageLoggingProperties props;
@@ -89,6 +118,10 @@ public class UsageLoggingAspect {
                 // do NOT propagate into the caller's flow.
                 LOG.warn("Usage logging failed for action={}: {}",
                          logUsage.action(), loggingFailure.getMessage());
+            } finally {
+                // Always clear the per-request attribute bag; otherwise the
+                // next request on the same worker thread inherits stale keys.
+                UsageAttributes.clear();
             }
         }
     }
@@ -119,27 +152,84 @@ public class UsageLoggingAspect {
             .userEmail(userEmail)
             .status(failed ? STATUS_ERROR : STATUS_SUCCESS)
             .durationMs(durationMs)
+            .attributes(buildAttributes())
             .errorMessage(failed ? truncate(thrown.getMessage(), 500) : null)
-            .correlationId(MDC.get(MDC_CORRELATION))
             .clientIp(clientIp(request))
             .userAgent(userAgent(request))
             .build();
     }
 
     /**
-     * Extracts the user email claim from a JWT authentication.
+     * Merges caller-supplied attributes from {@link UsageAttributes} with the
+     * always-on entries the aspect contributes itself (currently the MDC
+     * correlation id, which the BQ-aligned schema does not carry as a
+     * top-level column).
+     *
+     * @return merged map, or null when nothing was contributed
+     */
+    private static Map<String, Object> buildAttributes() {
+        Map<String, Object> caller = UsageAttributes.snapshot();
+        String correlation = MDC.get(MDC_CORRELATION);
+        if (caller == null && (correlation == null || correlation.isBlank())) {
+            return null;
+        }
+        Map<String, Object> merged = new LinkedHashMap<>();
+        if (correlation != null && !correlation.isBlank()) {
+            merged.put(ATTR_CORRELATION_ID, correlation);
+        }
+        if (caller != null) {
+            merged.putAll(caller);
+        }
+        return merged;
+    }
+
+    /**
+     * Extracts the user email from whatever principal Spring Security
+     * produced. Three live principal shapes across the supported AUTH_MODEs;
+     * see the file header for the per-mode contract.
      *
      * @param auth current Spring Security authentication
-     * @return email claim value, or null when unavailable
+     * @return email value, or null when unavailable
      */
     private String extractEmail(Authentication auth) {
         if (auth == null) {
             return null;
         }
         Object principal = auth.getPrincipal();
-        if (principal instanceof org.springframework.security.oauth2.jwt.Jwt jwt) {
-            Object email = jwt.getClaims().get("email");
-            return email != null ? String.valueOf(email) : null;
+        if (principal instanceof Jwt jwt) {
+            return firstClaim(jwt.getClaims()::get);
+        }
+        if (principal instanceof OidcUser oidc) {
+            String standard = oidc.getEmail();
+            if (standard != null && !standard.isBlank()) {
+                return standard;
+            }
+            return firstClaim(oidc.getClaims()::get);
+        }
+        if (principal instanceof OAuth2User oauth) {
+            return firstClaim(oauth.getAttributes()::get);
+        }
+        return null;
+    }
+
+    /**
+     * Walks {@link #EMAIL_CLAIM_NAMES} and returns the first non-blank value
+     * the lookup function produces. Tolerant of {@code null} (missing) and
+     * blank-string ({@code ""}) claim values.
+     *
+     * @param lookup function that resolves a claim/attribute name to its value
+     * @return first matching value as a string, or null
+     */
+    private static String firstClaim(Function<String, Object> lookup) {
+        for (String name : EMAIL_CLAIM_NAMES) {
+            Object value = lookup.apply(name);
+            if (value == null) {
+                continue;
+            }
+            String s = String.valueOf(value);
+            if (!s.isBlank()) {
+                return s;
+            }
         }
         return null;
     }

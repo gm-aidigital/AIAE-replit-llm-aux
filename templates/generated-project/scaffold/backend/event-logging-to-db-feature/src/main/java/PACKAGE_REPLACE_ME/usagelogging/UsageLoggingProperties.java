@@ -1,7 +1,7 @@
 // UsageLoggingProperties — @ConfigurationProperties("app.usage-logging").
 // Binding spec: observability/usage-logging-rules.md → "Required env placeholders".
 
-package PACKAGE_REPLACE_ME.observability.usage;
+package PACKAGE_REPLACE_ME.usagelogging;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 

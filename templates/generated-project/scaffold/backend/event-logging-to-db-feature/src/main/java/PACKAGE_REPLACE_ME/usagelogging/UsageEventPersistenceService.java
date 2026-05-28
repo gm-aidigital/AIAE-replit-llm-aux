@@ -1,8 +1,7 @@
-package PACKAGE_REPLACE_ME.observability.usage;
+package PACKAGE_REPLACE_ME.usagelogging;
 
-import PACKAGE_REPLACE_ME.domain.usage.entities.UsageEventEntity;
-import PACKAGE_REPLACE_ME.domain.usage.repositories.UsageEventRepository;
-import PACKAGE_REPLACE_ME.service.common.observability.UsageEvent;
+import PACKAGE_REPLACE_ME.usagelogging.entities.UsageEventEntity;
+import PACKAGE_REPLACE_ME.usagelogging.repositories.UsageEventRepository;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -11,7 +10,7 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Owns the actual usage-event INSERT in a separate Spring proxy.
+ * Owns the actual usage event INSERT in a separate Spring proxy.
  */
 @RequiredArgsConstructor
 public class UsageEventPersistenceService {
@@ -56,7 +55,6 @@ public class UsageEventPersistenceService {
         entity.setDurationMs(e.durationMs());
         entity.setAttributes(e.attributes());
         entity.setErrorMessage(e.errorMessage());
-        entity.setCorrelationId(e.correlationId());
         entity.setClientIp(e.clientIp());
         entity.setUserAgent(e.userAgent());
         return entity;

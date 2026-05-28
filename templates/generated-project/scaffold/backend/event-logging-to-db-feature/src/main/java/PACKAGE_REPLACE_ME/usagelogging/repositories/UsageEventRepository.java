@@ -1,6 +1,6 @@
-package PACKAGE_REPLACE_ME.domain.usage.repositories;
+package PACKAGE_REPLACE_ME.usagelogging.repositories;
 
-import PACKAGE_REPLACE_ME.domain.usage.entities.UsageEventEntity;
+import PACKAGE_REPLACE_ME.usagelogging.entities.UsageEventEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 /**

@@ -216,7 +216,7 @@ with Liquibase before protecting admin endpoints.
 ### Principal-key contract (REQUIRED)
 
 One claim is canonical principal id; used EVERYWHERE ("who the user is"):
-`Authentication#getName()`, seed `user_roles.user_id`, audit/usage-event
+`Authentication#getName()`, seed `user_roles.user_id`, audit/usage event
 `user_id`, any "logged-in person" FK.
 
 **Canonical claim: `email`** (lowercased, trimmed).
@@ -224,9 +224,14 @@ One claim is canonical principal id; used EVERYWHERE ("who the user is"):
 - `sub` is provider-internal (Clerk user id, Google subject); changes on
   re-provision. Don't key business tables on it.
 - `email` is stable for the demo/handoff window; reads naturally in seed/logs.
-- Both mock + SSO modes MUST make `getName()` return lowercased email.
-  `MockJwtDecoder` puts `email` into `sub` AND sets it as principal name;
-  Clerk's JWT carries `email` directly.
+- Mock mode MUST make `getName()` return lowercased email. `MockTokenService`
+  puts `email` into `sub` AND emits an `email` claim → `extractEmail` reads
+  it directly.
+- Clerk JWTs MUST carry an email claim for `user_email` to populate. Clerk-
+  side configuration to make that happen is out of scope for this template
+  — see Clerk's own docs. Backend `extractEmail` accepts `email`,
+  `email_address`, `primary_email_address`, or `mail` (first non-blank
+  wins), so any of those claim names works without code changes.
 
 **Hard rules** (#1 source of "logged in but no data" bugs):
 
@@ -236,7 +241,7 @@ One claim is canonical principal id; used EVERYWHERE ("who the user is"):
    authorization silently denies every protected endpoint.
 2. Mock-login endpoint accepts the same email values as the seed. Wire
    `AUTH_MOCK_USER` + "demo accounts" to seed emails, not role slugs.
-3. Audit/usage-event `user_id` stores the same email — cross-table joins
+3. Audit/usage event `user_id` stores the same email — cross-table joins
    on `user_id` work without translation.
 
 `mock` mode: `AUTH_MOCK_USER` is an email (e.g. `alice.johnson@company.com`),

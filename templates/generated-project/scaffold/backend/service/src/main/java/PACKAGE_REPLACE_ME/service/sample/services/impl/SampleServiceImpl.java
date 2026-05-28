@@ -18,7 +18,8 @@ import PACKAGE_REPLACE_ME.domain.sample.entities.SampleEntity;
 import PACKAGE_REPLACE_ME.domain.sample.repositories.SampleRepository;
 import PACKAGE_REPLACE_ME.service.common.error.AppException;
 import PACKAGE_REPLACE_ME.service.common.error.ErrorReason;
-import PACKAGE_REPLACE_ME.service.common.observability.LogUsage;
+import PACKAGE_REPLACE_ME.usagelogging.LogUsage;
+import PACKAGE_REPLACE_ME.usagelogging.UsageAttributes;
 import PACKAGE_REPLACE_ME.service.sample.mappers.SampleMapper;
 import PACKAGE_REPLACE_ME.service.sample.models.SampleRecord;
 import PACKAGE_REPLACE_ME.service.sample.models.SampleUpdate;
@@ -50,6 +51,9 @@ public class SampleServiceImpl implements SampleService {
     @Override
     @LogUsage(action = "sample.update")               // ← aspect logs success or error automatically
     public SampleRecord update(Long id, SampleUpdate update) {
+        // Reference: per-row attributes go into UsageEvent.attributes JSON.
+        // Keep keys snake_case, values JSON-serialisable, never PII / secrets.
+        UsageAttributes.put("sample_id", id);
         SampleEntity entity = repo.findById(id)
             .orElseThrow(() -> new AppException(ErrorReason.C001, id));
         applyUpdate(entity, update);

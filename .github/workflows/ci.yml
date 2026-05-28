@@ -87,12 +87,21 @@ jobs:
             "templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/auth/controllers/AuthController.java"
             "templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/error/GlobalExceptionHandler.java"
             "templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/observability/CorrelationIdFilter.java"
-            "templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/observability/usage/UsageLoggingAspect.java"
-            "templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/observability/usage/UsageLoggingConfig.java"
-            "templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/observability/usage/UsageEventPersistenceService.java"
-            "templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/observability/usage/UsageLoggingProperties.java"
-            "templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/observability/usage/PostgresUsageLogger.java"
-            "templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/observability/usage/NoOpUsageLogger.java"
+
+            # === Scaffold event-logging-to-db-feature module (whole usage-logging surface) ===
+            "templates/generated-project/scaffold/backend/event-logging-to-db-feature/pom.xml"
+            "templates/generated-project/scaffold/backend/event-logging-to-db-feature/src/main/java/PACKAGE_REPLACE_ME/usagelogging/LogUsage.java"
+            "templates/generated-project/scaffold/backend/event-logging-to-db-feature/src/main/java/PACKAGE_REPLACE_ME/usagelogging/UsageAttributes.java"
+            "templates/generated-project/scaffold/backend/event-logging-to-db-feature/src/main/java/PACKAGE_REPLACE_ME/usagelogging/UsageEvent.java"
+            "templates/generated-project/scaffold/backend/event-logging-to-db-feature/src/main/java/PACKAGE_REPLACE_ME/usagelogging/UsageLogger.java"
+            "templates/generated-project/scaffold/backend/event-logging-to-db-feature/src/main/java/PACKAGE_REPLACE_ME/usagelogging/UsageLoggingAspect.java"
+            "templates/generated-project/scaffold/backend/event-logging-to-db-feature/src/main/java/PACKAGE_REPLACE_ME/usagelogging/UsageLoggingConfig.java"
+            "templates/generated-project/scaffold/backend/event-logging-to-db-feature/src/main/java/PACKAGE_REPLACE_ME/usagelogging/UsageLoggingProperties.java"
+            "templates/generated-project/scaffold/backend/event-logging-to-db-feature/src/main/java/PACKAGE_REPLACE_ME/usagelogging/UsageEventPersistenceService.java"
+            "templates/generated-project/scaffold/backend/event-logging-to-db-feature/src/main/java/PACKAGE_REPLACE_ME/usagelogging/PostgresUsageLogger.java"
+            "templates/generated-project/scaffold/backend/event-logging-to-db-feature/src/main/java/PACKAGE_REPLACE_ME/usagelogging/NoOpUsageLogger.java"
+            "templates/generated-project/scaffold/backend/event-logging-to-db-feature/src/main/java/PACKAGE_REPLACE_ME/usagelogging/entities/UsageEventEntity.java"
+            "templates/generated-project/scaffold/backend/event-logging-to-db-feature/src/main/java/PACKAGE_REPLACE_ME/usagelogging/repositories/UsageEventRepository.java"
 
             # === Scaffold sample tests — proof that test infra works ===
             "templates/generated-project/scaffold/backend/application/src/test/java/PACKAGE_REPLACE_ME/ApplicationSmokeTest.java"
@@ -112,9 +121,6 @@ jobs:
             "templates/generated-project/scaffold/backend/service/src/main/java/PACKAGE_REPLACE_ME/service/common/error/ValidationMessage.java"
             "templates/generated-project/scaffold/backend/service/src/main/java/PACKAGE_REPLACE_ME/service/common/error/ValidationParameter.java"
             "templates/generated-project/scaffold/backend/service/src/main/java/PACKAGE_REPLACE_ME/service/common/error/ValidationMessageType.java"
-            "templates/generated-project/scaffold/backend/service/src/main/java/PACKAGE_REPLACE_ME/service/common/observability/LogUsage.java"
-            "templates/generated-project/scaffold/backend/service/src/main/java/PACKAGE_REPLACE_ME/service/common/observability/UsageEvent.java"
-            "templates/generated-project/scaffold/backend/service/src/main/java/PACKAGE_REPLACE_ME/service/common/observability/UsageLogger.java"
             "templates/generated-project/scaffold/backend/service/src/main/java/PACKAGE_REPLACE_ME/service/common/mapping/ServiceMapperConfig.java"
             "templates/generated-project/scaffold/backend/service/src/main/java/PACKAGE_REPLACE_ME/service/common/security/AppUser.java"
             "templates/generated-project/scaffold/backend/service/src/main/java/PACKAGE_REPLACE_ME/service/auth/models/MockLoginRecord.java"
@@ -415,17 +421,17 @@ jobs:
               || { echo "useDebounce hooks must update via useEffect with cleanup: ${debounce_hook}"; exit 1; }
           done < <(find templates/generated-project/scaffold/frontend/src -type f \( -name '*useDebounce*.ts' -o -name '*useDebounce*.tsx' \))
           grep -Fq '@Async("usageLoggingExecutor")' \
-              templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/observability/usage/UsageEventPersistenceService.java \
+              templates/generated-project/scaffold/backend/event-logging-to-db-feature/src/main/java/PACKAGE_REPLACE_ME/usagelogging/UsageEventPersistenceService.java \
               && grep -Fq '@Transactional(propagation = Propagation.REQUIRES_NEW)' \
-              templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/observability/usage/UsageEventPersistenceService.java \
+              templates/generated-project/scaffold/backend/event-logging-to-db-feature/src/main/java/PACKAGE_REPLACE_ME/usagelogging/UsageEventPersistenceService.java \
             || { echo "UsageEventPersistenceService must own @Async + REQUIRES_NEW persistence"; exit 1; }
           ! grep -RIn '^[[:space:]]*@Transactional' \
-              templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/observability/usage/UsageLoggingAspect.java >/dev/null 2>&1 \
+              templates/generated-project/scaffold/backend/event-logging-to-db-feature/src/main/java/PACKAGE_REPLACE_ME/usagelogging/UsageLoggingAspect.java >/dev/null 2>&1 \
             || { echo "Do not put @Transactional on @Around advice; use UsageEventPersistenceService"; exit 1; }
           grep -Fq '@JdbcTypeCode(SqlTypes.JSON)' \
-              templates/generated-project/scaffold/backend/domain/src/main/java/PACKAGE_REPLACE_ME/domain/usage/entities/UsageEventEntity.java \
+              templates/generated-project/scaffold/backend/event-logging-to-db-feature/src/main/java/PACKAGE_REPLACE_ME/usagelogging/entities/UsageEventEntity.java \
               && grep -Fq 'Map<String, Object> attributes' \
-              templates/generated-project/scaffold/backend/domain/src/main/java/PACKAGE_REPLACE_ME/domain/usage/entities/UsageEventEntity.java \
+              templates/generated-project/scaffold/backend/event-logging-to-db-feature/src/main/java/PACKAGE_REPLACE_ME/usagelogging/entities/UsageEventEntity.java \
             || { echo "UsageEventEntity.attributes must be JSONB via @JdbcTypeCode(SqlTypes.JSON) Map<String,Object>"; exit 1; }
           ! grep -RInE "LOWER\\(CONCAT\\('%',[[:space:]]*:[A-Za-z0-9_]+" \
               templates/generated-project/scaffold/backend/domain/src/main/java \

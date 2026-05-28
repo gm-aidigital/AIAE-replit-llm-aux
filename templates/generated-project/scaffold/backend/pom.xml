@@ -33,10 +33,14 @@
 
     <!-- Paths relative to backend/. No `common` Maven module and no empty
          modules. Add `external-services` only with real external client code.
-         AppException family lives in service/<base>/service/common/error/. -->
+         AppException family lives in service/<base>/service/common/error/.
+         `event-logging-to-db-feature` is the self-contained usage-logging
+         feature (annotation + aspect + entity + repo + Liquibase changelog);
+         drop it from this list to fully remove the feature from the build. -->
     <modules>
         <module>domain</module>
         <module>db</module>
+        <module>event-logging-to-db-feature</module>
         <module>service</module>
         <module>application</module>
     </modules>
@@ -98,6 +102,11 @@
             <dependency>
                 <groupId>${project.groupId}</groupId>
                 <artifactId>service</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>event-logging-to-db-feature</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

@@ -2,10 +2,7 @@
 // Keeps the @LogUsage call sites cheap (assemble + drop) when usage
 // logging is intentionally disabled (tests, local dev without DB).
 
-package PACKAGE_REPLACE_ME.observability.usage;
-
-import PACKAGE_REPLACE_ME.service.common.observability.UsageEvent;
-import PACKAGE_REPLACE_ME.service.common.observability.UsageLogger;
+package PACKAGE_REPLACE_ME.usagelogging;
 
 /**
  * Drops usage events when usage logging is intentionally disabled.

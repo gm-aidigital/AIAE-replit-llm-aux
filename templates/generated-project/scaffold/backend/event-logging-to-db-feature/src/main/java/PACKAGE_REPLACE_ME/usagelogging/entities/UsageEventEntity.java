@@ -1,9 +1,11 @@
-// UsageEventEntity — JPA mapping for usage_events (Liquibase 0001-usage-events.xml).
-// Lives in domain so JPA never escapes to service/application. Service
-// uses the immutable UsageEvent record; PostgresUsageLogger maps record
-// → entity at the persistence boundary.
+// UsageEventEntity — JPA mapping for usage_events. The matching Liquibase
+// changelog lives in the `db` module at
+// db/src/main/resources/db/changelog/changes/0001-usage-events.xml — that's
+// intentional: every migration in the project sits in `db`, never alongside
+// the @Entity that consumes it. PostgresUsageLogger maps record → entity at
+// the persistence boundary.
 
-package PACKAGE_REPLACE_ME.domain.usage.entities;
+package PACKAGE_REPLACE_ME.usagelogging.entities;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -67,9 +69,6 @@ public class UsageEventEntity {
 
     @Column(name = "error_message")
     private String errorMessage;
-
-    @Column(name = "correlation_id")
-    private String correlationId;
 
     @Column(name = "client_ip")
     private String clientIp;

@@ -1,9 +1,9 @@
 // UsageEvent — immutable value type assembled by UsageLoggingAspect and
-// handed to UsageLogger.record(). Lives in service so both the aspect
-// (application module) and any future logger impl can see it without
-// pulling JPA/Spring deps into service.
+// handed to UsageLogger.record(). Lives in the event-logging-to-db-feature
+// module alongside the sink interface so consumers depend on the API and
+// impl together.
 
-package PACKAGE_REPLACE_ME.service.common.observability;
+package PACKAGE_REPLACE_ME.usagelogging;
 
 import lombok.Builder;
 
@@ -24,7 +24,6 @@ public record UsageEvent(
     long durationMs,
     Map<String, Object> attributes,
     String errorMessage,
-    String correlationId,
     String clientIp,
     String userAgent
 ) { }

@@ -1,9 +1,9 @@
-// UsageLogger — sink interface. Implementations live in application/
-// (PostgresUsageLogger, NoOpUsageLogger). Business code NEVER calls
-// this directly — the @LogUsage annotation + UsageLoggingAspect own
-// dispatch. See observability/usage-logging-rules.md.
+// UsageLogger — sink interface. Implementations: PostgresUsageLogger,
+// NoOpUsageLogger (same module). Business code NEVER calls this directly —
+// the @LogUsage annotation + UsageLoggingAspect own dispatch.
+// See observability/usage-logging-rules.md.
 
-package PACKAGE_REPLACE_ME.service.common.observability;
+package PACKAGE_REPLACE_ME.usagelogging;
 
 /**
  * Sink for usage logging events emitted by service methods.
