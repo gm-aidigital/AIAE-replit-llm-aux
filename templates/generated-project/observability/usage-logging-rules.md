@@ -113,8 +113,8 @@ is nullable so partial / fire-and-forget events still land.
 | `environment` | `TEXT` | no | `prod` / `staging` / `dev` |
 | `event_type` | `TEXT` | yes | `api_request` / `auth` / `error` / `custom` |
 | `action` | `TEXT` | no | dotted lowercase, e.g. `forecast.create` |
-| `user_id` | `TEXT` | no | stable subject from JWT/OIDC, when authenticated |
-| `user_email` | `TEXT` | no | extracted from `email` / `email_address` / `primary_email_address` claim |
+| `user_id` | `TEXT` | no | `Authentication#getName()`. `SecurityConfig` pins `JwtAuthenticationConverter#principalClaimName="email"`, so for every JWT-based mode (mock + Clerk-with-email-template) this is the lowercased email; falls back to provider `sub` when no email claim exists. Replit OIDC keeps its `userNameAttributeName("sub")` setting and lands the Replit `sub` here. |
+| `user_email` | `TEXT` | no | extracted from `email` / `email_address` / `primary_email_address` / `mail` claim |
 | `status` | `TEXT` | no | `success` / `error` / HTTP code as string |
 | `duration_ms` | `BIGINT` | no | operation latency |
 | `attributes` | `JSONB` | no | sanitized structured payload — see "Per-row attributes" below |
@@ -122,16 +122,33 @@ is nullable so partial / fire-and-forget events still land.
 | `client_ip` | `TEXT` | no | first `X-Forwarded-For` entry |
 | `user_agent` | `TEXT` | no | request UA |
 
-There is no dedicated `correlation_id` column — the BQ guide schema doesn't
-have one. The aspect embeds the MDC correlation id inside `attributes`
-under the `correlation_id` key alongside any caller-supplied attributes.
+The BQ-aligned schema has no top-level `correlation_id` or `user_name`
+column. The aspect lifts both into `attributes` JSON automatically:
+
+- `attributes.correlation_id` — value of MDC `correlationId` at log time.
+- `attributes.user_name` — first non-blank of `full_name` / `name` /
+  `preferred_username` (or `OidcUser#getFullName()` under Replit OIDC).
+  If none of those is set, the aspect composes
+  `first_name + " " + last_name` (or OIDC `given_name + family_name`) as
+  a fallback — covers Clerk users where `{{user.full_name}}` resolved to
+  blank but the first/last template variables are still in the JWT.
+  Skipped only when no naming claim is present at all.
+
+Query example:
+```sql
+SELECT attributes->>'user_name' AS name, COUNT(*)
+FROM usage_events
+WHERE event_timestamp > now() - interval '7 days'
+GROUP BY 1
+ORDER BY 2 DESC;
+```
 
 ## Per-row attributes
 
-Anything beyond the fixed columns lives in `attributes` (JSONB). The aspect
-always seeds `{"correlation_id": "<mdc>"}` and merges in whatever the
-caller pushed via `UsageAttributes.put(...)` from inside the
-`@LogUsage`-annotated method:
+`attributes` (JSONB) is the catch-all. The aspect always seeds the
+auto-lifted keys above; on top of that, business code adds domain-specific
+keys via `UsageAttributes.put(...)` from inside the `@LogUsage`-annotated
+method:
 
 ```java
 @LogUsage(action = "forecast.create")

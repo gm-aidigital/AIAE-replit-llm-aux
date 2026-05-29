@@ -35,6 +35,7 @@ import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtDecoders;
 import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
 import org.springframework.web.cors.CorsConfiguration;
@@ -109,8 +110,40 @@ public class SecurityConfig {
                 // AuthConstants.PUBLIC_PATHS.
                 .requestMatchers(AuthConstants.PUBLIC_PATHS).permitAll()
                 .anyRequest().authenticated())
-            .oauth2ResourceServer(oauth -> oauth.jwt(jwt -> { }))
+            .oauth2ResourceServer(oauth -> oauth.jwt(jwt -> jwt
+                .jwtAuthenticationConverter(emailAsPrincipalConverter())))
             .build();
+    }
+
+    /**
+     * Binds {@code Authentication#getName()} to the {@code email} claim so
+     * downstream code (audit, usage_events.user_id, app authorisation joins)
+     * shares one human-readable canonical identifier across every JWT-based
+     * auth path. Per the blueprint contract: user_id = lowercased email
+     * everywhere.
+     *
+     * Behavior matrix:
+     * <ul>
+     *   <li>mock — {@code MockTokenService} always emits an {@code email}
+     *       claim → {@code getName()} returns the email.</li>
+     *   <li>Clerk SSO with a JWT template that emits {@code email} →
+     *       {@code getName()} returns the email.</li>
+     *   <li>Clerk SSO without an email-emitting template → claim is absent,
+     *       Spring falls back to {@code jwt.getSubject()} (Clerk
+     *       {@code user_xxx}). Logging still works; configure the template
+     *       tenant-side when you want human-readable rows.</li>
+     * </ul>
+     *
+     * @return converter that pins principal name to the email claim, with
+     *         Spring's built-in subject fallback when the claim is missing
+     */
+    private static JwtAuthenticationConverter emailAsPrincipalConverter() {
+        JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
+        // Spring's JwtAuthenticationToken#getName() falls back to
+        // jwt.getSubject() when the configured claim is null/blank, so this
+        // is safe even when the IdP doesn't ship the email claim.
+        converter.setPrincipalClaimName("email");
+        return converter;
     }
 
     /**

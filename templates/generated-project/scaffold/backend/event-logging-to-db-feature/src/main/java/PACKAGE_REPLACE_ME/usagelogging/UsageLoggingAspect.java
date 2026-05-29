@@ -11,19 +11,26 @@
 //     — assembly must be cheap (no I/O).
 //  6. joinPoint.getArgs() deliberately ignored — no payload/JWT/PII leakage.
 //     Callers populate per-row attributes via UsageAttributes.put(...).
-//  7. user_email extraction covers EVERY supported AUTH_MODE:
+//  7. user_email + user display name extraction covers EVERY supported
+//     AUTH_MODE via a shared principal-claim reader:
 //        Bearer-JWT (sso/mock/auto) → principal is Jwt, scan known claim
-//          names (email, email_address, primary_email_address, mail) —
-//          first non-blank wins. IdP-side claim configuration is out of
-//          scope for this template.
+//          names. email aliases: email, email_address, primary_email_address,
+//          mail. name aliases: full_name, name, preferred_username. First
+//          non-blank wins. IdP-side claim configuration is out of scope for
+//          this template — but SecurityConfig wires
+//          JwtAuthenticationConverter#setPrincipalClaimName("email"), so
+//          when the JWT carries email, auth.getName() (→ user_id column)
+//          also returns the email rather than the provider sub.
 //        AUTH_MODE=replit → principal is OidcUser; prefer OidcUser#getEmail()
-//          then fall back to the claim names.
-//        Any other oauth2Login → principal is OAuth2User; same claim names.
-//     Adding a new auth backend? Extend extractEmail() — do not introduce a
+//          / OidcUser#getFullName() then fall back to the alias lists.
+//        Any other oauth2Login → principal is OAuth2User; alias lists only.
+//     Adding a new auth backend? Extend the alias lists or pass a new OIDC
+//     standard-accessor into readPrincipalClaim — do not introduce a
 //     parallel pipeline.
-//  8. correlation_id is NOT a top-level column anymore (BQ guide doesn't
-//     have one). The aspect embeds it inside `attributes` JSON under the
-//     `correlation_id` key alongside any caller-supplied attributes.
+//  8. The BQ-aligned schema has no top-level correlation_id or user_name
+//     column. The aspect embeds both inside `attributes` JSON
+//     ({"correlation_id": "...", "user_name": "..."}) alongside any
+//     caller-supplied UsageAttributes entries.
 // Full contract: `templates/generated-project/observability/usage-logging-rules.md`.
 
 package PACKAGE_REPLACE_ME.usagelogging;
@@ -72,6 +79,7 @@ public class UsageLoggingAspect {
     private static final String STATUS_ERROR = "error";
     private static final String MDC_CORRELATION = "correlationId";
     private static final String ATTR_CORRELATION_ID = "correlation_id";
+    private static final String ATTR_USER_NAME = "user_name";
 
     /**
      * Claim names checked, in order, when reading the user email from a JWT
@@ -82,6 +90,29 @@ public class UsageLoggingAspect {
      */
     private static final String[] EMAIL_CLAIM_NAMES = {
         "email", "email_address", "primary_email_address", "mail"
+    };
+
+    /**
+     * Full-name claim aliases. Clerk's templated JWT typically uses
+     * {@code full_name} ({@code {{user.full_name}}}); OIDC standard uses
+     * {@code name}; {@code preferred_username} is the OIDC fallback when
+     * the IdP doesn't ship a display name. When the full-name lookup comes
+     * up empty, the aspect falls back to composing
+     * {@link #FIRST_NAME_CLAIM_NAMES} + {@link #LAST_NAME_CLAIM_NAMES}
+     * (Clerk also exposes these as separate template variables, and OIDC
+     * has {@code given_name} / {@code family_name}). The resulting value
+     * lands inside the {@code attributes} JSON under {@code user_name}.
+     */
+    private static final String[] NAME_CLAIM_NAMES = {
+        "full_name", "name", "preferred_username"
+    };
+
+    private static final String[] FIRST_NAME_CLAIM_NAMES = {
+        "first_name", "given_name"
+    };
+
+    private static final String[] LAST_NAME_CLAIM_NAMES = {
+        "last_name", "family_name"
     };
 
     private final UsageLogger usageLogger;
@@ -152,7 +183,7 @@ public class UsageLoggingAspect {
             .userEmail(userEmail)
             .status(failed ? STATUS_ERROR : STATUS_SUCCESS)
             .durationMs(durationMs)
-            .attributes(buildAttributes())
+            .attributes(buildAttributes(auth))
             .errorMessage(failed ? truncate(thrown.getMessage(), 500) : null)
             .clientIp(clientIp(request))
             .userAgent(userAgent(request))
@@ -161,21 +192,30 @@ public class UsageLoggingAspect {
 
     /**
      * Merges caller-supplied attributes from {@link UsageAttributes} with the
-     * always-on entries the aspect contributes itself (currently the MDC
-     * correlation id, which the BQ-aligned schema does not carry as a
-     * top-level column).
+     * aspect-supplied entries. Today that's the MDC correlation id (the BQ-
+     * aligned schema doesn't carry it as a top-level column) and the user's
+     * display name lifted out of the JWT/OIDC principal so dashboards can
+     * read {@code attributes->>'user_name'} without joining role tables.
      *
+     * @param auth current Spring Security authentication (may be null)
      * @return merged map, or null when nothing was contributed
      */
-    private static Map<String, Object> buildAttributes() {
+    private static Map<String, Object> buildAttributes(Authentication auth) {
         Map<String, Object> caller = UsageAttributes.snapshot();
         String correlation = MDC.get(MDC_CORRELATION);
-        if (caller == null && (correlation == null || correlation.isBlank())) {
+        String userName = extractName(auth);
+        boolean nothing = caller == null
+            && (correlation == null || correlation.isBlank())
+            && (userName == null || userName.isBlank());
+        if (nothing) {
             return null;
         }
         Map<String, Object> merged = new LinkedHashMap<>();
         if (correlation != null && !correlation.isBlank()) {
             merged.put(ATTR_CORRELATION_ID, correlation);
+        }
+        if (userName != null && !userName.isBlank()) {
+            merged.put(ATTR_USER_NAME, userName);
         }
         if (caller != null) {
             merged.putAll(caller);
@@ -191,37 +231,95 @@ public class UsageLoggingAspect {
      * @param auth current Spring Security authentication
      * @return email value, or null when unavailable
      */
-    private String extractEmail(Authentication auth) {
-        if (auth == null) {
-            return null;
+    private static String extractEmail(Authentication auth) {
+        return readPrincipalClaim(auth, EMAIL_CLAIM_NAMES, OidcUser::getEmail);
+    }
+
+    /**
+     * Extracts the user's display name from the principal. Resolution order:
+     * <ol>
+     *   <li>{@link OidcUser#getFullName()} (Replit OIDC) /
+     *       {@code full_name} / {@code name} / {@code preferred_username} —
+     *       first non-blank wins.</li>
+     *   <li>Compose {@code first_name + " " + last_name} (Clerk template
+     *       variables) or OIDC {@code given_name + " " + family_name}.</li>
+     *   <li>If only one half of the pair is present, return that half.</li>
+     * </ol>
+     * The composed fallback covers Clerk users whose
+     * {@code {{user.full_name}}} template variable resolved to blank but
+     * whose first/last name claims are still in the JWT.
+     *
+     * @param auth current Spring Security authentication
+     * @return display name, or null when no naming claim is present
+     */
+    private static String extractName(Authentication auth) {
+        String fullName = readPrincipalClaim(auth, NAME_CLAIM_NAMES, OidcUser::getFullName);
+        if (fullName != null && !fullName.isBlank()) {
+            return fullName;
         }
-        Object principal = auth.getPrincipal();
-        if (principal instanceof Jwt jwt) {
-            return firstClaim(jwt.getClaims()::get);
+        String first = readPrincipalClaim(auth, FIRST_NAME_CLAIM_NAMES, OidcUser::getGivenName);
+        String last = readPrincipalClaim(auth, LAST_NAME_CLAIM_NAMES, OidcUser::getFamilyName);
+        boolean hasFirst = first != null && !first.isBlank();
+        boolean hasLast = last != null && !last.isBlank();
+        if (hasFirst && hasLast) {
+            return first + " " + last;
         }
-        if (principal instanceof OidcUser oidc) {
-            String standard = oidc.getEmail();
-            if (standard != null && !standard.isBlank()) {
-                return standard;
-            }
-            return firstClaim(oidc.getClaims()::get);
+        if (hasFirst) {
+            return first;
         }
-        if (principal instanceof OAuth2User oauth) {
-            return firstClaim(oauth.getAttributes()::get);
+        if (hasLast) {
+            return last;
         }
         return null;
     }
 
     /**
-     * Walks {@link #EMAIL_CLAIM_NAMES} and returns the first non-blank value
-     * the lookup function produces. Tolerant of {@code null} (missing) and
+     * Shared backbone for principal-claim reads. Walks the alias list across
+     * Jwt / OidcUser / OAuth2User principal shapes and returns the first
+     * non-blank match. For OidcUser an OIDC-standard accessor (e.g.
+     * {@link OidcUser#getEmail()}) is checked first so a canonical value
+     * wins over a non-standard claim alias.
+     *
+     * @param auth current Spring Security authentication
+     * @param aliases claim names to try, in order
+     * @param oidcStandard OIDC standard accessor when the principal is an
+     *                     {@link OidcUser}; consulted before the alias list
+     * @return first non-blank value, or null
+     */
+    private static String readPrincipalClaim(Authentication auth,
+                                             String[] aliases,
+                                             Function<OidcUser, String> oidcStandard) {
+        if (auth == null) {
+            return null;
+        }
+        Object principal = auth.getPrincipal();
+        if (principal instanceof Jwt jwt) {
+            return firstClaim(jwt.getClaims()::get, aliases);
+        }
+        if (principal instanceof OidcUser oidc) {
+            String standard = oidcStandard.apply(oidc);
+            if (standard != null && !standard.isBlank()) {
+                return standard;
+            }
+            return firstClaim(oidc.getClaims()::get, aliases);
+        }
+        if (principal instanceof OAuth2User oauth) {
+            return firstClaim(oauth.getAttributes()::get, aliases);
+        }
+        return null;
+    }
+
+    /**
+     * Walks the supplied alias list and returns the first non-blank value the
+     * lookup function produces. Tolerant of {@code null} (missing) and
      * blank-string ({@code ""}) claim values.
      *
      * @param lookup function that resolves a claim/attribute name to its value
+     * @param aliases claim names to try, in order
      * @return first matching value as a string, or null
      */
-    private static String firstClaim(Function<String, Object> lookup) {
-        for (String name : EMAIL_CLAIM_NAMES) {
+    private static String firstClaim(Function<String, Object> lookup, String[] aliases) {
+        for (String name : aliases) {
             Object value = lookup.apply(name);
             if (value == null) {
                 continue;

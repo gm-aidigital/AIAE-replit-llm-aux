@@ -511,6 +511,37 @@ for `AUTH_MODE=replit` (so Spring resolves `{baseUrl}` to the public
 `https://*.replit.dev` host, not `http://localhost:5000`). It is harmless
 for the other modes — leave it always on.
 
+### Startup budget on Replit Reserved VM
+
+Reserved VM closes its port-check window roughly **30 seconds** after the
+process starts. Spring Boot binds Tomcat in the LAST step of `refresh()`,
+AFTER every bean initialises — so Liquibase + Hibernate's JDBC dialect
+probe + JPA entity scan all gate the bind. Past incident: cold-start hit
+~40s+, the platform killed the JVM mid-`refresh()`, and the deploy looped
+silently (no exception, just fresh PIDs).
+
+`application-replit.yml` (THIS PROFILE ONLY — not the base, not local-dev)
+ships with the following knobs to keep cold-start under ~10s:
+
+| Setting | What it skips | Trade-off |
+|---|---|---|
+| `spring.main.lazy-initialization=true` | Eager bean construction → Tomcat binds before JPA/MapStruct/security/Logbook init | First request to each cold path is ~200ms-1s slower |
+| `spring.jpa.database-platform=org.hibernate.dialect.PostgreSQLDialect` | Hibernate's JDBC dialect probe (multi-second on cold pool) | Pins the dialect — Replit is always Postgres, fine |
+| `hibernate.boot.allow_jdbc_metadata_access=false` + `temp.use_jdbc_metadata_defaults=false` | The catalog/schema metadata round-trip at boot | **Requires** the explicit dialect above, else Hibernate throws "Unable to determine Dialect without JDBC metadata" |
+
+If cold-start still blows the budget after these knobs (typically when
+Liquibase grows past ~10s of migrations), the next escalation is
+`spring.liquibase.enabled=false` + running Liquibase from an
+`ApplicationListener<ApplicationReadyEvent>` AFTER the port binds. That
+lets the platform mark the deploy healthy while migrations stream in the
+background — at the cost of requests landing on a half-migrated schema
+for a short window. Reach for it only when the four knobs above aren't
+enough.
+
+Do NOT copy these knobs into `application.yml` (base) or
+`application-local.yml`. Local-dev keeps eager init so misconfigurations
+fail loudly on `mvn spring-boot:run`; lazy-calinit would mask them.
+
 ## Local-dev dry-run (handoff only)
 
 ```bash

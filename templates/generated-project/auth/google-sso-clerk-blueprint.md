@@ -227,11 +227,35 @@ One claim is canonical principal id; used EVERYWHERE ("who the user is"):
 - Mock mode MUST make `getName()` return lowercased email. `MockTokenService`
   puts `email` into `sub` AND emits an `email` claim → `extractEmail` reads
   it directly.
-- Clerk JWTs MUST carry an email claim for `user_email` to populate. Clerk-
-  side configuration to make that happen is out of scope for this template
-  — see Clerk's own docs. Backend `extractEmail` accepts `email`,
+- Clerk JWTs MUST carry an email claim for `user_email` (and, via
+  `JwtAuthenticationConverter#principalClaimName="email"` in `SecurityConfig`,
+  for `user_id` / `Authentication#getName()`) to populate. Clerk-side
+  configuration to make that happen is out of scope for this template —
+  see Clerk's own docs. Backend `extractEmail` accepts `email`,
   `email_address`, `primary_email_address`, or `mail` (first non-blank
   wins), so any of those claim names works without code changes.
+- The aspect auto-lifts the user's display name into
+  `usage_events.attributes->>'user_name'`. Resolution order:
+  `full_name` → `name` → `preferred_username`, then a composed fallback
+  of `first_name + last_name` (Clerk template variables) or
+  `given_name + family_name` (OIDC standard). When only one half is
+  present, that half wins.
+
+  Recommended Clerk JWT template — robust because it ships both the
+  pre-computed `full_name` AND the components, so the composed fallback
+  kicks in for users whose `{{user.full_name}}` resolves to blank:
+  ```json
+  {
+    "email":      "{{user.primary_email_address}}",
+    "full_name":  "{{user.full_name}}",
+    "first_name": "{{user.first_name}}",
+    "last_name":  "{{user.last_name}}"
+  }
+  ```
+  Resulting row: `user_id` = lowercased email, `user_email` = lowercased
+  email, `attributes->>'user_name'` = e.g. `"Gleb Mozhaiskii"`. The
+  template's `user_id` claim is unnecessary — backend already uses
+  `email` for principal name and JWT `sub` only as silent fallback.
 
 **Hard rules** (#1 source of "logged in but no data" bugs):
 
