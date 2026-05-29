@@ -52,6 +52,25 @@ Status colors are reserved only for state communication:
 
 Never use status colors as decoration.
 
+### Scale tokens (spacing, radius, type)
+
+`tokens.css` also exposes spacing, radius, and type scales as CSS variables —
+consume these in component CSS instead of hard-coding px:
+
+- Spacing: `--space-1` (4px), `--space-2` (8px), `--space-3` (12px),
+  `--space-4` (16px), `--space-6` (24px), `--space-10` (40px).
+- Radius: `--radius-sm` (8px), `--radius-md` (10px),
+  `--radius-lg`/`--radius-xl` (12px), `--radius-full` (999px).
+- Type: `--text-body` (13px), `--text-table-head` (14px),
+  `--text-subhead` (16px), `--text-section` (18px),
+  `--text-page-title` (32px); aliases `--text-sm`/`--text-base`/`--text-lg`/`--text-xl`.
+- Surface/text/border aliases: `--surface-default`, `--surface-muted`,
+  `--surface-accent`, `--text-default`, `--text-muted`, `--accent-primary`,
+  `--border-default`.
+
+The px values in "Shape and Spacing" and "Typography" below are the source of
+truth for these variables; consume the variables, don't re-hard-code the px.
+
 ## Typography
 
 - Primary typeface: Inter, weights 400, 500, 600, 700.

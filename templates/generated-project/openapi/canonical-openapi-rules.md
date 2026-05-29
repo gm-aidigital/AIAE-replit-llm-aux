@@ -41,8 +41,8 @@ servers:
 paths:
   /api/v1/employees:           # ← actual generated route
     get: { … }
-  /api/v1/auth/mock/login:     # ← actual generated route
-    post: { … }
+  /api/v1/auth/me:             # ← actual generated route
+    get: { … }
 ```
 
 **Forbidden (rely on `servers` to "add" the prefix):**
@@ -97,7 +97,7 @@ parameter / response-type contract.
 @RestController
 public class EmployeesController implements EmployeesApi {
     @Override
-    public ResponseEntity<EmployeeV1> getEmployee(UUID id) { ... }
+    public ResponseEntity<EmployeeV1> getEmployee(Long id) { ... }
 }
 
 // CORRECT — file exports keyed off `format: binary` in spec → Resource
@@ -227,6 +227,8 @@ Forbidden:
 ## Schema discipline
 
 - Every field has `type` and uses `format` where relevant (`date`, `date-time`, numeric sizes).
+- Entity IDs are `type: integer, format: int64` (→ Java `Long`, Postgres `BIGINT`);
+  never `format: uuid`. See `custom_instruction/instructions.md` → Database policy.
 - `required` is explicit.
 - Reuse schemas from `components.schemas`.
 - Document enums with descriptions.
@@ -260,7 +262,7 @@ components:
       type: object
       required: [id, fullName, status]
       properties:
-        id: { type: string, format: uuid }
+        id: { type: integer, format: int64 }
         fullName: { type: string }
         status: { $ref: '#/components/schemas/EmployeeStatusV1' }
 

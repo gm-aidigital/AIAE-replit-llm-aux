@@ -1,47 +1,23 @@
-import { useQuery } from "@tanstack/react-query";
-import { apiClient } from "./shared/api/client";
-import { cn } from "./shared/lib/cn";
+import { AppShell } from "./app/AppShell";
+import { TemplateProfilePanel } from "./features/_template";
+import { PageHeader } from "./shared/ui/PageHeader";
 import "./App.css";
 
-// Minimal demo: calls GET /api/v1/auth/me and renders user/loading/error/empty
-// states. Classes follow BEM (see bem-naming-rules.md):
-//   .app                  — block
-//   .app__title           — element
-//   .app__status          — element
-//   .app__status--error   — modifier
-
 export default function App() {
-    const { data, isLoading, isError, error } = useQuery({
-        queryKey: ["auth", "me"],
-        queryFn: async () => {
-            const { data, error } = await apiClient.GET("/api/v1/auth/me");
-            if (error) throw error;
-            return data;
-        },
-        retry: false,
-    });
-
     return (
-        <main className="app">
-            <h1 className="app__title">Replit MVP scaffold</h1>
+        <AppShell appName="Replit MVP">
+            <PageHeader
+                title="Home"
+                subtitle="Compose features from src/features/ — this page uses the _template example."
+            />
 
-            {isLoading && <p className="app__status">Loading…</p>}
+            <section className="app">
+                <TemplateProfilePanel />
 
-            {isError && (
-                <p className={cn("app__status", "app__status--error")} role="alert">
-                    Not signed in ({String(error)})
+                <p className="app__hint">
+                    Copy <code>src/features/_template/</code> when adding your first real feature.
                 </p>
-            )}
-
-            {data && (
-                <p className="app__status app__status--ok">
-                    Hello, <strong className="app__email">{data.email}</strong>.
-                </p>
-            )}
-
-            <p className="app__hint">
-                Replace this scaffold with your first feature block.
-            </p>
-        </main>
+            </section>
+        </AppShell>
     );
 }

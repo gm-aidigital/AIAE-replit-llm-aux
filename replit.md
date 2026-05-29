@@ -13,14 +13,30 @@ quality gates.
 Authoritative rules: `custom_instruction/instructions.md`. Workflows:
 `.agents/skills/*/SKILL.md`. Canonical artifacts: `templates/generated-project/*`.
 
+## Vibe-coder happy path
+
+1. **Clerk Secrets first** — before Run: `CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`,
+   `AUTH_ISSUER_URI`, `AUTH_JWKS_URI`, `AUTH_AUDIENCE` in Replit Secrets (backend
+   fails fast without them). See `.env.example` for the full list.
+2. **Fork bootstrap** — `setup-project.sh` on boot (Python purge + install `scripts/`).
+3. **Package** — `bash scripts/apply-package-name.sh <app-name-package>`.
+4. **Scaffold** — copy from `templates/generated-project/scaffold/` (`SCAFFOLD-MANIFEST.md`);
+   never Spring Initializr / `npm create vite`.
+5. **First feature** — `generation/first-aggregate-checklist.md` (OpenAPI → codegen → layers).
+6. **UI** — copy `src/features/_template/`; router stays in `src/app/AppRoot.tsx`.
+7. **Publish** — `bash scripts/local-verify.sh` from **project root**.
+
+Tell the Agent: Clerk SSO only, typed `shared/api/client.ts`, strip samples with
+`strip-scaffold-samples.sh` when the first real aggregate lands.
+
 ## User Preferences
 
 - Stack lock absolute (Java 21 + Spring Boot 3.x + Maven; React + TS + Vite).
   Override phrase + forbidden list: `custom_instruction/instructions.md` →
   "ABSOLUTE STACK LOCK".
 - Audience: non-technical product users; explanations stay business-focused.
-- Default: dual-mode auth (Clerk + mock fallback), mocked/approved-only data,
-  Replit Secrets for real keys.
+- Auth: Clerk SSO only (required — no mock/replit fallback); mocked/approved-only
+  data; real keys in Replit Secrets.
 - Code: simple over clever; canonical artifacts over hand-written boilerplate.
 - UI: Elevate design system, compact product surfaces, no left side menu.
 - Generation budget: reference canonical files, never paste — see
@@ -46,12 +62,15 @@ templates/generated-project/*              # canonical artifacts + scaffold/
 
 - **Backend**: Java 21 LTS + Spring Boot 3.x + Maven multi-module + PostgreSQL +
   Liquibase + HikariCP + Lombok + Checkstyle + JaCoCo. OpenAPI contract-first.
-  Required modules are `application`, `service`, `domain`, `db`; optional
-  `external-services` is generated only for real outbound integrations, never
-  as an empty/POM-only module.
+  Required modules are `application`, `service`, `domain`, `db`, plus the
+  self-contained `event-logging-to-db-feature` usage-logging module (drop it to
+  remove the feature); optional `external-services` only for real outbound
+  integrations, never as an empty/POM-only module.
 - **Frontend**: React + TypeScript + Vite + TanStack Query, typed via
   `openapi-typescript` + `openapi-fetch` from the backend OpenAPI YAML.
-- **Auth**: dual-mode `AUTH_MODE=auto|sso|mock` (Clerk + backend-signed mock JWT).
+- **Auth**: Clerk SSO only (required). Backend validates Clerk JWTs against the
+  Clerk JWKS via `spring-boot-starter-oauth2-resource-server`; fails fast at
+  startup if `AUTH_ISSUER_URI`/`AUTH_JWKS_URI` is unset. No mock/replit fallback.
 - **Observability**: structured JSON logs to stdout, Actuator
   (`health`, `prometheus`), Postgres `usage_events` for usage estimation.
 - **Runtime split**: Replit → profile `replit`, port `5000`, Replit Postgres
@@ -70,40 +89,29 @@ Authoritative-references table: `custom_instruction/instructions.md` →
   workspace-preview only.
 - `onBoot` runs `templates/generated-project/scaffold/scripts/setup-project.sh`.
 - Workspace `[env]` does NOT propagate to Deployments. Before publish, copy
-  `SPRING_PROFILES_ACTIVE`, `CLERK_*`, `AUTH_*`, `USAGE_LOG_*`, and any Replit
-  Postgres env vars shown in the Secrets pane into Deployment Secrets when
-  Replit does not auto-propagate them.
-
-### Replit-only auth alternative
-
-For Replit-only demos (no local-dev export),
-[Replit Auth](https://docs.replit.com/references/auth-and-identity/authentication)
-is zero-config. Template defaults to Clerk because generated apps must also
-run locally.
+  `SPRING_PROFILES_ACTIVE`, `CLERK_*`, `AUTH_*`, `USAGE_LOG_*`, and Replit
+  Postgres env vars into Deployment Secrets when Replit does not auto-propagate.
 
 ## External Dependencies
 
-All optional in MVP mode — generated projects must run on Replit with none set.
+Clerk SSO is REQUIRED — set keys in Secrets before first Run. Postgres + usage
+logging are Replit-provided when enabled.
 
 | Service | Purpose | Activation |
 |---|---|---|
 | **Clerk** | Google SSO. | `CLERK_PUBLISHABLE_KEY` + `CLERK_SECRET_KEY` in Replit Secrets. |
 | **Google OAuth** (via Clerk) | Backing IdP. | Configured in Clerk Dashboard. |
 | **Usage logging** | Telemetry → app's `usage_events` Postgres table. | `USAGE_LOGGING_ENABLED=true` + `USAGE_LOG_SERVICE_NAME`. |
-| **PostgreSQL** | Persistence. | Replit `postgresql-16` injects Postgres env vars (`PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGPASSWORD`; `DATABASE_URL` may also exist). Backend config uses the individual vars directly; no custom post-processor and no forced SSL. Local-dev: docker-compose. See `.agents/skills/backend-java-feature/references/database-url-translation.md`. |
+| **PostgreSQL** | Persistence. | Replit `postgresql-16` injects Postgres env vars. Local-dev: docker-compose. |
 
 ### Required env placeholders (`.env.example`)
 
-Auth: `AUTH_MODE`, `AUTH_ISSUER_URI`, `AUTH_JWKS_URI`, `AUTH_AUDIENCE`,
-`AUTH_MOCK_USER`, `AUTH_MOCK_JWT_SECRET`, `CLERK_PUBLISHABLE_KEY`,
-`CLERK_SECRET_KEY`, `CLERK_SIGN_IN_FORCE_REDIRECT_URL`,
+Auth (Clerk SSO, required): `AUTH_ISSUER_URI`, `AUTH_JWKS_URI`, `AUTH_AUDIENCE`,
+`CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, `CLERK_SIGN_IN_FORCE_REDIRECT_URL`,
 `CLERK_SIGN_UP_FORCE_REDIRECT_URL`.
 
 Usage logging: `USAGE_LOGGING_ENABLED`, `USAGE_LOG_SERVICE_NAME`,
 `USAGE_LOG_ENVIRONMENT`.
-
-Provider setup (README only): `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`
-(in Clerk Dashboard).
 
 ### Prohibited
 

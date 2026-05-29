@@ -56,12 +56,21 @@ direction:
 
 | File | Purpose | Why Replit keeps deleting it | Replacement is FORBIDDEN |
 |---|---|---|---|
-| `frontend/src/pages/Login.tsx` | Mock-mode login form + Clerk `<SignInButton>` fallback. The single sign-in surface the SPA routes to on `401`. | Replit assumes "auth provider owns its own page" and removes ours. With `AUTH_MODE=mock` or auto-fallback the page MUST exist or the app dead-ends on 401. | Inlining the form inside `App.tsx` |
+| `frontend/src/pages/Login.tsx` | Clerk `<SignIn/>` — the single sign-in surface the SPA routes to on `401`. | Replit assumes "auth provider owns its own page" and removes ours; without it the app dead-ends on 401. | Inlining the form inside `App.tsx` |
+| `frontend/src/app/AppRoot.tsx` | Router + `AuthProvider` + `ProtectedRoute` — single auth/routing entry. | Replit mounts `<ClerkProvider>` in `main.tsx` and drops the token-getter bridge | Putting router/auth in `main.tsx` |
+| `frontend/src/app/AppShell.tsx` | Top-header layout shell (Elevate — no sidebar). | Monolithic layout in `App.tsx` | Left sidebar navigation |
+| `frontend/src/shared/ui/AppHeader.tsx` + `PageHeader.tsx` | Standard top nav + page title row. | Ad-hoc headers per page | One-off `<h1>` styling |
+| `frontend/src/shared/hooks/useDebounce.ts` | Canonical debounce hook (structure-lint enforced). | Broken `useState`-only debounce hooks | Inline debounce in every feature |
 | `frontend/src/shared/auth/AuthProvider.tsx` | Mounts `ClerkProvider` and bridges `useAuth().getToken()` into `runtime.ts` via `setSsoTokenGetter`. | Replit thinks `<ClerkProvider>` belongs in `main.tsx` — but then the token-getter bridge is missing and every authenticated fetch fires without a Bearer. | Putting `<ClerkProvider>` directly in `main.tsx` |
+| `frontend/src/shared/auth/ProtectedRoute.tsx` | Clerk auth gate — redirects unsigned users to `/login`. | Inlining ad-hoc auth checks in every page | Custom per-page auth gates |
+| `frontend/src/shared/ui/LoadingBlock.tsx` (+ `ErrorAlert`, `EmptyState`) | Standard async/query UI states (Elevate-styled). | Re-implementing loading/error/empty in every feature | Inline one-off status paragraphs |
+| `backend/application/.../web/SpaFallbackController.java` | Serves `index.html` for client-side routes when Spring hosts the built SPA (Replit Deployment deep links). | Looks like unused MVC glue | Per-app route lists that miss new pages |
 | `frontend/src/App.css` | Base layout / login form classes (`.login`, `.login__form`, etc.) referenced by `Login.tsx`. | Replit replaces with an ad-hoc `styles.css`, breaking the `bem-naming-rules.md` selector contract. | A `styles.css` parallel file |
 | `frontend/src/App.test.tsx` | Vitest smoke: app renders, auth shell behaves. Part of the MVP safety suite. | Replit treats tests as optional and deletes them when refactoring. | Skipping the test suite |
-| `scripts/setup-project.sh` | First-run replacement of `PACKAGE_REPLACE_ME` → real package, frontend deps install, Liquibase smoke. | Replit doesn't run it (it has its own bootstrap), so it looks dead — but engineering handoff and local-dev rely on it. | Manual one-off sed/find commands |
+| `scripts/setup-project.sh` | First-run cleanup: installs `.gitignore`, removes Replit Python injection, untracks control plane, copies runtime scripts to `scripts/`. Does **not** replace `PACKAGE_REPLACE_ME` — run `scripts/apply-package-name.sh` for that. | Manual one-off sed/find commands |
+| `scripts/apply-package-name.sh` | Mechanical `PACKAGE_REPLACE_ME` → `com.aidigital.<app>` rename + `groupId` update. Run once when scaffolding. | Ad-hoc package renames that miss directories |
 | `scripts/strip-scaffold-samples.sh` | One-shot removal of the reference sample aggregate (sample/* packages + 0002-sample-reference.xml + its `<include>` in `db.changelog-master.xml`). Run as part of landing the first real aggregate. | Replit sees a "cleanup script" with no business logic and skips it — but without it the generated project ships with `Sample*` classes and an orphaned reference table. | Hand-deleting one file and forgetting the changelog-master edit (Liquibase boot crash) |
+| `scripts/structure-lint.sh` | Architecture grep gate (sample survival, controller placement, module edges, AppRoot shell). Runs in `local-verify.sh` and `replit-build.sh`. | Agent ships layer violations that compile but fail handoff | Manual review only at publish time |
 | `docker-compose.yml` | Local-dev orchestration (backend + frontend + Postgres). Required for handoff. | Replit doesn't need Docker, so it's "noise" inside the workspace. | Removing local-dev support |
 | `.env.example` | Canonical env-var manifest. Lists every var consumed by `application.yml`, `vite.config.ts`, and the scripts. | Replit assumes Secrets pane is sufficient — but the manifest is the only source of truth for local-dev and handoff. | A README section listing vars |
 | `README.md.template` | Project README skeleton (with placeholders for app name, owners, runbook links). | Replit overwrites with its own `replit.md`; the engineering README must survive. | A single `replit.md` for everything |
@@ -236,7 +245,9 @@ Two paths, in increasing aggressiveness:
    and remove the `<include file="db/changelog/changes/0001-usage-events.xml"/>`
    line from `backend/db/src/main/resources/db/changelog/db.changelog-master.xml`.
    (`application` picks up `event-logging-to-db-feature` transitively through `service`, so
-   no explicit application/pom edit is required.)
+   no explicit application/pom edit is required.) Also set
+   `USAGE_LOGGING_ENABLED=false` in `.env.example` so CI's usage-logging gate
+   stays consistent.
 
 **Critical edge: `application → db`.** Migrations run at RUNTIME via Spring
 Boot's Liquibase auto-config; changelog XMLs only land in the fat jar if
@@ -323,7 +334,7 @@ service/src/main/java/<base>/service/
       ValidationMessageType.java
   <aggregate>/                                      # ONE folder per domain aggregate
     services/<X>Service.java                        # interface
-    services/impl/<X>ServiceImpl.java               # @Service impl, @LogUsage on each public method
+    services/impl/<X>ServiceImpl.java               # @Service impl; every public method auto-logged (UsageLoggingAspect)
     mappers/<X>Mapper.java                          # Entity ↔ Record, ONE per entity, compose via uses=
     models/
       <X>Record.java                                # output record (immutable)
@@ -338,14 +349,14 @@ domain/src/main/java/<base>/domain/
 event-logging-to-db-feature/src/main/java/<base>/usagelogging/      # usage-logging Java surface (NO migrations — those live in db/)
   LogUsage.java                                     # annotation (import from here)
   UsageAttributes.java                              # ThreadLocal helper; caller fills the JSONB `attributes`
-  UsageEvent.java                                   # value record
-  UsageLogger.java                                  # sink interface
-  PostgresUsageLogger.java                          # @Postgres sink impl
-  NoOpUsageLogger.java                              # used when app.usage-logging.enabled=false
-  UsageEventPersistenceService.java                 # @Async + REQUIRES_NEW INSERT bean
-  UsageLoggingAspect.java                           # @Aspect, intercepts @LogUsage
-  UsageLoggingConfig.java                           # @Configuration: binds sink + executor
-  UsageLoggingProperties.java                       # app.usage-logging.* binding
+  UsageLoggingAspect.java                           # @Aspect, intercepts @LogUsage (kept at root with LogUsage/UsageAttributes — uses their package-private contract)
+  models/UsageEvent.java                            # value record
+  loggers/UsageLogger.java                          # sink interface
+  loggers/impl/PostgresUsageLogger.java             # @Postgres sink impl
+  loggers/impl/NoOpUsageLogger.java                 # used when app.usage-logging.enabled=false
+  config/UsageLoggingConfig.java                    # @Configuration: binds sink + executor
+  config/UsageLoggingProperties.java                # app.usage-logging.* binding
+  persistence/UsageEventPersistenceService.java     # @Async + REQUIRES_NEW INSERT bean
   entities/UsageEventEntity.java                    # JPA mapping for usage_events (BQ-aligned schema)
   repositories/UsageEventRepository.java            # JpaRepository
 
@@ -432,7 +443,8 @@ Never write singular `service/`, `mapper/`, `entity/`, `repository/`, `model/`,
 ## Module-level rules
 
 - Controllers implement generated OpenAPI interfaces; thin (≤6 lines, no conditionals).
-- Only `*ServiceImpl` carries `@Service`; each public impl method has `@LogUsage(action = "...")`.
+- Only `*ServiceImpl` carries `@Service`; every public impl method is auto-logged
+  by `UsageLoggingAspect` (`@LogUsage` optional, to override the action name).
 - Entities/repositories never appear in REST contracts.
 - DB via Liquibase. MapStruct for all conversion. One entity = one mapper per layer; compose via shared mapper config + `uses=`.
 - Business errors as `AppException(ErrorReason.X, ...)` — never per-domain enums.
@@ -475,9 +487,9 @@ Feature-first React (Bulletproof React shape, see
 `templates/generated-project/frontend/canonical-react-frontend-rules.md`):
 
 ```
-frontend/src/app          # providers, router, global error boundary, shell
+frontend/src/app          # AppRoot (router + auth), AppShell layout
 frontend/src/pages        # route-level composition only (incl. Login.tsx)
-frontend/src/features     # feature modules (UI + hooks + feature API)
+frontend/src/features     # feature modules (UI + hooks + feature API); copy _template/
 frontend/src/entities     # reusable domain UI/models
 frontend/src/shared/api   # generated OpenAPI types + auth-aware fetcher
 frontend/src/shared/auth  # AuthProvider — Clerk wrapper + token-getter bridge
@@ -496,20 +508,18 @@ frontend/src/shared/config
 | Frontend in Deployment | Spring serves `frontend/dist/` from `src/main/resources/static/` | n/a |
 | Secrets | Replit Secrets pane | `.env` (gitignored) |
 | Profile | `replit` (Hikari `2–3`) | `local` (Hikari `50`) |
-| Auth modes supported | `auto` / `sso` / `mock` / `replit` | `mock` (default) or `sso` if standalone Clerk creds present |
+| Auth | Clerk SSO only (Bearer JWT validated vs Clerk JWKS) | Clerk SSO (set issuer/JWKS + Clerk keys) |
 
 Both share `application.yml` as base. See
 `.agents/skills/backend-java-feature/references/database-url-translation.md`.
 
-`AUTH_MODE=replit` is the Replit-native OIDC flow (no Clerk):
-session-cookie + PKCE public client, with `REPL_ID` as the pre-registered
-OAuth client id. See `templates/generated-project/auth/google-sso-clerk-blueprint.md`
-"Replit Auth as a fourth mode" for full wiring.
+Auth is Clerk SSO only (Bearer JWT validated against the Clerk JWKS); see
+`templates/generated-project/auth/google-sso-clerk-blueprint.md`.
 
-`server.forward-headers-strategy=framework` is REQUIRED in `application.yml`
-for `AUTH_MODE=replit` (so Spring resolves `{baseUrl}` to the public
-`https://*.replit.dev` host, not `http://localhost:5000`). It is harmless
-for the other modes — leave it always on.
+`server.forward-headers-strategy=framework` is set in `application.yml` so
+Spring honours `X-Forwarded-*` behind Replit's edge (absolute URLs / Swagger /
+CORS resolve to the public `https://*.replit.dev` host, not
+`http://localhost:5000`).
 
 ### Startup budget on Replit Reserved VM
 

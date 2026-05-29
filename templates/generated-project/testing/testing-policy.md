@@ -5,12 +5,29 @@ zero-test project is not complete. Build/debug loops may skip tests while the
 app is unstable; the final MVP must include a lean safety suite for backend
 and frontend before publish or handoff.
 
+## Testability rules (all production code)
+
+These make every unit testable and mockable — apply to all generated code:
+
+- **No `static` methods on beans/services.** Use instance methods so
+  collaborators can be injected and mocked; `static` can't be stubbed and forces
+  integration-style tests. Pure constants stay `static final`.
+- **Self-invoked methods are package-private or `protected`, never `private`.**
+  When a public method calls another method on the same class, the callee must be
+  visible to a Mockito **spy** so the caller is unit-testable in isolation:
+  ```java
+  MyService svc = spy(new MyService(deps));
+  doReturn(stub).when(svc).helper(args);   // helper() is package-private
+  assertThat(svc.publicMethod(args)).isEqualTo(expected);
+  ```
+- Prefer constructor injection (`@RequiredArgsConstructor`) so tests pass fakes.
+
 ## Phases
 
 | Phase | Trigger | Tests required? | JaCoCo gate |
 |---|---|---|---|
 | **1. Building** | Initial generation; app not yet running E2E | **No final requirement yet** — `-DskipTests` allowed only for internal debug loops | `0%` (gate disabled) |
-| **2. MVP safety suite** | Replit Run launches; mock-login -> `/auth/me` -> 200; main flow reaches backend/DB and renders in frontend | **Yes** — lean backend + frontend safety tests are mandatory before completion | Soft ratchet; never decreases once raised |
+| **2. MVP safety suite** | Replit Run launches; Clerk sign-in -> `/auth/me` -> 200; main flow reaches backend/DB and renders in frontend | **Yes** — lean backend + frontend safety tests are mandatory before completion | Soft ratchet; never decreases once raised |
 | **3. Handoff** | Engineering takeover | **Strict** — full coverage including IT, edge cases, business invariants | `80%` enforced (`-Phandoff`) |
 
 ### Phase 1 — Building
@@ -33,15 +50,16 @@ Not allowed:
 
 ### Phase 2 — MVP safety suite
 
-App boots, mock-auth works, demo data is visible, and the main frontend flow
+App boots, Clerk SSO works, demo data is visible, and the main frontend flow
 renders against the backend. Agent **stops adding features** and writes the
 minimum safety suite in the same generation pass.
 
 Backend minimums:
 
 1. **Application smoke** — app context starts, and health endpoint is reachable.
-2. **Auth boundary** — at least one protected API returns `401` without a
-   token and `2xx` with a valid mock JWT.
+2. **Auth boundary** — at least one protected API returns `401` without a token
+   and `2xx` with a valid Clerk JWT (use Spring Security's `jwt()` test
+   post-processor; no live IdP needed), plus `401` for an invalid/expired token.
 3. **Main happy path** — the primary generated flow returns the canonical DTO
    shape from controller/API level.
 4. **Main error path** — validation or business error maps to the committed
@@ -54,7 +72,7 @@ Backend minimums:
 Frontend minimums:
 
 1. **Render smoke** — the main route renders under Vitest without crashing.
-2. **Auth/session behavior** — mock or SSO session state is represented through
+2. **Auth/session behavior** — Clerk SSO session state is represented through
    the same UI path used by the app.
 3. **Async states** — the primary server-backed surface covers loading, error,
    and success states.
@@ -124,11 +142,11 @@ Phase 1 -> 2 when ALL true:
 
 - [ ] `mvn -f backend/pom.xml -DskipTests package` succeeds.
 - [ ] Replit Run boots the workspace without unhandled exceptions in logs.
-- [ ] `curl /api/v1/auth/me` with a mock JWT returns 200.
+- [ ] `curl /api/v1/auth/me` with a valid Clerk JWT returns 200.
 - [ ] At least one feature endpoint reads from the DB and returns data.
 - [ ] Frontend renders without console errors against the running backend.
-- [ ] Browser Network tab shows mock login hitting exactly
-  `/api/v1/auth/mock/login` (or `<context-path>/api/v1/auth/mock/login`),
+- [ ] Browser Network tab shows API calls hitting exactly
+  `/api/v1/auth/me` (or `<context-path>/api/v1/auth/me`),
   never `/api/v1/api/v1/...`.
 
 "Phase 1 done -> start writing tests" handshake. `mvp-safety-review` refuses

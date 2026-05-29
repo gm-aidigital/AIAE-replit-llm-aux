@@ -1,9 +1,5 @@
-import { beforeEach, describe, expect, it } from "vitest";
-import { resolveApiBaseUrl, runtimeConfig, setMockToken, usesClerkAuth } from "./runtime";
-
-beforeEach(() => {
-    setMockToken(null);
-});
+import { describe, expect, it } from "vitest";
+import { resolveApiBaseUrl, runtimeConfig } from "./runtime";
 
 describe("resolveApiBaseUrl", () => {
     it("should keep API calls same-origin in Vite dev mode test", () => {
@@ -19,26 +15,11 @@ describe("resolveApiBaseUrl", () => {
     });
 });
 
-describe("mock token runtime storage", () => {
-    it("should persist mock token across route changes and reloads test", async () => {
-        setMockToken("jwt-123");
+describe("auth token", () => {
+    it("should return null when no Clerk token getter is registered yet test", async () => {
+        // Given: AuthProvider has not mounted (no ClerkTokenBridge registered)
 
-        expect(await runtimeConfig.getAuthToken()).toBe("jwt-123");
-        expect(window.sessionStorage.getItem("replit-mvp.mockToken")).toBe("jwt-123");
-    });
-
-    it("should clear mock token on unauthorized test", async () => {
-        setMockToken("jwt-123");
-
-        await runtimeConfig.onUnauthorized();
-
+        // When / Then: no token is available, never throws
         expect(await runtimeConfig.getAuthToken()).toBeNull();
-        expect(window.sessionStorage.getItem("replit-mvp.mockToken")).toBeNull();
-    });
-});
-
-describe("auth mode selection", () => {
-    it("should stay in mock-compatible mode when no Clerk publishable key is configured test", () => {
-        expect(usesClerkAuth()).toBe(false);
     });
 });

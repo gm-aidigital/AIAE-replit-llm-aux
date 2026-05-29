@@ -70,13 +70,19 @@ Liquibase changelog. Logger never blocks a request, never throws into the flow.
 - Aspect handles success/exception/duration/user/correlationId. Business code
   never imports `UsageLogger`.
 
-**Manual** (your discipline):
-- **`@LogUsage(action = "<dotted.lowercase>")` on every `*ServiceImpl` public
-  method that's a user action.** Without it, the method is NOT logged —
-  aspect can't guess which methods are user actions vs internal helpers.
-- One `@LogUsage` per public method on every `*ServiceImpl`. Private/internal
-  helpers stay un-annotated.
-- `action` is a stable analytics identifier — pick once; renaming breaks dashboard queries.
+**Automatic — no annotation needed** (this is the key behavior):
+- The aspect intercepts EVERY public method of EVERY `*ServiceImpl` (pointcut
+  `execution(public * *..service..services.impl.*ServiceImpl.*(..))`). Usage
+  logging can never be "forgotten" — there is nothing to annotate.
+- The action name is derived as `<aggregate>.<method>` (e.g.
+  `SampleServiceImpl#findById` → `sample.findById`).
+- Private/internal helpers and self-invoked calls are not logged (Spring AOP
+  proxy semantics — call service methods from another bean, e.g. the controller).
+
+**Optional override** (`@LogUsage`):
+- Add `@LogUsage(action = "<dotted.lowercase>")` on a method ONLY to override
+  the derived action name (a stable analytics id — pick once; renaming breaks
+  dashboard queries) or to set a non-default `eventType`.
 
 Reference: `SampleServiceImpl` in scaffold.
 
@@ -113,7 +119,7 @@ is nullable so partial / fire-and-forget events still land.
 | `environment` | `TEXT` | no | `prod` / `staging` / `dev` |
 | `event_type` | `TEXT` | yes | `api_request` / `auth` / `error` / `custom` |
 | `action` | `TEXT` | no | dotted lowercase, e.g. `forecast.create` |
-| `user_id` | `TEXT` | no | `Authentication#getName()`. `SecurityConfig` pins `JwtAuthenticationConverter#principalClaimName="email"`, so for every JWT-based mode (mock + Clerk-with-email-template) this is the lowercased email; falls back to provider `sub` when no email claim exists. Replit OIDC keeps its `userNameAttributeName("sub")` setting and lands the Replit `sub` here. |
+| `user_id` | `TEXT` | no | `Authentication#getName()`. `SecurityConfig` pins `JwtAuthenticationConverter#principalClaimName="email"`, so when the Clerk JWT carries email this is the lowercased email; falls back to provider `sub` when no email claim exists. |
 | `user_email` | `TEXT` | no | extracted from `email` / `email_address` / `primary_email_address` / `mail` claim |
 | `status` | `TEXT` | no | `success` / `error` / HTTP code as string |
 | `duration_ms` | `BIGINT` | no | operation latency |
@@ -127,12 +133,9 @@ column. The aspect lifts both into `attributes` JSON automatically:
 
 - `attributes.correlation_id` — value of MDC `correlationId` at log time.
 - `attributes.user_name` — first non-blank of `full_name` / `name` /
-  `preferred_username` (or `OidcUser#getFullName()` under Replit OIDC).
-  If none of those is set, the aspect composes
-  `first_name + " " + last_name` (or OIDC `given_name + family_name`) as
-  a fallback — covers Clerk users where `{{user.full_name}}` resolved to
-  blank but the first/last template variables are still in the JWT.
-  Skipped only when no naming claim is present at all.
+  `preferred_username` from the Clerk JWT. If none of those is set, the aspect
+  composes `first_name + " " + last_name` (Clerk template variables) as a
+  fallback. Skipped only when no naming claim is present at all.
 
 Query example:
 ```sql
@@ -335,23 +338,14 @@ Implementation rules for `UsageEventPersistenceService`:
 
 ### Auth principal coverage
 
-The aspect's `extractEmail` MUST handle every live principal type the
-template ships with. Lookup walks a fixed list of claim names —
-`email`, `email_address`, `primary_email_address`, `mail` — first hit wins:
-
-| AUTH_MODE | Principal class | Source |
-|---|---|---|
-| `mock` / `auto` (mock fallback) | `org.springframework.security.oauth2.jwt.Jwt` | `jwt.getClaims().get(<name>)` — `MockTokenService` sets `email`. |
-| `sso` / `auto` (Clerk) | `org.springframework.security.oauth2.jwt.Jwt` | `jwt.getClaims().get(<name>)`. Populates only if the Clerk JWT carries an email claim — Clerk-side configuration is out of scope here. |
-| `replit` | `org.springframework.security.oauth2.core.oidc.user.OidcUser` | `oidc.getEmail()` first (OIDC standard), then fall back through the claim list. |
-| Any other oauth2Login | `org.springframework.security.oauth2.core.user.OAuth2User` | `oauth.getAttributes().get(<name>)`. |
-
-Past breakage (caught in prod data): under `AUTH_MODE=replit`, only the
-`Jwt` branch existed → `user_email` was always null. Adding `OidcUser`
-handling fixed it. The multi-claim fallback (`email`, `email_address`,
-`primary_email_address`, `mail`) is defensive against varied IdP claim
-naming and adds no Clerk-side or provider-side requirements to the
-template.
+The aspect's `extractEmail` reads the principal — always a Clerk
+`org.springframework.security.oauth2.jwt.Jwt` (Clerk SSO is the only auth
+mode) — walking a fixed list of claim names (`email`, `email_address`,
+`primary_email_address`, `mail`; first hit wins) via
+`jwt.getClaims().get(<name>)`. It populates only if the Clerk JWT carries an
+email claim — Clerk-side JWT-template configuration is out of scope here. The
+multi-claim fallback is defensive against varied IdP claim naming and adds no
+provider-side requirement.
 
 ## Liquibase changelog
 

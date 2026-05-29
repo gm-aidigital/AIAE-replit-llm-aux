@@ -1,5 +1,8 @@
-// UsageLoggingAspect — intercepts @LogUsage methods, records UsageEvent via
-// UsageLogger. Behaviour invariants (preserve on every edit):
+// UsageLoggingAspect — AUTO-intercepts every public method of every business
+// service impl (*ServiceImpl in service/<aggregate>/services/impl/) and records
+// a UsageEvent via UsageLogger. No annotation required, so usage logging can
+// never be "forgotten"; apply @LogUsage only to override the derived action
+// name or event type. Behaviour invariants (preserve on every edit):
 //  1. Self-invocation bypasses Spring AOP proxy → aspect won't fire.
 //  2. @Order(LOWEST_PRECEDENCE - 100) — OUTER than @Transactional, so the
 //     usage event reflects final commit/rollback outcome.
@@ -11,22 +14,9 @@
 //     — assembly must be cheap (no I/O).
 //  6. joinPoint.getArgs() deliberately ignored — no payload/JWT/PII leakage.
 //     Callers populate per-row attributes via UsageAttributes.put(...).
-//  7. user_email + user display name extraction covers EVERY supported
-//     AUTH_MODE via a shared principal-claim reader:
-//        Bearer-JWT (sso/mock/auto) → principal is Jwt, scan known claim
-//          names. email aliases: email, email_address, primary_email_address,
-//          mail. name aliases: full_name, name, preferred_username. First
-//          non-blank wins. IdP-side claim configuration is out of scope for
-//          this template — but SecurityConfig wires
-//          JwtAuthenticationConverter#setPrincipalClaimName("email"), so
-//          when the JWT carries email, auth.getName() (→ user_id column)
-//          also returns the email rather than the provider sub.
-//        AUTH_MODE=replit → principal is OidcUser; prefer OidcUser#getEmail()
-//          / OidcUser#getFullName() then fall back to the alias lists.
-//        Any other oauth2Login → principal is OAuth2User; alias lists only.
-//     Adding a new auth backend? Extend the alias lists or pass a new OIDC
-//     standard-accessor into readPrincipalClaim — do not introduce a
-//     parallel pipeline.
+//  7. user_email + user display name extraction reads Clerk JWT claims.
+//     SecurityConfig wires JwtAuthenticationConverter#setPrincipalClaimName("email"),
+//     so auth.getName() (→ user_id column) returns the email when present.
 //  8. The BQ-aligned schema has no top-level correlation_id or user_name
 //     column. The aspect embeds both inside `attributes` JSON
 //     ({"correlation_id": "...", "user_name": "..."}) alongside any
@@ -35,9 +25,13 @@
 
 package PACKAGE_REPLACE_ME.usagelogging;
 
+import PACKAGE_REPLACE_ME.usagelogging.config.UsageLoggingProperties;
+import PACKAGE_REPLACE_ME.usagelogging.loggers.UsageLogger;
+import PACKAGE_REPLACE_ME.usagelogging.models.UsageEvent;
 import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
+import org.aspectj.lang.reflect.MethodSignature;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -46,14 +40,13 @@ import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.oauth2.core.oidc.user.OidcUser;
-import org.springframework.security.oauth2.core.user.OAuth2User;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Component;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
 import jakarta.servlet.http.HttpServletRequest;
+import java.lang.reflect.Method;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.LinkedHashMap;
@@ -62,7 +55,7 @@ import java.util.UUID;
 import java.util.function.Function;
 
 /**
- * Captures {@link LogUsage} service calls and emits structured usage events.
+ * Captures every public business service-impl call and emits structured usage events.
  */
 @Aspect
 @Component
@@ -80,6 +73,18 @@ public class UsageLoggingAspect {
     private static final String MDC_CORRELATION = "correlationId";
     private static final String ATTR_CORRELATION_ID = "correlation_id";
     private static final String ATTR_USER_NAME = "user_name";
+    private static final String DEFAULT_EVENT_TYPE = "api_request";
+
+    /**
+     * Auto-intercept every public method of every business service impl
+     * ({@code <base>.service.<aggregate>.services.impl.*ServiceImpl}). The
+     * package filter deliberately excludes this module's own beans
+     * (e.g. {@code UsageEventPersistenceService}), external-services clients,
+     * and controllers. Apply {@link LogUsage} only to override the derived
+     * action name or event type.
+     */
+    private static final String SERVICE_IMPL_METHODS =
+        "execution(public * *..service..services.impl.*ServiceImpl.*(..))";
 
     /**
      * Claim names checked, in order, when reading the user email from a JWT
@@ -124,15 +129,16 @@ public class UsageLoggingAspect {
     }
 
     /**
-     * Records success or failure metadata around an annotated service method.
+     * Records success or failure metadata around every public service-impl method.
      *
      * @param joinPoint intercepted service method
-     * @param logUsage annotation values from the method
      * @return original method result
      * @throws Throwable original method failure, always rethrown unchanged
      */
-    @Around("@annotation(logUsage)")
-    public Object recordUsage(ProceedingJoinPoint joinPoint, LogUsage logUsage) throws Throwable {
+    @Around(SERVICE_IMPL_METHODS)
+    public Object recordUsage(ProceedingJoinPoint joinPoint) throws Throwable {
+        String action = resolveAction(joinPoint);
+        String eventType = resolveEventType(joinPoint);
         long startNanos = System.nanoTime();
         Throwable thrown = null;
         try {
@@ -143,12 +149,12 @@ public class UsageLoggingAspect {
         } finally {
             long durationMs = (System.nanoTime() - startNanos) / 1_000_000L;
             try {
-                usageLogger.record(buildEvent(logUsage, thrown, durationMs));
+                usageLogger.record(buildEvent(action, eventType, thrown, durationMs));
             } catch (Throwable loggingFailure) {
                 // Last resort: if even assembling/dispatching the event throws,
                 // do NOT propagate into the caller's flow.
                 LOG.warn("Usage logging failed for action={}: {}",
-                         logUsage.action(), loggingFailure.getMessage());
+                         action, loggingFailure.getMessage());
             } finally {
                 // Always clear the per-request attribute bag; otherwise the
                 // next request on the same worker thread inherits stale keys.
@@ -158,14 +164,81 @@ public class UsageLoggingAspect {
     }
 
     /**
+     * Resolves the action name: a non-blank {@link LogUsage#action()} override
+     * when present, else a derived {@code <aggregate>.<method>}.
+     *
+     * @param joinPoint intercepted service method
+     * @return resolved action name
+     */
+    String resolveAction(ProceedingJoinPoint joinPoint) {
+        LogUsage annotation = findLogUsage(joinPoint);
+        if (annotation != null && !annotation.action().isBlank()) {
+            return annotation.action();
+        }
+        return deriveAction(joinPoint);
+    }
+
+    /**
+     * Resolves the event category: {@link LogUsage#eventType()} when annotated,
+     * else the default {@code "api_request"}. A thrown exception still flips the
+     * stored event type to error in {@link #buildEvent}.
+     *
+     * @param joinPoint intercepted service method
+     * @return resolved event type
+     */
+    String resolveEventType(ProceedingJoinPoint joinPoint) {
+        LogUsage annotation = findLogUsage(joinPoint);
+        return annotation != null ? annotation.eventType() : DEFAULT_EVENT_TYPE;
+    }
+
+    /**
+     * Reads the optional {@link LogUsage} from the executing impl method, or
+     * null when the method is auto-logged without an override.
+     *
+     * @param joinPoint intercepted service method
+     * @return annotation when present, else null
+     */
+    LogUsage findLogUsage(ProceedingJoinPoint joinPoint) {
+        if (joinPoint.getSignature() instanceof MethodSignature signature) {
+            Method method = signature.getMethod();
+            return method.getAnnotation(LogUsage.class);
+        }
+        return null;
+    }
+
+    /**
+     * Derives {@code <aggregate>.<method>} from the impl class + method name
+     * when no {@link LogUsage#action()} override is supplied. The class-name
+     * suffix ({@code ServiceImpl}/{@code Service}/{@code Impl}) is stripped and
+     * the remainder decapitalised: SampleServiceImpl#findById → "sample.findById".
+     *
+     * @param joinPoint intercepted service method
+     * @return derived dotted action name
+     */
+    String deriveAction(ProceedingJoinPoint joinPoint) {
+        String type = joinPoint.getSignature().getDeclaringType().getSimpleName();
+        for (String suffix : new String[] {"ServiceImpl", "Service", "Impl"}) {
+            if (type.endsWith(suffix) && type.length() > suffix.length()) {
+                type = type.substring(0, type.length() - suffix.length());
+                break;
+            }
+        }
+        String aggregate = type.isEmpty()
+            ? "service"
+            : Character.toLowerCase(type.charAt(0)) + type.substring(1);
+        return aggregate + "." + joinPoint.getSignature().getName();
+    }
+
+    /**
      * Builds the immutable event payload from the invocation context.
      *
-     * @param logUsage annotation values from the method
+     * @param action resolved usage action name
+     * @param eventType resolved usage event category
      * @param thrown method failure, or null on success
      * @param durationMs elapsed method duration in milliseconds
      * @return assembled usage event
      */
-    private UsageEvent buildEvent(LogUsage logUsage, Throwable thrown, long durationMs) {
+    UsageEvent buildEvent(String action, String eventType, Throwable thrown, long durationMs) {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         String userId = (auth != null && auth.isAuthenticated()) ? auth.getName() : null;
         String userEmail = extractEmail(auth);
@@ -177,8 +250,8 @@ public class UsageLoggingAspect {
             .eventTimestamp(LocalDateTime.now(ZoneOffset.UTC))
             .service(props.getServiceName())
             .environment(props.getEnvironment())
-            .eventType(failed ? EVENT_TYPE_ERROR : logUsage.eventType())
-            .action(logUsage.action())
+            .eventType(failed ? EVENT_TYPE_ERROR : eventType)
+            .action(action)
             .userId(userId)
             .userEmail(userEmail)
             .status(failed ? STATUS_ERROR : STATUS_SUCCESS)
@@ -200,7 +273,7 @@ public class UsageLoggingAspect {
      * @param auth current Spring Security authentication (may be null)
      * @return merged map, or null when nothing was contributed
      */
-    private static Map<String, Object> buildAttributes(Authentication auth) {
+    Map<String, Object> buildAttributes(Authentication auth) {
         Map<String, Object> caller = UsageAttributes.snapshot();
         String correlation = MDC.get(MDC_CORRELATION);
         String userName = extractName(auth);
@@ -224,41 +297,28 @@ public class UsageLoggingAspect {
     }
 
     /**
-     * Extracts the user email from whatever principal Spring Security
-     * produced. Three live principal shapes across the supported AUTH_MODEs;
-     * see the file header for the per-mode contract.
+     * Extracts the user email from the Clerk JWT principal.
      *
      * @param auth current Spring Security authentication
      * @return email value, or null when unavailable
      */
-    private static String extractEmail(Authentication auth) {
-        return readPrincipalClaim(auth, EMAIL_CLAIM_NAMES, OidcUser::getEmail);
+    String extractEmail(Authentication auth) {
+        return readJwtClaim(auth, EMAIL_CLAIM_NAMES);
     }
 
     /**
-     * Extracts the user's display name from the principal. Resolution order:
-     * <ol>
-     *   <li>{@link OidcUser#getFullName()} (Replit OIDC) /
-     *       {@code full_name} / {@code name} / {@code preferred_username} —
-     *       first non-blank wins.</li>
-     *   <li>Compose {@code first_name + " " + last_name} (Clerk template
-     *       variables) or OIDC {@code given_name + " " + family_name}.</li>
-     *   <li>If only one half of the pair is present, return that half.</li>
-     * </ol>
-     * The composed fallback covers Clerk users whose
-     * {@code {{user.full_name}}} template variable resolved to blank but
-     * whose first/last name claims are still in the JWT.
+     * Extracts the user's display name from the Clerk JWT.
      *
      * @param auth current Spring Security authentication
      * @return display name, or null when no naming claim is present
      */
-    private static String extractName(Authentication auth) {
-        String fullName = readPrincipalClaim(auth, NAME_CLAIM_NAMES, OidcUser::getFullName);
+    String extractName(Authentication auth) {
+        String fullName = readJwtClaim(auth, NAME_CLAIM_NAMES);
         if (fullName != null && !fullName.isBlank()) {
             return fullName;
         }
-        String first = readPrincipalClaim(auth, FIRST_NAME_CLAIM_NAMES, OidcUser::getGivenName);
-        String last = readPrincipalClaim(auth, LAST_NAME_CLAIM_NAMES, OidcUser::getFamilyName);
+        String first = readJwtClaim(auth, FIRST_NAME_CLAIM_NAMES);
+        String last = readJwtClaim(auth, LAST_NAME_CLAIM_NAMES);
         boolean hasFirst = first != null && !first.isBlank();
         boolean hasLast = last != null && !last.isBlank();
         if (hasFirst && hasLast) {
@@ -274,39 +334,21 @@ public class UsageLoggingAspect {
     }
 
     /**
-     * Shared backbone for principal-claim reads. Walks the alias list across
-     * Jwt / OidcUser / OAuth2User principal shapes and returns the first
-     * non-blank match. For OidcUser an OIDC-standard accessor (e.g.
-     * {@link OidcUser#getEmail()}) is checked first so a canonical value
-     * wins over a non-standard claim alias.
+     * Reads the first non-blank claim from a Clerk JWT principal.
      *
      * @param auth current Spring Security authentication
      * @param aliases claim names to try, in order
-     * @param oidcStandard OIDC standard accessor when the principal is an
-     *                     {@link OidcUser}; consulted before the alias list
-     * @return first non-blank value, or null
+     * @return first matching value, or null
      */
-    private static String readPrincipalClaim(Authentication auth,
-                                             String[] aliases,
-                                             Function<OidcUser, String> oidcStandard) {
+    String readJwtClaim(Authentication auth, String[] aliases) {
         if (auth == null) {
             return null;
         }
         Object principal = auth.getPrincipal();
-        if (principal instanceof Jwt jwt) {
-            return firstClaim(jwt.getClaims()::get, aliases);
+        if (!(principal instanceof Jwt jwt)) {
+            return null;
         }
-        if (principal instanceof OidcUser oidc) {
-            String standard = oidcStandard.apply(oidc);
-            if (standard != null && !standard.isBlank()) {
-                return standard;
-            }
-            return firstClaim(oidc.getClaims()::get, aliases);
-        }
-        if (principal instanceof OAuth2User oauth) {
-            return firstClaim(oauth.getAttributes()::get, aliases);
-        }
-        return null;
+        return firstClaim(jwt.getClaims()::get, aliases);
     }
 
     /**
@@ -318,7 +360,7 @@ public class UsageLoggingAspect {
      * @param aliases claim names to try, in order
      * @return first matching value as a string, or null
      */
-    private static String firstClaim(Function<String, Object> lookup, String[] aliases) {
+    String firstClaim(Function<String, Object> lookup, String[] aliases) {
         for (String name : aliases) {
             Object value = lookup.apply(name);
             if (value == null) {
@@ -337,7 +379,7 @@ public class UsageLoggingAspect {
      *
      * @return current request, or null outside an HTTP request
      */
-    private HttpServletRequest currentRequest() {
+    HttpServletRequest currentRequest() {
         var attrs = RequestContextHolder.getRequestAttributes();
         return attrs instanceof ServletRequestAttributes servletAttrs
             ? servletAttrs.getRequest()
@@ -350,7 +392,7 @@ public class UsageLoggingAspect {
      * @param request current HTTP request
      * @return first forwarded IP or remote address, or null without a request
      */
-    private String clientIp(HttpServletRequest request) {
+    String clientIp(HttpServletRequest request) {
         if (request == null) {
             return null;
         }
@@ -367,7 +409,7 @@ public class UsageLoggingAspect {
      * @param request current HTTP request
      * @return truncated user-agent value, or null without a request
      */
-    private String userAgent(HttpServletRequest request) {
+    String userAgent(HttpServletRequest request) {
         return request == null ? null : truncate(request.getHeader("User-Agent"), 500);
     }
 
@@ -378,7 +420,7 @@ public class UsageLoggingAspect {
      * @param max maximum returned length
      * @return null, unchanged value, or truncated value
      */
-    private static String truncate(String s, int max) {
+    String truncate(String s, int max) {
         if (s == null) {
             return null;
         }

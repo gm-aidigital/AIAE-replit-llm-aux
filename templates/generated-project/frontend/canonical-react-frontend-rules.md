@@ -76,8 +76,8 @@ Regeneration (major Vite upgrade): diff against scaffold MUST preserve all six.
 
 ```
 src/app          src/pages        src/features
-src/entities     src/shared/api   src/shared/ui
-src/shared/lib   src/shared/config
+src/entities     src/shared/api   src/shared/auth
+src/shared/ui    src/shared/lib   src/shared/config
 ```
 
 ## OpenAPI client generation
@@ -135,7 +135,7 @@ Generated artifacts:
 Follow `templates/generated-project/auth/google-sso-clerk-blueprint.md`.
 
 UI requirements:
-- Login screen always renders (mock mode supports it without external IdP).
+- Login screen renders Clerk `<SignIn/>` (Clerk SSO is the only auth mode).
 - Send `Authorization: Bearer <jwt>` to backend for protected calls.
 - `/api/v1/auth/me` bootstraps user state.
 - `401` → clear local auth state + redirect to login.

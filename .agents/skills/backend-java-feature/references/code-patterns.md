@@ -233,19 +233,17 @@ Every `@Test` method, JUnit or Vitest, follows this convention:
 
 ```java
 @Test
-void shouldIssueTokenOnMockLoginTest() throws Exception {
-    // Given:
-    when(mockTokenService.issueToken(eq("alice@example.com")))
-        .thenReturn(new MockLoginRecord("mock-jwt", Instant.now().plusSeconds(3600)));
+void shouldReturnUserPayloadFromJwtClaimsTest() throws Exception {
+    // Given: a valid Clerk JWT — the jwt() test post-processor injects it
+    // directly (no live IdP, no decoder call).
 
     // When:
-    var response = mvc.perform(post("/api/v1/auth/mock/login")
-        .contentType(MediaType.APPLICATION_JSON)
-        .content("{\"email\":\"alice@example.com\"}"));
+    var response = mvc.perform(get("/api/v1/auth/me")
+        .with(jwt().jwt(j -> j.subject("user_123").claim("email", "alice@example.com"))));
 
     // Then:
     response.andExpect(status().isOk())
-            .andExpect(jsonPath("$.accessToken").value("mock-jwt"));
+            .andExpect(jsonPath("$.email").value("alice@example.com"));
 }
 ```
 

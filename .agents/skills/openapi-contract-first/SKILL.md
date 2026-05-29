@@ -31,8 +31,7 @@ reverse.
 
 When the endpoint is protected: bearer JWT scheme declared,
 operation has `security:`, `401`/`403` documented with payload examples,
-auth bootstrap endpoints (`/api/v1/auth/me`, optionally
-`/api/v1/auth/mock/login`) present.
+and `/api/v1/auth/me` is present (Clerk SSO only — no mock-login endpoint).
 
 ## Compatibility
 

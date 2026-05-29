@@ -4,7 +4,7 @@
 
 **Backend: Java 21 LTS + Spring Boot 3.x + Maven multi-module + PostgreSQL.**
 **Frontend: React + TypeScript + Vite.**
-**Auth: dual-mode (Clerk SSO + mock fallback) with backend JWT validation.**
+**Auth: Clerk SSO only (required) — backend validates Clerk JWTs against Clerk JWKS; no mock/replit fallback.**
 **Java package root: `com.aidigital.<app-name-package>.*` only.**
 
 Forbidden in every generated project:
@@ -35,7 +35,14 @@ against Clerk JWKS — no Express.
 bash templates/generated-project/scaffold/scripts/setup-project.sh
 ```
 
-`.replit` `onBoot` runs this automatically; idempotent. The script:
+`.replit` `onBoot` runs this automatically. Installs `scripts/` at project root
+(`structure-lint.sh`, `verify-gates.sh`, `local-verify.sh`). Run verify from
+**project root**, not the template scaffold path.
+
+**Vibe-coder happy path:** `replit.md` → "Vibe-coder happy path" (Clerk Secrets first).
+**First feature checklist:** `templates/generated-project/generation/first-aggregate-checklist.md`.
+
+The script:
 1. Installs canonical `.gitignore` (keeps `.agents/`, `templates/`,
    `custom_instruction/`, `AGENTS.md`, `replit.md` out of git).
 2. Deletes Replit's auto-injected Python files (`main.py`, `pyproject.toml`,
@@ -47,6 +54,21 @@ bash templates/generated-project/scaffold/scripts/setup-project.sh
 If any survive, `mvp-safety-review` and CI hard-fail. Never do these
 manually — past generations skipped steps under token pressure.
 
+## STEP 1 when the first real aggregate lands
+
+In the same commit as the first real feature:
+
+1. `bash scripts/apply-package-name.sh <app-name-package>` if not done at scaffold time.
+2. `bash scripts/strip-scaffold-samples.sh` — removes the reference `sample/*`
+   aggregate + `0002-sample-reference.xml` (reference-only; MUST NOT ship).
+3. Fill `README.md` (created from `README.md.template` at fork) with the real
+   app name, purpose, API/Swagger links, env vars, run/deploy steps.
+
+A generated project that still ships `sample/*` or an unfilled README is
+rejected by `local-verify.sh` and CI. Details:
+`templates/generated-project/structure/near-production-project-structure.md`
+→ "Scaffold sample aggregate".
+
 ---
 
 This repository is a Replit Custom Template config repo storing reusable
@@ -55,6 +77,17 @@ rules, skills, and canonical generated-project artifacts. **Runtime artifacts
 
 Each rule has ONE canonical source file. Treat it as authoritative; never
 restate elsewhere.
+
+## Generation order (token-efficient)
+
+1. Copy scaffold files verbatim; run `apply-package-name.sh <app-name-package>`.
+2. OpenAPI YAML — only endpoints the feature needs.
+3. Regenerate backend interfaces + frontend types (`mvn compile`, `npm run generate:api`).
+4. Implement generated `*Api` interfaces + feature code.
+5. Strip sample aggregate when first real domain lands (`strip-scaffold-samples.sh`).
+6. MVP safety tests before publish.
+
+Full rules: `templates/generated-project/generation/token-efficient-generation-rules.md`.
 
 ## Priorities
 
@@ -150,53 +183,14 @@ configured inline in `scaffold/backend/pom.xml` `<pluginManagement>`.
 
 ## Scaffold files — copy verbatim, NEVER regenerate
 
-Generators (`npm create vite`, `spring initializr`, etc.) strip Replit-specific
-fixes and force re-deriving every fix from failure logs ("db not in fat jar",
-"lower(bytea)", "Blocked request not allowed", "spring-boot:run on parent pom",
-"allowedHosts: 'all'").
+Generators strip Replit-specific fixes. **Rule:** copy from `scaffold/`; replace
+only `PACKAGE_REPLACE_ME` and app placeholders. Full file list and per-file
+settings: `templates/generated-project/scaffold/SCAFFOLD-MANIFEST.md`.
 
-**Rule:** files in the table below — `cp` from `scaffold/`, replace ONLY
-documented placeholders (`PACKAGE_REPLACE_ME`, `/some-path-by-app-name`,
-project name). Never overwrite from a generator.
+Run `bash scripts/apply-package-name.sh <app-name-package>` once after copy.
+First real aggregate: `templates/generated-project/generation/first-aggregate-checklist.md`.
 
-`PACKAGE_REPLACE_ME` is not free-form. Replace it with
-`com.aidigital.<app-name-package>` and set `backend/pom.xml` `<groupId>` to the
-same value. The OpenAPI generator packages derive from `${project.groupId}`;
-wrong groupId creates wrong generated packages throughout the app.
-
-Before `npm create`, `spring initializr`, `mvn archetype`, `npx create-*`:
-STOP, check the table, copy from scaffold. New requirements get additive
-`Edit`s — preserve every existing block.
-
-**Each row carries Replit-specific fixes that generators strip.**
-
-| File | Replit-specific settings that disappear on regenerate |
-|---|---|
-| `.replit` (root) | Backend workflow MUST be `mvn -f backend/pom.xml -DskipTests -Dskip.frontend=true install && mvn -f backend/application/pom.xml -DskipTests -Dskip.frontend=true spring-boot:run` — never `spring-boot:run` on the parent reactor; frontend workflow MUST run `npm run generate:api` before Vite; `[deployment]` GCE Reserved-VM with `scripts/replit-build.sh` + `scripts/replit-run.sh`; one public port `5000` → externalPort `80`; Vite `5173` is workspace-only, not a `[[ports]]` entry; `onBoot` runs `setup-project.sh`; Replit Postgres vars (`PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGPASSWORD`) flow through the process env; workflow has FATAL guard against Python files |
-| `replit.nix` (root) | Pinned `pkgs.jdk21` + `pkgs.nodejs_22` + `pkgs.postgresql_16`; channel `stable-24_11` |
-| `docker-compose.yml` (root) | `--profile local` gating, port `8080` for backend (local), standard `POSTGRES_*` env wiring to the compose Postgres service, health-check depends_on |
-| `.env.example` (root) | Full enumerated set of `AUTH_*`, `USAGE_LOG_*`, `CLERK_*`, `BACKEND_DEV_PORT`, `VITE_API_BASE_URL`, `VITE_API_CONTEXT_PATH` placeholders |
-| `.gitignore` (root) | Control-plane excludes (`.agents/`, `templates/`, `custom_instruction/`, `AGENTS.md`, `replit.md`) — without these the company repo gets polluted on `git push` |
-| `backend/pom.xml` | `<dependencyManagement>` for required internal modules (`domain`, `db`, `service`) and optional `external-services` only when real integrations exist; `<pluginManagement>` for spring-boot-maven-plugin, openapi-generator, frontend-maven-plugin, jacoco, checkstyle, git-commit-id; Java 21 + Spring Boot 3.4.0 pinning; lombok 1.18.40 (forward-safe with newer JDKs); no empty Maven modules |
-| `backend/application/pom.xml` | `<start-class>${project.groupId}.Application`; the REQUIRED `db` dependency (changelogs on fat-jar classpath); spring-boot-maven-plugin activation; openapi-generator activation; PostgreSQL runtime driver; jjwt + logbook + commons-csv + observability deps |
-| `backend/service/pom.xml` | Edge to `domain`; add edge to `external-services` only when that optional module exists and contains real external client code — never depend on `application`; jakarta-validation for `ValidationMessage`; FORBIDDEN: web/security/servlet/JWT deps |
-| `backend/domain/pom.xml` | `spring-boot-starter-data-jpa` + lombok; LEAF (no internal deps) |
-| `backend/external-services/pom.xml` | OPTIONAL; create only for real external integrations; LEAF for internal modules; HTTP-client/vendor SDK deps live here; never leave as a POM-only module |
-| `backend/db/pom.xml` | `liquibase-core` only — no Java code |
-| `backend/Dockerfile` | Multi-stage Java 21 build, `mvn -B -DskipTests package`, exec form `java -jar /app/app.jar`, port `8080` (local-dev image) |
-| `backend/lombok.config` | `lombok.addLombokGeneratedAnnotation = true` (required for jacoco to exclude generated code) |
-| `backend/config/checkstyle.xml` and `checkstyle-suppressions.xml` | Project-tuned ruleset; the parent POM references both files by relative path |
-| `frontend/vite.config.ts` | `allowedHosts: ['.replit.dev', '.repl.co', '.kirk.replit.dev', 'localhost', '127.0.0.1']`, `resolve.alias` for `@/*`, `host: '0.0.0.0'`, port `5173` (NEVER `5000`), `/api` proxy to `localhost:${BACKEND_DEV_PORT:-5000}${VITE_API_CONTEXT_PATH}`, build `outDir: ../backend/application/src/main/resources/static`, identical `preview` block. FORBIDDEN: `allowedHosts: 'all'`, `allowedHosts: '*'` |
-| `frontend/package.json` | scripts `generate:api` + `check:api` + `test`; React + Vite + TanStack Query + Clerk + Vitest/Testing Library version pins |
-| `frontend/tsconfig.json` | Strict mode + path alias `@/*` → `./src/*` |
-| `frontend/src/shared/api/client.ts` | Single backend HTTP boundary using `openapi-fetch`; raw `fetch`, `axios`, and `XMLHttpRequest` are forbidden in `frontend/src` so path/method drift is caught by generated OpenAPI types |
-| `frontend/src/**` | First screen must be the actual product UI. FORBIDDEN in app UI: "React dev server is running on port 5173", "Switch the preview pane", "Open on port 5173"; port notes belong in README only |
-| `frontend/Dockerfile` | nginx-based multi-stage (build → nginx serve), correct `nginx.conf` location |
-| `frontend/nginx.conf` | SPA fallback (`try_files $uri /index.html`), `/api` proxy to backend service in local-dev compose, gzip + cache headers |
-| `scripts/setup-project.sh` | Runs on `onBoot`; installs the canonical `.gitignore`, removes Replit's Python auto-injection, untracks the control plane from git index, strips `python-*` from `.replit` `modules` |
-
-**If you must regenerate** (major Vite/Spring upgrade): diff against scaffold
-MUST preserve every right-column setting. Scaffold is the floor, not ceiling.
+Before `npm create`, Spring Initializr, or any generator: STOP — copy from scaffold.
 
 ## Authoritative references
 
@@ -209,11 +203,13 @@ Each topic has one canonical file. Read before generating; never duplicate.
 | OpenAPI review checklist | `templates/generated-project/openapi/openapi-review-checklist.md` |
 | Frontend rules | `templates/generated-project/frontend/canonical-react-frontend-rules.md` |
 | Elevate design guidelines | `templates/generated-project/frontend/elevate-design-guidelines.md` |
-| Auth (dual-mode) | `templates/generated-project/auth/google-sso-clerk-blueprint.md` |
+| Auth (Clerk SSO only) | `templates/generated-project/auth/google-sso-clerk-blueprint.md` |
 | Usage logging | `templates/generated-project/observability/usage-logging-rules.md` |
 | HTTP request/response logging | `templates/generated-project/observability/logbook-http-logging-rules.md` |
 | Error handling | `templates/generated-project/errors/error-handling-pattern.md` |
 | Token-efficient generation | `templates/generated-project/generation/token-efficient-generation-rules.md` |
+| First aggregate checklist | `templates/generated-project/generation/first-aggregate-checklist.md` |
+| Scaffold manifest | `templates/generated-project/scaffold/SCAFFOLD-MANIFEST.md` |
 | Testing policy (phased) | `templates/generated-project/testing/testing-policy.md` |
 | HikariCP / JPA baseline | `.agents/skills/backend-java-feature/references/hikari-jpa-baseline.yml` |
 | Java backend workflow | `.agents/skills/backend-java-feature/SKILL.md` |
@@ -226,7 +222,7 @@ Each topic has one canonical file. Read before generating; never duplicate.
 | Replit profile YAML | `.agents/skills/backend-java-feature/references/application-replit.yml` |
 | Starter scaffold | `templates/generated-project/scaffold/` |
 
-## Auth (mandatory dual-mode)
+## Auth (mandatory: Clerk SSO only)
 
 See `templates/generated-project/auth/google-sso-clerk-blueprint.md`.
 

@@ -15,16 +15,14 @@ export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, process.cwd(), "");
     const backendPort = env.BACKEND_DEV_PORT ?? "5000";
     const backendContextPath = env.VITE_API_CONTEXT_PATH ?? "";   // e.g. "/sales-dashboard"
-    const authMode = env.VITE_AUTH_MODE ?? env.AUTH_MODE ?? "auto";
-    const hasBackendSsoConfig = Boolean(env.AUTH_ISSUER_URI || env.AUTH_JWKS_URI);
-    const clerkPublishableKey = (authMode === "sso" || hasBackendSsoConfig)
-        ? (env.VITE_CLERK_PUBLISHABLE_KEY ?? env.CLERK_PUBLISHABLE_KEY ?? "")
-        : (env.VITE_CLERK_PUBLISHABLE_KEY ?? "");
+    // Clerk SSO is the only auth mode. Map Replit-managed CLERK_PUBLISHABLE_KEY
+    // into the VITE_-prefixed var the browser sees.
+    const clerkPublishableKey =
+        env.VITE_CLERK_PUBLISHABLE_KEY ?? env.CLERK_PUBLISHABLE_KEY ?? "";
 
     return {
         plugins: [react()],
         define: {
-            "import.meta.env.VITE_AUTH_MODE": JSON.stringify(authMode),
             "import.meta.env.VITE_CLERK_PUBLISHABLE_KEY": JSON.stringify(clerkPublishableKey),
         },
         resolve: {

@@ -78,7 +78,7 @@ Document the replacement plan for each item:
 
 | From (MVP) | To (production) |
 |---|---|
-| Mock auth defaults | Real Clerk/Google SSO config values |
+| Mock/stub data providers | Real integrations or documented stubs with env flags |
 | Demo datasets / fixtures | Approved production data APIs/pipelines |
 | Replit Secrets | Company secret manager |
 | Replit-native PostgreSQL module | Managed PostgreSQL (RDS / CloudSQL / equivalent) |

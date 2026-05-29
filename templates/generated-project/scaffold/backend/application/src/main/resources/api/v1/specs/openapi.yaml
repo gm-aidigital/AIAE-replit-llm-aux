@@ -25,7 +25,7 @@ paths:
     get:
       tags: [auth]
       operationId: getCurrentUser
-      summary: Returns the authenticated user (mock or SSO)
+      summary: Returns the authenticated user (Clerk SSO)
       security:
         - bearerAuth: []
       responses:
@@ -45,31 +45,6 @@ paths:
           $ref: "#/components/responses/UnauthorizedV1"
         "403":
           $ref: "#/components/responses/ForbiddenV1"
-
-  /api/v1/auth/mock/login:
-    post:
-      tags: [auth]
-      operationId: mockLogin
-      summary: Issue a mock JWT (only available when AUTH_MODE=mock or auto without Clerk keys)
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/MockLoginRequestV1"
-      responses:
-        "200":
-          description: Mock JWT issued
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/MockLoginResponseV1"
-        "404":
-          description: Mock login is disabled in SSO mode
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ApiErrorV1"
 
 components:
   securitySchemes:
@@ -103,19 +78,6 @@ components:
         id:    { type: string }
         email: { type: string, format: email }
         roles: { type: array, items: { type: string } }
-
-    MockLoginRequestV1:
-      type: object
-      required: [email]
-      properties:
-        email: { type: string, format: email }
-
-    MockLoginResponseV1:
-      type: object
-      required: [accessToken, expiresAt]
-      properties:
-        accessToken: { type: string, description: "Backend-signed JWT (mock)" }
-        expiresAt:   { type: string, format: date-time }
 
     ApiErrorV1:
       type: object

@@ -2,6 +2,17 @@
 
 Generate projects by reusing canonical artifacts and codegen. Do not retype.
 
+## Agent load order (first feature — max ~5 files)
+
+1. `custom_instruction/instructions.md` (always loaded by Replit)
+2. `templates/generated-project/generation/first-aggregate-checklist.md`
+3. `.agents/skills/openapi-contract-first/SKILL.md` **or** `frontend-react-feature/SKILL.md`
+4. One canonical topic file only if needed (OpenAPI rules **or** structure anti-patterns)
+5. Copy from `templates/generated-project/scaffold/` — never paste canonical docs inline
+
+Do **not** load `near-production-project-structure.md`, `usage-logging-rules.md`, and
+`publish-gate-checks.md` in the same turn unless implementing that specific concern.
+
 ## Hard rules
 
 - Do not duplicate canonical content. Reference instead.
@@ -12,23 +23,33 @@ Generate projects by reusing canonical artifacts and codegen. Do not retype.
 - Do not scaffold unused screens, endpoints, entities, DTOs, repositories.
 - Do not include large fixture datasets inline; use small fixtures.
 - Do not commit service account JSON. Env placeholders only.
+- Copy scaffold files — never run `npm create vite` or Spring Initializr.
+- Use `shared/api/client.ts` only — no raw `fetch` / `axios` in `frontend/src`.
+- Run `apply-package-name.sh` once; never hand-rename only some `PACKAGE_REPLACE_ME` dirs.
 
 ## Recommended order
 
 1. Root structure + mandatory files (see
    `templates/generated-project/structure/near-production-project-structure.md`).
-2. OpenAPI YAML with only the endpoints the feature needs.
-3. Backend `openapi-generator-maven-plugin` snippet + interface implementations.
-4. Frontend `openapi-typescript` script + small typed client.
-5. Feature code over generated types.
-6. Persistence (Liquibase + JPA) only when needed.
-7. Tests for changed behavior.
-8. Replit run + (optional) local docker-compose dry run.
+2. `bash scripts/apply-package-name.sh <app-name-package>`.
+3. OpenAPI YAML with only the endpoints the feature needs.
+4. Backend `openapi-generator-maven-plugin` + interface implementations.
+5. Frontend `openapi-typescript` + typed client.
+6. Feature code over generated types.
+7. Persistence (Liquibase + JPA) only when needed.
+8. `strip-scaffold-samples.sh` when the first real aggregate replaces `sample/*`.
+9. Tests for changed behavior.
+10. `bash scripts/local-verify.sh` (includes `structure-lint.sh`) before share.
+
+See also: `generation/first-aggregate-checklist.md`.
 
 ## Preferred codegen
 
 - Backend: `openapi-generator-maven-plugin`, `interfaceOnly=true`.
 - Frontend: `openapi-typescript` + `openapi-fetch`.
 - Server state: TanStack Query wrappers around the generated client.
+- UI states: reuse `LoadingBlock`, `ErrorAlert`, `EmptyState` from scaffold.
+- Auth: `AuthProvider` + `ProtectedRoute` in `app/AppRoot.tsx` — Clerk SSO only.
+- Layout: `AppShell` + `AppHeader` + `PageHeader`; features under `src/features/`.
 
 Keep generated surface small, typed and inspectable.

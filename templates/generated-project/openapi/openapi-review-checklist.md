@@ -32,8 +32,7 @@ Quick gate for every API change. Detailed rules in
 - [ ] `bearerAuth` exists in `components.securitySchemes`
 - [ ] Operation declares `security`
 - [ ] Explicit `401` and `403` responses
-- [ ] `/api/v1/auth/me` documented
-- [ ] Mock-login endpoint documented when mock mode exists
+- [ ] `/api/v1/auth/me` documented (no mock-login endpoint — Clerk SSO only)
 
 ## Examples
 

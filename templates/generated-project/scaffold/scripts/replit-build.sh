@@ -15,4 +15,8 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."   # works from root/scripts and scaffold/scripts
 
+if [ -f scripts/structure-lint.sh ]; then
+  bash scripts/structure-lint.sh
+fi
+
 exec mvn -f backend/pom.xml -B -DskipTests package

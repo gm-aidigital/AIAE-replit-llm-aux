@@ -3,8 +3,8 @@ import type { paths } from "./generated/schema";
 import { runtimeConfig } from "../config/runtime";
 
 // Auth-aware typed client. The Authorization header is added by middleware
-// using whatever token the auth provider supplies (Clerk getToken() in SSO
-// mode, the mock JWT in mock mode).
+// using the Bearer token from Clerk (useAuth().getToken(), bridged into
+// runtime.ts by AuthProvider). Clerk SSO is the only auth mode.
 
 // OpenAPI path keys already include `/api/v1/...`; apiBaseUrl is only a host
 // or servlet context prefix. Never set it to `/api/v1` or calls become

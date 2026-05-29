@@ -33,9 +33,8 @@ spring:
 server:
   port: ${PORT:8080}
   # Replit + Reserved VM terminate TLS at the edge and forward X-Forwarded-*
-  # headers. `framework` makes Spring resolve {baseUrl} (used by the OIDC
-  # redirect_uri) to the public https://*.replit.dev origin rather than
-  # http://localhost:5000 — required for AUTH_MODE=replit, harmless otherwise.
+  # headers. `framework` makes Spring honour them so absolute URLs / Swagger /
+  # CORS resolve to the public https origin rather than http://localhost:5000.
   forward-headers-strategy: framework
   servlet:
     # Default empty (root) — Spring serves /api/v1/... directly. Set a
@@ -66,19 +65,12 @@ logging:
 # via @ConfigurationProperties("app.auth") and ("app.usage-logging").
 app:
   auth:
-    mode: ${AUTH_MODE:auto}
+    # Clerk SSO is the ONLY auth mode. Set issuer-uri (or jwk-set-uri) to your
+    # Clerk tenant; SecurityConfig fails fast at startup if neither is set.
     sso:
-      # Only set issuer-uri when AUTH_MODE=sso. SecurityConfig's SSO branch
-      # is gated on AUTH_MODE itself, not on these values being present.
       issuer-uri: ${AUTH_ISSUER_URI:}
       jwk-set-uri: ${AUTH_JWKS_URI:}
       audience:   ${AUTH_AUDIENCE:}
-    mock:
-      default-user: ${AUTH_MOCK_USER:demo-user@example.com}
-      # MockJwtDecoder requires ≥32 chars (HS256). Default below lets the
-      # scaffold boot without AUTH_MOCK_JWT_SECRET set — REPLACE in any
-      # real deployment via env or Replit Secrets.
-      jwt-secret:   ${AUTH_MOCK_JWT_SECRET:dev-mock-jwt-secret-replace-before-production-12345}
   security:
     csp:
       frame-ancestors: "${APP_SECURITY_CSP_FRAME_ANCESTORS:'self' https://*.replit.dev https://*.repl.co}"

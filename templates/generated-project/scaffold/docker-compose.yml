@@ -50,8 +50,11 @@ services:
       POSTGRES_PORT:          5432
       APP_CONTEXT_PATH:       ${APP_CONTEXT_PATH:-}
       APP_SERVICE_NAME:       ${APP_SERVICE_NAME:-generated-mvp}
-      APP_AUTH_MODE:          ${APP_AUTH_MODE:-mock}
-      APP_AUTH_MOCK_JWT_SECRET: ${APP_AUTH_MOCK_JWT_SECRET:-change-me-32-chars-or-more-mock-jwt-secret}
+      # Clerk SSO is the only auth mode — the backend fails fast without it.
+      # Set these in .env for local-dev (a standalone Clerk tenant).
+      AUTH_ISSUER_URI:        ${AUTH_ISSUER_URI:-}
+      AUTH_JWKS_URI:          ${AUTH_JWKS_URI:-}
+      AUTH_AUDIENCE:          ${AUTH_AUDIENCE:-}
       USAGE_LOGGING_ENABLED:  ${USAGE_LOGGING_ENABLED:-true}
       USAGE_LOG_SERVICE_NAME: ${USAGE_LOG_SERVICE_NAME:-generated-mvp}
       USAGE_LOG_ENVIRONMENT:  ${USAGE_LOG_ENVIRONMENT:-dev}

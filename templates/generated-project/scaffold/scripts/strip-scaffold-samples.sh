@@ -24,30 +24,26 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "${ROOT}"
 
-DOMAIN_GLOB="backend/domain/src/main/java/*/domain/sample"
-SERVICE_GLOB="backend/service/src/main/java/*/service/sample"
-SERVICE_TEST_GLOB="backend/service/src/test/java/*/service/sample"
 SAMPLE_CHANGELOG="backend/db/src/main/resources/db/changelog/changes/0002-sample-reference.xml"
 MASTER_CHANGELOG="backend/db/src/main/resources/db/changelog/db.changelog-master.xml"
 
 removed_any=false
 
-remove_glob() {
-    local pattern="$1"
-    # shellcheck disable=SC2086
-    for path in $pattern; do
-        if [ -d "${path}" ]; then
-            rm -rf "${path}"
-            echo "    removed ${path}"
-            removed_any=true
-        fi
-    done
+remove_sample_dirs() {
+    local kind="$1"   # domain or service
+    local scope="$2"  # main or test
+    local base="backend/${kind}/src/${scope}/java"
+    while IFS= read -r path; do
+        rm -rf "${path}"
+        echo "    removed ${path}"
+        removed_any=true
+    done < <(find "${base}" -type d -path "*/${kind}/sample" 2>/dev/null)
 }
 
 echo "==> Removing scaffold sample aggregate"
-remove_glob "${DOMAIN_GLOB}"
-remove_glob "${SERVICE_GLOB}"
-remove_glob "${SERVICE_TEST_GLOB}"
+remove_sample_dirs "domain" "main"
+remove_sample_dirs "service" "main"
+remove_sample_dirs "service" "test"
 
 if [ -f "${SAMPLE_CHANGELOG}" ]; then
     rm -f "${SAMPLE_CHANGELOG}"

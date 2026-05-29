@@ -70,12 +70,13 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-oauth2-resource-server</artifactId>
         </dependency>
-        <!-- OidcUser / OAuth2User — Replit OIDC mode emits these as the
-             SecurityContext principal instead of Jwt. Without this dep the
-             aspect cannot read the email claim under AUTH_MODE=replit. -->
+
+        <!-- Test: JUnit 5 + Mockito + AssertJ + Spring test context. Proves the
+             aspect auto-intercepts every public *ServiceImpl method. -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-oauth2-client</artifactId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
         </dependency>
     </dependencies>
 </project>

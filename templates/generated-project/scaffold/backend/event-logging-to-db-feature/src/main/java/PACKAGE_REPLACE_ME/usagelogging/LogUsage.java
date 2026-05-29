@@ -1,9 +1,10 @@
-// @LogUsage — annotation that triggers UsageLoggingAspect.
+// @LogUsage — OPTIONAL override for the auto usage-logging aspect.
 //
-// Apply to PUBLIC methods on Spring-managed beans (typically @Service
-// implementations) that you want to record as user actions. The aspect
-// captures action, user, status, duration, and writes a UsageEvent row
-// via UsageLogger.
+// UsageLoggingAspect already records EVERY public *ServiceImpl method to
+// usage_events with no annotation needed (action derived from class+method).
+// Add @LogUsage only to override the derived action name or the event type
+// on a specific method. The aspect captures action, user, status, duration,
+// and writes a UsageEvent row via UsageLogger.
 //
 // !!! Self-invocation does NOT trigger the aspect !!!
 // Spring AOP works via proxies. `this.annotatedMethod()` inside the same
@@ -29,11 +30,13 @@ public @interface LogUsage {
 
     /**
      * Dotted lowercase action name, e.g. "employee.update", "report.export".
-     * Required. Becomes UsageEvent.action.
+     * OPTIONAL — when blank the aspect derives {@code <aggregate>.<method>}
+     * from the impl class + method. Set it only to override that default.
+     * Becomes UsageEvent.action.
      *
-     * @return usage action name
+     * @return usage action name override, or "" to use the derived name
      */
-    String action();
+    String action() default "";
 
     /**
      * Event category. Defaults to "api_request". Other values: "auth",

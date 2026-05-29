@@ -1,6 +1,6 @@
 ---
 name: frontend-react-feature
-description: Build a React + TypeScript frontend feature in a generated project. Use when adding pages, features, hooks, or wiring server state. Covers typed API boundary, dual-mode auth UI, accessible UX states, and Replit-vs-local runtime split.
+description: Build a React + TypeScript frontend feature in a generated project. Use when adding pages, features, hooks, or wiring server state. Covers typed API boundary, Clerk SSO auth UI, accessible UX states, and Replit-vs-local runtime split.
 metadata:
   user-invocable: "true"
 ---
@@ -19,9 +19,12 @@ Use for any frontend change in a generated MVP project.
 
 ## Baseline
 
-React · TypeScript (strict) · Vite (unless user explicitly asks for another
-framework) · `openapi-typescript` + `openapi-fetch` · TanStack Query ·
-Clerk React SDK when SSO is enabled · Vitest + Testing Library.
+React · TypeScript (strict) · Vite · `openapi-typescript` + `openapi-fetch` ·
+TanStack Query · Clerk · Vitest.
+
+**App shell:** `main.tsx` mounts `app/AppRoot.tsx` only (router + auth). Product
+UI lives in `features/` composed by `pages/` or `App.tsx`. Use `AppShell`,
+`AppHeader`, `PageHeader`, and `shared/hooks/useDebounce.ts`.
 
 ## Core rules (delta from canonical-react-frontend-rules.md)
 
@@ -44,10 +47,12 @@ Clerk React SDK when SSO is enabled · Vitest + Testing Library.
 ## Auth UX
 
 Follow the canonical blueprint. Frontend must:
-- show a working login screen in mock mode and SSO mode without code changes
-- read `AUTH_MODE` from runtime config, not from build target
-- attach `Authorization: Bearer <jwt>` to protected calls
+- wrap authenticated routes with `ProtectedRoute` from `shared/auth/ProtectedRoute.tsx`
+- show a working Clerk `<SignIn/>` sign-in screen at `/login` (Clerk SSO is the only mode)
+- read the Clerk publishable key from `runtime.ts`, never `import.meta.env` directly
+- attach `Authorization: Bearer <jwt>` to protected calls via `AuthProvider` token bridge
 - treat backend (`/api/v1/auth/me`) as source of truth
+- reuse `LoadingBlock`, `ErrorAlert`, `EmptyState` from `shared/ui/` for query states
 - clear local state on `401`, render access-denied on `403`
 
 ## Runtime: Replit vs local-dev
@@ -62,7 +67,7 @@ Follow the canonical blueprint. Frontend must:
 OpenAPI paths already include `/api/v1/...`. Therefore `openapi-fetch`
 `baseUrl` must be empty by default or a host/context prefix only. Never set
 `baseUrl`/`apiBaseUrl`/`BASE_URL`/`VITE_API_BASE_URL` to `/api/v1`; that produces
-`/api/v1/api/v1/...` and breaks mock login.
+`/api/v1/api/v1/...` and breaks every API call.
 
 `shared/config` reads runtime config from `import.meta.env` and validates it at
 boot. Build-time secrets are forbidden.

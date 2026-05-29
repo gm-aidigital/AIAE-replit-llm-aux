@@ -24,9 +24,9 @@ Describe the actual product flow here in business language:
 2. Open the workspace; the `postgresql-16` module provisions a Postgres
    database and Replit injects `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`,
    and `PGPASSWORD` as Secrets.
-3. (Optional) Set `CLERK_SECRET_KEY` + `VITE_CLERK_PUBLISHABLE_KEY` in
-   Secrets to enable real Google SSO; otherwise the app runs in mock-auth
-   mode with a local login form.
+3. Set `CLERK_SECRET_KEY`, `VITE_CLERK_PUBLISHABLE_KEY`, and `AUTH_ISSUER_URI`
+   in Secrets — Clerk SSO is REQUIRED; the backend fails fast at startup
+   without it (there is no mock fallback).
 4. Click **Run**. Backend on port 5000, Vite dev server on 5173.
 5. To deploy: click **Deploy** → choose **Reserved VM** (not Autoscale).
 
@@ -58,7 +58,6 @@ Main endpoints:
 | Method | Path | Purpose | Auth |
 |---|---|---|---|
 | `GET` | `/api/v1/auth/me` | Returns the current authenticated user. | Bearer JWT |
-| `POST` | `/api/v1/auth/mock/login` | Issues a mock JWT in mock/auto-without-SSO mode. | Public |
 | `<METHOD>` | `<PATH>` | `<business endpoint description>` | `<Public/Bearer JWT>` |
 
 Keep this table synchronized with `backend/application/src/main/resources/api/v1/specs/openapi.yaml`.
@@ -69,7 +68,7 @@ See `.env.example`. Real values live in Replit Secrets / local `.env` (gitignore
 
 ## MVP limitations
 
-- <e.g. mock auth by default; flip `AUTH_MODE` to `sso` for real Clerk SSO>
+- <e.g. uses a demo Clerk tenant; provision a production Clerk tenant for launch>
 - <e.g. usage events written to the app's own DB; switch to BigQuery sink
    when cross-service aggregation is required>
 - <e.g. demo dataset only; no real customer data>
@@ -77,7 +76,7 @@ See `.env.example`. Real values live in Replit Secrets / local `.env` (gitignore
 
 ## What engineering must replace before production
 
-- Mock auth defaults → real Clerk/Google SSO production keys.
+- Demo Clerk tenant → production Clerk/Google SSO tenant + production keys.
 - Replit-managed DB → company-managed Postgres (RDS / CloudSQL).
 - Replit Secrets → company secret manager.
 - `.replit` Reserved VM target → company infrastructure.
@@ -96,7 +95,7 @@ Integration tests run on `workflow_dispatch` with `run_integration_tests=true`.
 - Backend: Java 21 LTS + Spring Boot 3.x, multi-module Maven.
 - Java package root: `com.aidigital.<app-name-package>`.
 - Frontend: React + TypeScript + Vite, typed via `openapi-typescript`.
-- Auth: dual-mode (`AUTH_MODE=auto|sso|mock`), real path via Clerk + Google.
+- Auth: Clerk SSO only (required) — Clerk + Google; backend validates JWTs vs Clerk JWKS.
 - Persistence: PostgreSQL (Replit SQL Database on workspace, docker-compose locally).
 - Observability: JSON logs to stdout, Actuator (`health`, `prometheus`),
   Logbook HTTP request/response logs with masking, Postgres `usage_events` table.

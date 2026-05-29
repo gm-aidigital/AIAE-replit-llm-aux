@@ -9,7 +9,7 @@ import java.util.List;
  * methods can accept it as a parameter without pulling Spring Security into
  * the service module's classpath.
  *
- * @param subject Stable provider id (e.g. Clerk sub, mock-issuer subject).
+ * @param subject Stable Clerk user id ({@code sub} claim).
  * @param email   Lowercased canonical email — the principal identifier used
  *                everywhere ({@code user_roles.user_id}, audit, joins).
  * @param roles   Authorities from JWT (e.g. {@code ROLE_HR_MANAGER}).

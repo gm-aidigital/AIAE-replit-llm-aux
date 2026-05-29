@@ -23,10 +23,8 @@ server:
     context-path: ""
 
 app:
-  auth:
-    mode: mock
-    mock:
-      # ≥32 chars (HS256 minimum); test-only, not a real secret.
-      jwt-secret: test-mock-jwt-secret-12345678901234567890
+  # SSO config intentionally omitted — tests supply a stub JwtDecoder bean
+  # (see ApplicationSmokeTest / AuthControllerTest) instead of hitting a real
+  # Clerk JWKS endpoint. SecurityConfig.jwtDecoder is @ConditionalOnMissingBean.
   usage-logging:
     enabled: false       # keeps PostgresUsageLogger out of test context

@@ -31,30 +31,10 @@ even when `spring.security.oauth2.resourceserver.jwt.issuer-uri` is empty.
 Tries to fetch JWKS from empty URL → startup crash.
 
 Fix (both required):
-1. Always provide `@Bean JwtDecoder`. Scaffolded `SecurityConfig` has a
-   hard-fallback branch that guarantees a decoder exists.
+1. Always provide `@Bean JwtDecoder`. Scaffolded `SecurityConfig` provides the
+   Clerk-SSO decoder (`@ConditionalOnMissingBean`, fail-fast if unconfigured).
 2. Do NOT put `spring.security.oauth2.resourceserver.jwt.*` in `application.yml`.
    Scaffolded `application.yml` omits them — don't add "for completeness".
-
-## OAuth2 client (OIDC login) needs a SEPARATE starter
-
-`spring-boot-starter-oauth2-resource-server` does NOT pull in
-`org.springframework.security.oauth2.client.*`. Any code using
-`ClientRegistration`, `ClientRegistrationRepository`,
-`ClientRegistrations.fromIssuerLocation(...)`,
-`InMemoryClientRegistrationRepository`, or the `oauth2Login(...)` DSL on
-`HttpSecurity` needs `spring-boot-starter-oauth2-client` as an additional
-dependency in `application/pom.xml`.
-
-Past failure: `ReplitOidcSecurityConfig` (added for `AUTH_MODE=replit`)
-compiled fine locally but CI failed with
-`package org.springframework.security.oauth2.client.registration does not exist`
-because resource-server starter doesn't transitively pull
-`spring-security-oauth2-client`. The scaffold now declares both starters
-in `application/pom.xml`; leaving the client starter in unconditionally
-is harmless when `AUTH_MODE != replit` — the auto-config stays dormant
-without a `ClientRegistrationRepository` bean, and that bean is gated by
-`@ConditionalOnProperty(AUTH_MODE_REPLIT)`.
 
 ## Spring Security `requestMatchers` does NOT include the context path
 
@@ -168,15 +148,15 @@ manually push bytes. Let the generated contract drive the type.
 ## `openapi-fetch` baseUrl must not duplicate `/api/v1`
 
 The frontend schema keys are the literal OpenAPI paths. If the spec has
-`/api/v1/auth/mock/login`, this call:
+`/api/v1/auth/me`, this call:
 
 ```ts
 createClient<paths>({ baseUrl: "/api/v1" })
-apiClient.POST("/api/v1/auth/mock/login", ...)
+apiClient.GET("/api/v1/auth/me", ...)
 ```
 
-hits `/api/v1/api/v1/auth/mock/login`. Mock login looks broken even though
-curling the backend endpoint works.
+hits `/api/v1/api/v1/auth/me`. The API looks broken even though curling the
+backend endpoint works.
 
 Fix: `baseUrl` is empty by default. Use it only for a host or servlet context
 prefix, e.g. `/employee-directory`, never `/api/v1`.
@@ -414,7 +394,7 @@ rest of the reactor builds.
 ## Frontend path/method drift vs OpenAPI
 
 Symptoms:
-- Mock login works in the spec but UI hits `/api/v1/auth/mock-login`.
+- Spec defines `/api/v1/auth/me` but the UI calls `/api/v1/auth/myself`.
 - Admin usage is implemented at `/api/v1/admin/usage` but UI calls
   `/api/v1/usage/summary`.
 - Spec says `put`, UI sends `PATCH`.

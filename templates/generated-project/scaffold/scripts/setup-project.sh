@@ -26,10 +26,16 @@ echo "==> Installing runtime scripts at project root (scripts/)"
 # installs the runtime copies at <root>/scripts/ so .replit and engineers
 # cloning the company repo find them at the same path.
 mkdir -p "${ROOT}/scripts"
-for s in replit-build.sh replit-run.sh local-verify.sh; do
+for s in replit-build.sh replit-run.sh local-verify.sh structure-lint.sh verify-gates.sh ci-verify-scaffold.sh apply-package-name.sh strip-scaffold-samples.sh; do
   cp "${SCAFFOLD}/scripts/${s}" "${ROOT}/scripts/${s}"
   chmod +x "${ROOT}/scripts/${s}"
 done
+
+echo "==> Installing project README from template (only if none exists yet)"
+# Guarantees every generated project ships a README.md — the engineering
+# handoff and generated-project CI both require it. The Agent fills in the
+# real app name / API links when the first real feature lands.
+[ -f "${ROOT}/README.md" ] || cp "${SCAFFOLD}/README.md.template" "${ROOT}/README.md"
 
 echo "==> Removing Replit-injected Python scaffolding (Java template, not Python)"
 for f in main.py pyproject.toml uv.lock poetry.lock requirements.txt Pipfile Pipfile.lock; do
@@ -60,5 +66,5 @@ if [ -f .replit ]; then
 fi
 
 echo "==> Done."
-echo "    Next: ask Agent to scaffold the Java + Spring Boot + React app per"
-echo "    templates/generated-project/scaffold/."
+echo "    Next: run bash scripts/apply-package-name.sh <app-name-package>, then scaffold"
+echo "    the Java + Spring Boot + React app per templates/generated-project/scaffold/."

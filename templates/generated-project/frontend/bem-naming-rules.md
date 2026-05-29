@@ -99,6 +99,7 @@ frontend/src/
     │   ├── modal/
     │   ├── input/
     │   └── ...
+    ├── auth/                             # AuthProvider (Clerk wrapper + token bridge)
     ├── api/
     ├── lib/
     └── config/

@@ -41,7 +41,8 @@ public class SampleServiceImpl implements SampleService {
     private final SampleMapper mapper;
 
     @Override
-    @LogUsage(action = "sample.find")                 // ← aspect logs this call to usage_events
+    // Auto-logged: the aspect records EVERY public *ServiceImpl method to
+    // usage_events with no annotation needed (action derived → "sample.findById").
     public SampleRecord findById(Long id) {
         return repo.findById(id)
             .map(mapper::toRecord)                    // map BEFORE returning (no entity escape)
@@ -49,7 +50,7 @@ public class SampleServiceImpl implements SampleService {
     }
 
     @Override
-    @LogUsage(action = "sample.update")               // ← aspect logs success or error automatically
+    @LogUsage(action = "sample.update")               // optional: override the auto-derived action name
     public SampleRecord update(Long id, SampleUpdate update) {
         // Reference: per-row attributes go into UsageEvent.attributes JSON.
         // Keep keys snake_case, values JSON-serialisable, never PII / secrets.
