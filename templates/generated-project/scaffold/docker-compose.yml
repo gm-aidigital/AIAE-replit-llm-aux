@@ -30,9 +30,6 @@ services:
       retries: 10
 
   backend:
-    # Context is the REPO ROOT — backend/Dockerfile uses repo-root-relative
-    # COPY paths (frontend/, backend/, config/, lombok.config) so it can
-    # bundle the SPA into static/ during the same image build.
     build:
       context: .
       dockerfile: backend/Dockerfile
@@ -43,6 +40,7 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: local
       PORT:                   8080
+      JAVA_OPTS:              ${JAVA_OPTS:-}
       POSTGRES_DB:            ${POSTGRES_DB:-app}
       POSTGRES_USER:          ${POSTGRES_USER:-app}
       POSTGRES_PASSWORD:      ${POSTGRES_PASSWORD:-app}
@@ -50,8 +48,10 @@ services:
       POSTGRES_PORT:          5432
       APP_CONTEXT_PATH:       ${APP_CONTEXT_PATH:-}
       APP_SERVICE_NAME:       ${APP_SERVICE_NAME:-generated-mvp}
-      # Clerk SSO is the only auth mode — the backend fails fast without it.
-      # Set these in .env for local-dev (a standalone Clerk tenant).
+      AUTH_ALLOWED_EMAIL_DOMAIN: ${AUTH_ALLOWED_EMAIL_DOMAIN:-aidigital.com}
+      AUTH_AUTHORIZED_PARTIES: ${AUTH_AUTHORIZED_PARTIES:-http://localhost:5173,http://localhost:5000}
+      CLERK_PUBLISHABLE_KEY:  ${CLERK_PUBLISHABLE_KEY:-}
+      CLERK_SECRET_KEY:         ${CLERK_SECRET_KEY:-}
       AUTH_ISSUER_URI:        ${AUTH_ISSUER_URI:-}
       AUTH_JWKS_URI:          ${AUTH_JWKS_URI:-}
       AUTH_AUDIENCE:          ${AUTH_AUDIENCE:-}
@@ -60,9 +60,6 @@ services:
       USAGE_LOG_ENVIRONMENT:  ${USAGE_LOG_ENVIRONMENT:-dev}
     ports:
       - "8080:8080"
-    # Healthcheck assumes context-path is empty (the scaffold default — see
-    # application.yml `server.servlet.context-path`). If you set
-    # APP_CONTEXT_PATH in env, prepend it to the curl URL accordingly.
     healthcheck:
       test: ["CMD-SHELL", "curl -fsS http://localhost:8080$${APP_CONTEXT_PATH:-}/actuator/health || exit 1"]
       interval: 10s
@@ -71,13 +68,14 @@ services:
       start_period: 30s
 
   frontend:
-    # Context is the REPO ROOT — frontend/Dockerfile COPYs both frontend/ and
-    # backend/.../openapi.yaml during build (volumes are runtime-only and
-    # can't supply build-time files to `npm run generate:api`).
     build:
       context: .
       dockerfile: frontend/Dockerfile
+      args:
+        VITE_CLERK_PUBLISHABLE_KEY: ${CLERK_PUBLISHABLE_KEY:-}
     profiles: ["local"]
+    environment:
+      APP_CONTEXT_PATH: ${APP_CONTEXT_PATH:-}
     depends_on:
       backend:
         condition: service_healthy

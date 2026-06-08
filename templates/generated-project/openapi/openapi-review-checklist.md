@@ -21,6 +21,25 @@ Quick gate for every API change. Detailed rules in
 - [ ] No export/download controller is expected to return `byte[]` or call
       generated-interface `getRequest()`
 
+## Documentation
+
+- [ ] Every operation has `summary` and behavior-focused `description`
+- [ ] Every path/query/header parameter has `description`
+- [ ] Every request body and response has `description`
+- [ ] Every schema has `description`
+- [ ] Every schema property has `description`, including `$ref` fields
+- [ ] Every enum schema has `description`; non-obvious values have `x-enumDescriptions`
+- [ ] Every enum is a standalone versioned `components.schemas.*V1` schema
+- [ ] No property, array item, or parameter uses inline `enum`; all enum usages are `$ref`
+
+## Schema Strictness
+
+- [ ] Every regular `type: object` DTO is closed with `additionalProperties: false`
+- [ ] No top-level request/response schema uses `additionalProperties: true`; only explicitly named dynamic helper schemas may do that
+- [ ] No regular endpoint relies on `Map<String, Object>`, raw `Object`, or loose object bodies
+- [ ] Dynamic maps are isolated inside closed DTOs and their values are typed as narrowly as possible
+- [ ] Generated frontend schema has no top-level `[key: string]: unknown` except approved dynamic helper schemas
+
 ## Errors
 
 - [ ] Explicit `4xx`/`5xx` for expected failures

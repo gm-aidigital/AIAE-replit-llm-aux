@@ -13,7 +13,7 @@ adapted for MVP→handoff.
 ## Bootstrap rule — copy the scaffold, do NOT regenerate
 
 `frontend/vite.config.ts`, `package.json`, `tsconfig.json`, `index.html`,
-`nginx.conf`, `Dockerfile` MUST be copied verbatim from
+`nginx.conf.template`, `Dockerfile` MUST be copied verbatim from
 `templates/generated-project/scaffold/frontend/`.
 
 **Forbidden:** `npm create vite@latest`, `npx create-vite`, any other

@@ -141,8 +141,21 @@ Replit datasource env wiring: see
     while the app is not yet runnable.
   - Phase 2 (MVP safety suite): tests must exist and pass; ratchet up as tests
     are written.
-  - Phase 3 (handoff): `0.80` enforced via `mvn -Phandoff verify`.
+  - Phase 2+ (MVP complete): parent POM defaults `0.80` line / `0.70` branch;
+    template CI may override to `0` while validating the scaffold only.
 - Structured JSON logs to stdout
+- Never use `@Value` in backend code — bind configuration with
+  `@ConfigurationProperties` beans only.
+- Service interfaces are contracts: every service interface and every public
+  service method must have JavaDoc with purpose, parameters, return value, and
+  business errors where applicable.
+- `*ServiceImpl` classes are orchestration-only and must stay below the hard
+  size limits in `service-helper-extraction-policy.md`; extract validators,
+  policies, assemblers, workflows, or helper services instead of adding
+  private-method piles.
+- OpenAPI is a user-facing contract: every operation, schema, enum, parameter,
+  request body, response, and schema property must carry meaningful
+  `description` text.
 
 Do not replace a requested Java/Spring backend with Node/Express without
 explicit user approval.
@@ -168,7 +181,7 @@ backend/db/src/main/resources/db/changelog/changes/0001-usage-events.xml
 
 # frontend/ — ALL JS/TS artifacts
 frontend/package.json   frontend/vite.config.ts   frontend/tsconfig.json
-frontend/Dockerfile     frontend/nginx.conf       # local-dev only
+frontend/Dockerfile     frontend/nginx.conf.template   # local-dev only
 ```
 
 Backend artifacts in `backend/`, frontend in `frontend/`, root only for
@@ -199,6 +212,7 @@ Each topic has one canonical file. Read before generating; never duplicate.
 | Topic | Canonical file |
 |---|---|
 | Project structure | `templates/generated-project/structure/near-production-project-structure.md` |
+| Service quality / helper extraction | `templates/generated-project/structure/service-helper-extraction-policy.md` |
 | OpenAPI rules | `templates/generated-project/openapi/canonical-openapi-rules.md` |
 | OpenAPI review checklist | `templates/generated-project/openapi/openapi-review-checklist.md` |
 | Frontend rules | `templates/generated-project/frontend/canonical-react-frontend-rules.md` |

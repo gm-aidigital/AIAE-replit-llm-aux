@@ -19,11 +19,14 @@ export default defineConfig(({ mode }) => {
     // into the VITE_-prefixed var the browser sees.
     const clerkPublishableKey =
         env.VITE_CLERK_PUBLISHABLE_KEY ?? env.CLERK_PUBLISHABLE_KEY ?? "";
+    const clerkJwtTemplate =
+        env.VITE_CLERK_JWT_TEMPLATE ?? "aidigital-api";
 
     return {
         plugins: [react()],
         define: {
             "import.meta.env.VITE_CLERK_PUBLISHABLE_KEY": JSON.stringify(clerkPublishableKey),
+            "import.meta.env.VITE_CLERK_JWT_TEMPLATE": JSON.stringify(clerkJwtTemplate),
         },
         resolve: {
             alias: {

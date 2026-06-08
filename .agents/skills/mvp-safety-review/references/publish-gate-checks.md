@@ -171,7 +171,7 @@ Past runs swapped Vite onto 5000 + Spring to 8080 → broke Reserved-VM Deployme
 
 - [ ] `backend/Dockerfile` (multi-stage Maven → JRE).
 - [ ] `frontend/Dockerfile` (Node → nginx static).
-- [ ] `frontend/nginx.conf` (SPA routing + `/api` proxy).
+- [ ] `frontend/nginx.conf.template` (SPA routing + `/api` proxy).
 - [ ] `docker-compose.yml` at project root with `local` profile, `postgres + backend + frontend`
       services, build contexts at `./backend` and `./frontend`.
 - [ ] Local dry-run commands documented in README.

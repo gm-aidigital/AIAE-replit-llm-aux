@@ -14,11 +14,9 @@
 
 package PACKAGE_REPLACE_ME.domain.sample.entities;
 
+import PACKAGE_REPLACE_ME.domain.common.entities.IdAwareEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -34,11 +32,7 @@ import java.time.LocalDateTime;
 @Getter
 @Setter
 @NoArgsConstructor
-public class SampleEntity {
-
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+public class SampleEntity extends IdAwareEntity {
 
     @Column(nullable = false)
     private String name;

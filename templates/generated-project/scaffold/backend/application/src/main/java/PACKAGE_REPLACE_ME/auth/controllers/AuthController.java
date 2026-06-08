@@ -2,11 +2,10 @@ package PACKAGE_REPLACE_ME.auth.controllers;
 
 import PACKAGE_REPLACE_ME.api.v1.AuthApi;
 import PACKAGE_REPLACE_ME.api.v1.model.UserV1;
+import PACKAGE_REPLACE_ME.mappers.auth.UserMapper;
 import PACKAGE_REPLACE_ME.security.AppUserFactory;
-import PACKAGE_REPLACE_ME.service.common.security.AppUser;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -21,6 +20,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthController implements AuthApi {
 
     private final AppUserFactory appUserFactory;
+    private final UserMapper userMapper;
 
     /**
      * Returns the authenticated user payload built from the JWT in the
@@ -30,12 +30,7 @@ public class AuthController implements AuthApi {
      */
     @Override
     public ResponseEntity<UserV1> getCurrentUser() {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        AppUser caller = appUserFactory.from(auth);
-        UserV1 dto = new UserV1();
-        dto.setId(caller.subject());
-        dto.setEmail(caller.email());
-        dto.setRoles(caller.roles());
-        return ResponseEntity.ok(dto);
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        return ResponseEntity.ok(userMapper.toUserV1(appUserFactory.from(auth)));
     }
 }

@@ -88,6 +88,11 @@ jobs:
             "templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/security/AuthProperties.java"
             "templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/security/AppUserFactory.java"
             "templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/web/SpaFallbackController.java"
+            "templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/security/CompanyEmailDomainAuthorizationManager.java"
+            "templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/security/ClerkJwtClaimsValidator.java"
+            "templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/security/ClerkPublishableKeyDecoder.java"
+            "templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/security/SecurityProperties.java"
+            "templates/generated-project/scaffold/backend/domain/src/main/java/PACKAGE_REPLACE_ME/domain/common/entities/IdAwareEntity.java"
             "templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/auth/controllers/AuthController.java"
             "templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/error/GlobalExceptionHandler.java"
             "templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/observability/CorrelationIdFilter.java"
@@ -122,7 +127,24 @@ jobs:
             "templates/generated-project/scaffold/scripts/verify-gates.sh"
             "templates/generated-project/scaffold/scripts/ci-verify-scaffold.sh"
             "templates/generated-project/scaffold/scripts/strip-scaffold-samples.sh"
+            "templates/generated-project/scaffold/scripts/materialize-project.sh"
+            "templates/generated-project/scaffold/scripts/configure-clerk-development.sh"
+            "templates/generated-project/scaffold/scripts/test-strip-scaffold-samples.sh"
+            "templates/generated-project/scaffold/scripts/lib/check-api-client-paths.sh"
+            "templates/generated-project/scaffold/scripts/lib/check-production-magic-values.sh"
+            "templates/generated-project/scaffold/scripts/lib/check-production-static-methods.sh"
+            "templates/generated-project/scaffold/scripts/lib/scan-production-java.py"
+            "templates/generated-project/scaffold/scripts/test-check-production-scanners.sh"
+            "templates/generated-project/scaffold/scripts/test-setup-project.sh"
+            "templates/generated-project/scaffold/scripts/test-materialize-project.sh"
+            "templates/generated-project/scaffold/scripts/test-configure-clerk-development.sh"
+            "templates/generated-project/scaffold/scripts/docker-local-smoke.sh"
+            "templates/generated-project/scaffold/scripts/docker-context-path-smoke.sh"
+            "scripts/release-replit-template.sh"
+            "scripts/test-release-replit-template.sh"
             "templates/generated-project/scaffold/SCAFFOLD-MANIFEST.md"
+            "templates/generated-project/structure/service-helper-extraction-policy.md"
+            "templates/generated-project/structure/context-path-policy.md"
 
             # === Scaffold frontend auth + UI ===
             "templates/generated-project/scaffold/frontend/src/pages/Login.tsx"
@@ -150,7 +172,7 @@ jobs:
             "templates/generated-project/scaffold/backend/service/src/main/java/PACKAGE_REPLACE_ME/service/common/security/AppUser.java"
             "templates/generated-project/scaffold/backend/service/src/main/java/PACKAGE_REPLACE_ME/service/sample/services/SampleService.java"
             "templates/generated-project/scaffold/backend/service/src/main/java/PACKAGE_REPLACE_ME/service/sample/services/impl/SampleServiceImpl.java"
-            "templates/generated-project/scaffold/backend/service/src/main/java/PACKAGE_REPLACE_ME/service/sample/mappers/SampleMapper.java"
+            "templates/generated-project/scaffold/backend/service/src/main/java/PACKAGE_REPLACE_ME/service/mappers/sample/SampleMapper.java"
             "templates/generated-project/scaffold/backend/service/src/main/java/PACKAGE_REPLACE_ME/service/sample/models/SampleRecord.java"
             "templates/generated-project/scaffold/backend/service/src/main/java/PACKAGE_REPLACE_ME/service/sample/models/SampleUpdate.java"
 
@@ -168,7 +190,7 @@ jobs:
 
             # === Scaffold frontend ===
             "templates/generated-project/scaffold/frontend/Dockerfile"
-            "templates/generated-project/scaffold/frontend/nginx.conf"
+            "templates/generated-project/scaffold/frontend/nginx.conf.template"
             "templates/generated-project/scaffold/frontend/package.json"
             "templates/generated-project/scaffold/frontend/package-lock.json"
             "templates/generated-project/scaffold/frontend/vite.config.ts"
@@ -331,6 +353,11 @@ jobs:
             bash templates/generated-project/scaffold/scripts/verify-gates.sh --template-replit
           bash templates/generated-project/scaffold/scripts/verify-gates.sh --scaffold-source
           bash templates/generated-project/scaffold/scripts/structure-lint.sh --scaffold
+          bash templates/generated-project/scaffold/scripts/test-strip-scaffold-samples.sh
+          bash templates/generated-project/scaffold/scripts/test-check-production-scanners.sh
+          bash templates/generated-project/scaffold/scripts/test-setup-project.sh
+          bash templates/generated-project/scaffold/scripts/test-materialize-project.sh
+          bash templates/generated-project/scaffold/scripts/test-configure-clerk-development.sh
 
       - name: No service-account JSON in the template itself
         shell: bash
@@ -346,6 +373,40 @@ jobs:
             fi
           done < <(find . -path ./.git -prune -o -type f -name '*.json' -print)
           [ "${found}" -eq 0 ] || exit 1
+
+  replit-release-artifact:
+    name: Flattened Replit release artifact
+    runs-on: ubuntu-latest
+    needs: template-integrity
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build and validate release artifact
+        run: bash scripts/test-release-replit-template.sh
+
+  scaffold-docker-smoke:
+    name: Scaffold Docker smoke (materialized)
+    runs-on: ubuntu-latest
+    needs: template-integrity
+    steps:
+      - uses: actions/checkout@v4
+      - name: Materialize project
+        run: |
+          set -euo pipefail
+          WORK="$(mktemp -d)"
+          echo "WORK=${WORK}" >> "${GITHUB_ENV}"
+          SCAFFOLD_ROOT="${GITHUB_WORKSPACE}/templates/generated-project/scaffold" \
+            TEMPLATE_REPO_ROOT="${GITHUB_WORKSPACE}" \
+            MATERIALIZE_DEST="${WORK}" \
+            bash templates/generated-project/scaffold/scripts/materialize-project.sh replitmvp
+      - name: Docker local smoke
+        working-directory: ${{ env.WORK }}
+        run: |
+          set -euo pipefail
+          docker compose --profile local config
+          bash scripts/docker-local-smoke.sh
+      - name: Docker context-path smoke
+        working-directory: ${{ env.WORK }}
+        run: bash scripts/docker-context-path-smoke.sh
 
   scaffold-verify:
     name: Scaffold full verify
@@ -365,3 +426,24 @@ jobs:
       - name: Materialize scaffold and run full verify gate
         shell: bash
         run: bash templates/generated-project/scaffold/scripts/ci-verify-scaffold.sh
+
+  integration-packs:
+    name: Integration pack installers
+    runs-on: ubuntu-latest
+    needs: template-integrity
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Run integration pack install tests
+        shell: bash
+        env:
+          JAVA_HOME: ${{ env.JAVA_HOME }}
+        run: bash templates/integrations/test-install-packs.sh

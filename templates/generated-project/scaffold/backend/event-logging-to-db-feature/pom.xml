@@ -37,6 +37,8 @@
     <artifactId>event-logging-to-db-feature</artifactId>
     <name>Replit MVP — event-logging-to-db-feature</name>
 
+    <!-- Self-contained, removable feature. Must NOT depend on any other internal
+         module (domain/service/application). ID semantics live in this module. -->
     <dependencies>
         <dependency>
             <groupId>org.projectlombok</groupId>

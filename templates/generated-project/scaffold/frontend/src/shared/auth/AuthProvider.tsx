@@ -28,7 +28,7 @@ export function AuthProvider({ children }: Props) {
 function ClerkTokenBridge() {
     const { getToken } = useAuth();
     useEffect(() => {
-        setSsoTokenGetter(() => getToken());
+        setSsoTokenGetter(() => getToken({ template: runtimeConfig.clerkJwtTemplate }));
         return () => setSsoTokenGetter(null);
     }, [getToken]);
     return null;

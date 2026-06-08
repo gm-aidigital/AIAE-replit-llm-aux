@@ -26,6 +26,7 @@ paths:
       tags: [auth]
       operationId: getCurrentUser
       summary: Returns the authenticated user (Clerk SSO)
+      description: Returns the Clerk-authenticated user identity used by the SPA bootstrap.
       security:
         - bearerAuth: []
       responses:
@@ -38,9 +39,9 @@ paths:
               examples:
                 demo:
                   value:
-                    id: "user_123"
+                    user_id: "user_123"
                     email: "demo-user@example.com"
-                    roles: ["viewer"]
+                    full_name: "Demo User"
         "401":
           $ref: "#/components/responses/UnauthorizedV1"
         "403":
@@ -73,27 +74,36 @@ components:
   schemas:
     UserV1:
       type: object
-      required: [id, email]
+      additionalProperties: false
+      description: Authenticated user identity projected from Clerk JWT claims.
+      required: [user_id, email]
+      # Baseline payload carries identity only. Add a roles array here ONLY when
+      # the product introduces server-side role authorization.
       properties:
-        id:    { type: string }
-        email: { type: string, format: email }
-        roles: { type: array, items: { type: string } }
+        user_id:   { type: string, description: "Clerk user id (sub/user_id claim)." }
+        email:     { type: string, format: email, description: "Primary email address verified by Clerk." }
+        full_name: { type: string, description: "Display name assembled from Clerk profile claims." }
 
     ApiErrorV1:
       type: object
+      additionalProperties: false
+      description: Standard API error body returned for application and validation failures.
       required: [code, message, timestamp]
       properties:
         code:          { type: string, description: "Machine-readable error code" }
-        message:       { type: string, description: "Human-readable message" }
-        timestamp:     { type: string, format: date-time }
-        correlationId: { type: string }
+        message:       { type: string, description: "Human-readable message." }
+        timestamp:     { type: string, format: date-time, description: "UTC timestamp when the error response was created." }
+        correlationId: { type: string, description: "Request correlation id used to find matching logs." }
         parameters:
           type: array
+          description: Field-level validation details when validation fails.
           items: { $ref: "#/components/schemas/ValidationParameterV1" }
 
     ValidationParameterV1:
       type: object
+      additionalProperties: false
+      description: Single validation detail attached to an API error.
       required: [code, value]
       properties:
-        code:  { type: string }
-        value: { type: string }
+        code:  { type: string, description: "Machine-readable validation code or field name." }
+        value: { type: string, description: "Rejected value or validation context." }

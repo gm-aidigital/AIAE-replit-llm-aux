@@ -1,51 +1,61 @@
 // AppUserFactory — builds AppUser from the Spring Security authentication.
-// A Spring bean (not a static utility) so controllers inject it and tests can
-// mock/spy it. Lives in the application module so it can import Spring Security
-// types without polluting the service module.
 
 package PACKAGE_REPLACE_ME.security;
 
 import PACKAGE_REPLACE_ME.service.common.security.AppUser;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.stereotype.Component;
 
-import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 
 /**
  * Builds {@link AppUser} from the Spring Security authentication.
+ *
+ * <p>Fail-closed: accepts only Clerk-issued {@link JwtAuthenticationToken}s.
+ * Requires {@code user_id} and {@code email} claims — never falls back from
+ * a missing claim to {@code sub} or to a placeholder string.
  */
 @Component
 public class AppUserFactory {
 
+    private static final String CLAIM_USER_ID = "user_id";
+    private static final String CLAIM_EMAIL = "email";
+    private static final String CLAIM_FULLNAME = "full_name";
+
     /**
-     * Converts the current request authentication into an {@link AppUser}. The
-     * {@code email} claim is preferred over {@code sub}; SecurityConfig wires
-     * the Clerk JWT so the canonical email lands in {@code email}.
+     * Converts the current request authentication into an {@link AppUser}.
      *
-     * @param auth Spring Security authentication from the security context.
-     *             Must not be null — the security chain rejects unauthenticated
-     *             requests before they reach controllers.
-     * @return caller context with stable subject, lowercased email and roles.
+     * @param auth Spring Security authentication from the security context
+     * @return caller identity built from the Clerk JWT claims
+     * @throws IllegalStateException when the authentication is not a Clerk JWT
+     *         or required claims are absent
      */
     public AppUser from(Authentication auth) {
-        if (auth instanceof JwtAuthenticationToken jwtAuth) {
-            Jwt jwt = jwtAuth.getToken();
-            String email = Optional.ofNullable(jwt.getClaimAsString("email"))
-                .filter(e -> !e.isBlank())
-                .orElse(jwt.getSubject());
-            String canonicalEmail = email != null
-                ? email.toLowerCase(Locale.ROOT).strip()
-                : "unknown";
-            List<String> roles = jwtAuth.getAuthorities().stream()
-                .map(GrantedAuthority::getAuthority)
-                .toList();
-            return new AppUser(jwt.getSubject(), canonicalEmail, roles);
+        if (!(auth instanceof JwtAuthenticationToken jwtAuth)) {
+            throw new IllegalStateException(
+                "Unsupported authentication type; expected a Clerk JWT: "
+                + (auth == null ? "null" : auth.getClass().getName()));
         }
-        return new AppUser(auth.getName(), auth.getName(), List.of());
+        Jwt jwt = jwtAuth.getToken();
+
+        String userId = jwt.getClaimAsString(CLAIM_USER_ID);
+        if (userId == null || userId.isBlank()) {
+            throw new IllegalStateException("Clerk JWT is missing required claim: user_id");
+        }
+
+        String rawEmail = jwt.getClaimAsString(CLAIM_EMAIL);
+        if (rawEmail == null || rawEmail.isBlank()) {
+            throw new IllegalStateException("Clerk JWT is missing required claim: email");
+        }
+        String email = rawEmail.trim().toLowerCase(Locale.ROOT);
+
+        String fullName = Optional.ofNullable(jwt.getClaimAsString(CLAIM_FULLNAME))
+            .filter(v -> !v.isBlank())
+            .orElse(email);
+
+        return new AppUser(userId, email, fullName);
     }
 }

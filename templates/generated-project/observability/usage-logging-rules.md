@@ -119,8 +119,8 @@ is nullable so partial / fire-and-forget events still land.
 | `environment` | `TEXT` | no | `prod` / `staging` / `dev` |
 | `event_type` | `TEXT` | yes | `api_request` / `auth` / `error` / `custom` |
 | `action` | `TEXT` | no | dotted lowercase, e.g. `forecast.create` |
-| `user_id` | `TEXT` | no | `Authentication#getName()`. `SecurityConfig` pins `JwtAuthenticationConverter#principalClaimName="email"`, so when the Clerk JWT carries email this is the lowercased email; falls back to provider `sub` when no email claim exists. |
-| `user_email` | `TEXT` | no | extracted from `email` / `email_address` / `primary_email_address` / `mail` claim |
+| `user_id` | `TEXT` | no | `Authentication#getName()`. `SecurityConfig` wires `JwtAuthenticationConverter#setPrincipalClaimName("user_id")`, so this is the stable Clerk `user_id`. **Never** the email address. |
+| `user_email` | `TEXT` | no | normalized `email` claim, stored separately from the principal id |
 | `status` | `TEXT` | no | `success` / `error` / HTTP code as string |
 | `duration_ms` | `BIGINT` | no | operation latency |
 | `attributes` | `JSONB` | no | sanitized structured payload — see "Per-row attributes" below |
@@ -149,15 +149,16 @@ ORDER BY 2 DESC;
 ## Per-row attributes
 
 `attributes` (JSONB) is the catch-all. The aspect always seeds the
-auto-lifted keys above; on top of that, business code adds domain-specific
-keys via `UsageAttributes.put(...)` from inside the `@LogUsage`-annotated
-method:
+auto-lifted keys above; on top of that, business code adds domain-specific keys by injecting `UsageAttributes` and
+calling `usageAttributes.put(...)` from inside the service method:
 
 ```java
+private final UsageAttributes usageAttributes;
+
 @LogUsage(action = "forecast.create")
 public ForecastRecord create(ForecastRequest req, AppUser caller) {
-    UsageAttributes.put("geo", req.geo());
-    UsageAttributes.put("channel", req.channel());
+    usageAttributes.put("geo", req.geo());
+    usageAttributes.put("channel", req.channel());
     return ...;
 }
 ```

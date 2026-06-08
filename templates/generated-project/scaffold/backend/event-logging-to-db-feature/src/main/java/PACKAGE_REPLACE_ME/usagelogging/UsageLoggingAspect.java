@@ -13,10 +13,10 @@
 //  5. Logger is @Async (off-thread DB write). Aspect only assembles + hands off
 //     — assembly must be cheap (no I/O).
 //  6. joinPoint.getArgs() deliberately ignored — no payload/JWT/PII leakage.
-//     Callers populate per-row attributes via UsageAttributes.put(...).
-//  7. user_email + user display name extraction reads Clerk JWT claims.
-//     SecurityConfig wires JwtAuthenticationConverter#setPrincipalClaimName("email"),
-//     so auth.getName() (→ user_id column) returns the email when present.
+//     Callers populate per-row attributes via usageAttributes.put(...).
+//  7. SecurityConfig wires JwtAuthenticationConverter#setPrincipalClaimName("user_id"),
+//     so auth.getName() returns the Clerk user_id (stable identifier). The
+//     email is read separately from the "email" JWT claim; never from getName().
 //  8. The BQ-aligned schema has no top-level correlation_id or user_name
 //     column. The aspect embeds both inside `attributes` JSON
 //     ({"correlation_id": "...", "user_name": "..."}) alongside any
@@ -122,10 +122,13 @@ public class UsageLoggingAspect {
 
     private final UsageLogger usageLogger;
     private final UsageLoggingProperties props;
+    private final UsageAttributes usageAttributes;
 
-    public UsageLoggingAspect(UsageLogger usageLogger, UsageLoggingProperties props) {
+    public UsageLoggingAspect(UsageLogger usageLogger, UsageLoggingProperties props,
+                              UsageAttributes usageAttributes) {
         this.usageLogger = usageLogger;
         this.props = props;
+        this.usageAttributes = usageAttributes;
     }
 
     /**
@@ -158,7 +161,7 @@ public class UsageLoggingAspect {
             } finally {
                 // Always clear the per-request attribute bag; otherwise the
                 // next request on the same worker thread inherits stale keys.
-                UsageAttributes.clear();
+                usageAttributes.clear();
             }
         }
     }
@@ -257,7 +260,7 @@ public class UsageLoggingAspect {
             .status(failed ? STATUS_ERROR : STATUS_SUCCESS)
             .durationMs(durationMs)
             .attributes(buildAttributes(auth))
-            .errorMessage(failed ? truncate(thrown.getMessage(), 500) : null)
+            .errorMessage(failed ? truncate(thrown.getMessage(), props.getMaxErrorMessageLength()) : null)
             .clientIp(clientIp(request))
             .userAgent(userAgent(request))
             .build();
@@ -274,7 +277,7 @@ public class UsageLoggingAspect {
      * @return merged map, or null when nothing was contributed
      */
     Map<String, Object> buildAttributes(Authentication auth) {
-        Map<String, Object> caller = UsageAttributes.snapshot();
+        Map<String, Object> caller = usageAttributes.snapshot();
         String correlation = MDC.get(MDC_CORRELATION);
         String userName = extractName(auth);
         boolean nothing = caller == null
@@ -410,7 +413,7 @@ public class UsageLoggingAspect {
      * @return truncated user-agent value, or null without a request
      */
     String userAgent(HttpServletRequest request) {
-        return request == null ? null : truncate(request.getHeader("User-Agent"), 500);
+        return request == null ? null : truncate(request.getHeader("User-Agent"), props.getMaxUserAgentLength());
     }
 
     /**

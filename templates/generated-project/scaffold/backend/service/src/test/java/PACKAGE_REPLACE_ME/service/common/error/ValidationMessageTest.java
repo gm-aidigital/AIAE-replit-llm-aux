@@ -9,8 +9,8 @@ class ValidationMessageTest {
     @Test
     void shouldBeEqualForSameCodeMessageTypeAndParamsTest() {
         // Given / When:
-        ValidationMessage a = ValidationMessage.withParams(ErrorReason.C001, 1L);
-        ValidationMessage b = ValidationMessage.withParams(ErrorReason.C001, 1L);
+        ValidationMessage a = new ValidationMessage(ErrorReason.C001, 1L);
+        ValidationMessage b = new ValidationMessage(ErrorReason.C001, 1L);
 
         // Then:
         assertThat(a).isEqualTo(b).hasSameHashCodeAs(b);
@@ -21,8 +21,8 @@ class ValidationMessageTest {
     @Test
     void shouldDifferWhenCodeDiffersTest() {
         // Given / When:
-        ValidationMessage a = ValidationMessage.withParams(ErrorReason.C001, 1L);
-        ValidationMessage b = ValidationMessage.withParams(ErrorReason.C006, 1L);
+        ValidationMessage a = new ValidationMessage(ErrorReason.C001, 1L);
+        ValidationMessage b = new ValidationMessage(ErrorReason.C006, 1L);
 
         // Then:
         assertThat(a).isNotEqualTo(b);
@@ -33,7 +33,7 @@ class ValidationMessageTest {
     @Test
     void shouldHandleNullParamsArrayTest() {
         // Given / When:
-        ValidationMessage m = ValidationMessage.withParams(ErrorReason.C004, (Object[]) null);
+        ValidationMessage m = new ValidationMessage(ErrorReason.C004, (Object[]) null);
 
         // Then:
         assertThat(m.getParameters()).isEmpty();

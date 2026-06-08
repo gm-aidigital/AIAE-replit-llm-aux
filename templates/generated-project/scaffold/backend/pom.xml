@@ -62,7 +62,6 @@
         <npm.version>10.9.2</npm.version>
 
         <springdoc.version>2.8.3</springdoc.version>
-        <jjwt.version>0.12.6</jjwt.version>
         <logstash-logback-encoder.version>8.0</logstash-logback-encoder.version>
         <logbook.version>3.10.0</logbook.version>
         <commons-csv.version>1.12.0</commons-csv.version>
@@ -72,7 +71,8 @@
         <jacoco.version>0.8.12</jacoco.version>
         <checkstyle.version>10.21.0</checkstyle.version>
         <!-- JaCoCo gate. Phased — see testing-policy.md. -->
-        <jacoco.line.coverage>0.00</jacoco.line.coverage>
+        <jacoco.line.coverage>0.80</jacoco.line.coverage>
+        <jacoco.branch.coverage>0.70</jacoco.branch.coverage>
 
         <!-- OpenAPI packages. Version (v1, v2) in BOTH package name AND
              schema names in openapi.yaml. NO modelNameSuffix — partial V2
@@ -149,25 +149,6 @@
                 <groupId>org.springdoc</groupId>
                 <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
                 <version>${springdoc.version}</version>
-            </dependency>
-
-            <!-- JWT verification helpers (Clerk JWKS via oauth2-resource-server) -->
-            <dependency>
-                <groupId>io.jsonwebtoken</groupId>
-                <artifactId>jjwt-api</artifactId>
-                <version>${jjwt.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>io.jsonwebtoken</groupId>
-                <artifactId>jjwt-impl</artifactId>
-                <version>${jjwt.version}</version>
-                <scope>runtime</scope>
-            </dependency>
-            <dependency>
-                <groupId>io.jsonwebtoken</groupId>
-                <artifactId>jjwt-jackson</artifactId>
-                <version>${jjwt.version}</version>
-                <scope>runtime</scope>
             </dependency>
 
             <!-- CSV (export endpoints) -->
@@ -296,6 +277,11 @@
                                                 <value>COVEREDRATIO</value>
                                                 <minimum>${jacoco.line.coverage}</minimum>
                                             </limit>
+                                            <limit>
+                                                <counter>BRANCH</counter>
+                                                <value>COVEREDRATIO</value>
+                                                <minimum>${jacoco.branch.coverage}</minimum>
+                                            </limit>
                                         </limits>
                                     </rule>
                                 </rules>
@@ -415,13 +401,15 @@
         </plugins>
     </build>
 
-    <!-- Phased testing — see testing-policy.md. Default = Phase 1/2 gate
-         (0.00 → ratcheted); `-Phandoff` = Phase 3 strict 0.80. -->
+    <!-- Phased testing — see testing-policy.md.
+         Default = Phase 1/2 gate (0.00 -> ratcheted up over sprints).
+         -Phandoff = Phase 3 strict gates: >=0.80 line, >=0.70 branch. -->
     <profiles>
         <profile>
             <id>handoff</id>
             <properties>
                 <jacoco.line.coverage>0.80</jacoco.line.coverage>
+                <jacoco.branch.coverage>0.70</jacoco.branch.coverage>
             </properties>
         </profile>
     </profiles>

@@ -16,15 +16,9 @@
 <configuration>
 
     <springProperty scope="context" name="appName" source="spring.application.name" defaultValue="app"/>
-    <springProfile name="local">
-        <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
-            <encoder>
-                <pattern>%d{HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n</pattern>
-            </encoder>
-        </appender>
-    </springProfile>
 
-    <springProfile name="!local">
+    <!-- JSON on every default profile (local, replit, prod). Readable console logs: spring.profiles.active=local,readable -->
+    <springProfile name="!readable">
         <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
             <encoder class="net.logstash.logback.encoder.LoggingEventCompositeJsonEncoder">
                 <providers>
@@ -45,6 +39,14 @@
                     <mdc/>
                     <stackTrace/>
                 </providers>
+            </encoder>
+        </appender>
+    </springProfile>
+
+    <springProfile name="readable">
+        <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
+            <encoder>
+                <pattern>%d{HH:mm:ss.SSS} %-5level [%thread] %logger{36} - %msg%n</pattern>
             </encoder>
         </appender>
     </springProfile>

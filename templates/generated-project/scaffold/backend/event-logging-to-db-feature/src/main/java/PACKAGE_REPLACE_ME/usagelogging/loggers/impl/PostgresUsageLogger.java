@@ -6,19 +6,19 @@ package PACKAGE_REPLACE_ME.usagelogging.loggers.impl;
 
 import PACKAGE_REPLACE_ME.usagelogging.loggers.UsageLogger;
 import PACKAGE_REPLACE_ME.usagelogging.models.UsageEvent;
-import PACKAGE_REPLACE_ME.usagelogging.persistence.UsageEventPersistenceService;
+import PACKAGE_REPLACE_ME.usagelogging.sink.UsageEventSink;
 import lombok.RequiredArgsConstructor;
 
 /**
- * Dispatches usage events into the configured persistence sink.
+ * Dispatches usage events into the configured {@link UsageEventSink} chain.
  */
 @RequiredArgsConstructor
 public class PostgresUsageLogger implements UsageLogger {
 
-    private final UsageEventPersistenceService persistenceService;
+    private final UsageEventSink usageEventSink;
 
     @Override
     public void record(UsageEvent event) {
-        persistenceService.persist(event);
+        usageEventSink.record(event);
     }
 }

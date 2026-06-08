@@ -2,16 +2,9 @@
 // Clerk SSO is the ONLY supported auth mode: the app validates Clerk-issued
 // JWTs against the Clerk JWKS endpoint. There is NO mock/replit fallback — a
 // missing issuer/JWKS fails fast at startup (see jwtDecoder()).
-//
-// GOTCHA: OAuth2 resource-server auto-config triggers on an empty issuer-uri
-// and crashes startup. Fix: always provide the @Bean JwtDecoder here; never
-// set spring.security.oauth2.resourceserver.jwt.* in YAML. Full:
-// `.agents/skills/backend-java-feature/references/spring-boot-gotchas.md`
-// → "OAuth2 Resource Server auto-config".
 
 package PACKAGE_REPLACE_ME.security;
 
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -44,25 +37,25 @@ import java.util.List;
  * browser security headers.
  */
 @Configuration
-@EnableConfigurationProperties(AuthProperties.class)
+@EnableConfigurationProperties({AuthProperties.class, SecurityProperties.class})
 public class SecurityConfig {
 
-    /**
-     * Comma-separated allow-list for the CORS Origin header. Defaults match the
-     * Replit workspace + common local-dev ports. Override via env
-     * {@code APP_SECURITY_CORS_ALLOWED_ORIGINS} for staging/prod.
-     */
-    @Value("${app.security.cors.allowed-origins:"
-        + "https://*.replit.dev,https://*.repl.co,http://localhost:5173,http://localhost:5000}")
-    private String corsAllowedOrigins;
+    private final SecurityProperties securityProperties;
+    private final ClerkJwtClaimsValidator clerkJwtClaimsValidator;
+    private final ClerkPublishableKeyDecoder publishableKeyDecoder;
+    private final CompanyEmailDomainAuthorizationManager companyEmailDomainAuthorizationManager;
 
-    /**
-     * CSP {@code frame-ancestors} directive — controls which parent pages may
-     * embed the SPA in an iframe. Tighten via env
-     * {@code APP_SECURITY_CSP_FRAME_ANCESTORS} in deployment.
-     */
-    @Value("${app.security.csp.frame-ancestors:'self' https://*.replit.dev https://*.repl.co}")
-    private String cspFrameAncestors;
+    public SecurityConfig(
+        SecurityProperties securityProperties,
+        ClerkJwtClaimsValidator clerkJwtClaimsValidator,
+        ClerkPublishableKeyDecoder publishableKeyDecoder,
+        CompanyEmailDomainAuthorizationManager companyEmailDomainAuthorizationManager
+    ) {
+        this.securityProperties = securityProperties;
+        this.clerkJwtClaimsValidator = clerkJwtClaimsValidator;
+        this.publishableKeyDecoder = publishableKeyDecoder;
+        this.companyEmailDomainAuthorizationManager = companyEmailDomainAuthorizationManager;
+    }
 
     /**
      * Builds the single stateless security chain for API and actuator endpoints.
@@ -77,14 +70,11 @@ public class SecurityConfig {
             .csrf(AbstractHttpConfigurer::disable)
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-            // Security headers — explicit policy, no Spring defaults relied on.
-            // Iframe embedding allowed by company guidelines → X-Frame-Options
-            // disabled; CSP frame-ancestors carries the policy instead.
             .headers(h -> h
                 .frameOptions(frame -> frame.disable())
                 .contentSecurityPolicy(csp -> csp.policyDirectives(
                     "default-src 'self'; "
-                    + "frame-ancestors " + cspFrameAncestors + "; "
+                    + "frame-ancestors " + securityProperties.getCsp().getFrameAncestors() + "; "
                     + "script-src 'self' 'unsafe-inline'; "
                     + "style-src 'self' 'unsafe-inline'; "
                     + "img-src 'self' data: https:; "
@@ -92,60 +82,53 @@ public class SecurityConfig {
                     + "font-src 'self' data:"))
                 .referrerPolicy(r -> r.policy(
                     ReferrerPolicyHeaderWriter.ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN))
-                .contentTypeOptions(opts -> { })        // X-Content-Type-Options: nosniff
+                .contentTypeOptions(opts -> { })
                 .httpStrictTransportSecurity(hsts -> hsts
                     .includeSubDomains(true)
-                    .maxAgeInSeconds(31_536_000L)))     // 1 year
+                    .maxAgeInSeconds(31_536_000L)))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(AuthConstants.PUBLIC_PATHS).permitAll()
-                .anyRequest().authenticated())
+                .anyRequest().access(companyEmailDomainAuthorizationManager))
             .oauth2ResourceServer(oauth -> oauth.jwt(jwt -> jwt
-                .jwtAuthenticationConverter(emailAsPrincipalConverter())))
+                .jwtAuthenticationConverter(userIdAsPrincipalConverter())))
             .build();
     }
 
     /**
-     * Binds {@code Authentication#getName()} to the {@code email} claim so audit
-     * / {@code usage_events.user_id} / authorization joins share one canonical
-     * identifier (lowercased email). Spring falls back to {@code jwt.getSubject()}
-     * when the IdP doesn't ship an email claim. Package-private so it is
-     * unit-testable / spy-able (no static).
+     * Binds {@code Authentication#getName()} to the stable Clerk
+     * {@code user_id} claim (not the email).
      *
-     * @return converter that pins the principal name to the email claim
+     * @return converter that pins the principal name to the user_id claim
      */
-    JwtAuthenticationConverter emailAsPrincipalConverter() {
+    JwtAuthenticationConverter userIdAsPrincipalConverter() {
         JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
-        converter.setPrincipalClaimName("email");
+        converter.setPrincipalClaimName(AuthConstants.USER_ID_CLAIM);
         return converter;
     }
 
     /**
      * CORS source — reads the allow-list from {@code app.security.cors.allowed-origins}.
-     * {@code allowedOriginPatterns} (not {@code allowedOrigins}) is required when
-     * wildcards are present (e.g. {@code https://*.replit.dev}).
      *
      * @return URL-pattern CORS configuration applied to all paths
      */
     @Bean
     CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration cfg = new CorsConfiguration();
-        cfg.setAllowedOriginPatterns(Arrays.stream(corsAllowedOrigins.split(","))
+        cfg.setAllowedOriginPatterns(Arrays.stream(
+                securityProperties.getCors().getAllowedOrigins().split(","))
             .map(String::trim).filter(s -> !s.isEmpty()).toList());
         cfg.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         cfg.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Correlation-Id", "Accept"));
         cfg.setExposedHeaders(List.of("X-Correlation-Id"));
         cfg.setAllowCredentials(true);
-        cfg.setMaxAge(3600L);
+        cfg.setMaxAge(securityProperties.getCors().getMaxAgeSeconds());
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", cfg);
         return source;
     }
 
     /**
-     * The Clerk-SSO {@link JwtDecoder}. {@code @ConditionalOnMissingBean} lets a
-     * test supply a stub decoder; in production this is the only decoder and it
-     * FAILS FAST when neither issuer-uri nor jwk-set-uri is configured — SSO is
-     * required, there is no mock fallback.
+     * The Clerk-SSO {@link JwtDecoder}.
      *
      * @param props auth configuration bound from {@code app.auth.*}
      * @return decoder configured for Clerk (or any OIDC issuer)
@@ -157,23 +140,22 @@ public class SecurityConfig {
     }
 
     /**
-     * Builds a Nimbus JwtDecoder with explicit validation: iss (default),
-     * exp/nbf/timestamps (default), and aud when configured. Prefers
-     * {@code jwk-set-uri} when provided; falls back to issuer auto-discovery.
-     * Package-private so it is unit-testable / spy-able (no static).
+     * Builds a Nimbus JwtDecoder with explicit validation.
      *
      * @param props auth configuration bound from {@code app.auth.*}
      * @return decoder configured for Clerk (or any OIDC issuer)
      */
     JwtDecoder buildSsoDecoder(AuthProperties props) {
+        resolveSsoEndpoints(props);
+
         String issuer = props.getSso().getIssuerUri();
         String jwkSetUri = props.getSso().getJwkSetUri();
         String audience = props.getSso().getAudience();
 
         if ((issuer == null || issuer.isBlank()) && (jwkSetUri == null || jwkSetUri.isBlank())) {
             throw new IllegalStateException(
-                "Clerk SSO is required but unconfigured: set AUTH_ISSUER_URI or AUTH_JWKS_URI "
-                + "(app.auth.sso.issuer-uri / jwk-set-uri). This template has no mock fallback.");
+                "Clerk SSO is required but unconfigured: set CLERK_PUBLISHABLE_KEY or "
+                + "AUTH_ISSUER_URI / AUTH_JWKS_URI. This template has no mock fallback.");
         }
 
         NimbusJwtDecoder decoder = (jwkSetUri != null && !jwkSetUri.isBlank())
@@ -184,17 +166,38 @@ public class SecurityConfig {
             ? JwtValidators.createDefaultWithIssuer(issuer)
             : JwtValidators.createDefault();
 
+        OAuth2TokenValidator<Jwt> audienceValidator = null;
         if (audience != null && !audience.isBlank()) {
-            // aud claim is either a string OR a list — accept both, match any.
-            OAuth2TokenValidator<Jwt> audValidator = new JwtClaimValidator<Object>(
+            audienceValidator = new JwtClaimValidator<>(
                 JwtClaimNames.AUD,
                 claim -> claim instanceof Collection<?> c
                     ? c.contains(audience)
                     : audience.equals(claim));
-            decoder.setJwtValidator(new DelegatingOAuth2TokenValidator<>(defaultValidator, audValidator));
-        } else {
-            decoder.setJwtValidator(defaultValidator);
         }
+
+        OAuth2TokenValidator<Jwt> composite = audienceValidator == null
+            ? new DelegatingOAuth2TokenValidator<>(
+                defaultValidator, clerkJwtClaimsValidator)
+            : new DelegatingOAuth2TokenValidator<>(
+                defaultValidator, audienceValidator, clerkJwtClaimsValidator);
+
+        decoder.setJwtValidator(composite);
         return decoder;
+    }
+
+    /**
+     * Fills issuer and JWKS from {@code CLERK_PUBLISHABLE_KEY} when explicit URIs are blank.
+     *
+     * @param props bound auth configuration
+     */
+    private void resolveSsoEndpoints(AuthProperties props) {
+        AuthProperties.Sso sso = props.getSso();
+        if ((sso.getIssuerUri() == null || sso.getIssuerUri().isBlank())
+            && (sso.getJwkSetUri() == null || sso.getJwkSetUri().isBlank())
+            && props.getPublishableKey() != null && !props.getPublishableKey().isBlank()) {
+            String issuer = publishableKeyDecoder.issuerFromPublishableKey(props.getPublishableKey());
+            sso.setIssuerUri(issuer);
+            sso.setJwkSetUri(publishableKeyDecoder.jwksUriFromPublishableKey(props.getPublishableKey()));
+        }
     }
 }

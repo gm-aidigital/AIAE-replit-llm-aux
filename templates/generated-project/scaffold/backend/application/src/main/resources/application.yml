@@ -65,13 +65,21 @@ logging:
 # via @ConfigurationProperties("app.auth") and ("app.usage-logging").
 app:
   auth:
-    # Clerk SSO is the ONLY auth mode. Set issuer-uri (or jwk-set-uri) to your
-    # Clerk tenant; SecurityConfig fails fast at startup if neither is set.
+    allowed-email-domain: ${AUTH_ALLOWED_EMAIL_DOMAIN:aidigital.com}
+    publishable-key: ${CLERK_PUBLISHABLE_KEY:}
+    # Comma-separated EXACT trusted browser origins for the JWT azp claim (required).
+    # Never a publishable key. Blank values fail startup (AuthStartupValidator).
+    authorized-parties: ${AUTH_AUTHORIZED_PARTIES:}
+    # Clerk SSO is the ONLY auth mode. Issuer/JWKS derive from publishable-key
+    # when AUTH_ISSUER_URI / AUTH_JWKS_URI are blank.
     sso:
       issuer-uri: ${AUTH_ISSUER_URI:}
       jwk-set-uri: ${AUTH_JWKS_URI:}
       audience:   ${AUTH_AUDIENCE:}
   security:
+    cors:
+      allowed-origins: "${APP_SECURITY_CORS_ALLOWED_ORIGINS:https://*.replit.dev,https://*.repl.co,http://localhost:5173,http://localhost:5000}"
+      max-age-seconds: ${APP_SECURITY_CORS_MAX_AGE_SECONDS:3600}
     csp:
       frame-ancestors: "${APP_SECURITY_CSP_FRAME_ANCESTORS:'self' https://*.replit.dev https://*.repl.co}"
   # Logbook HTTP req/resp logging — bound by LogbookConfig. Defaults inline
@@ -97,3 +105,8 @@ app:
     # (e.g. `employee-directory`, NOT `replit-mvp-template`).
     service-name: ${USAGE_LOG_SERVICE_NAME:${spring.application.name}}
     environment:  ${USAGE_LOG_ENVIRONMENT:dev}
+    executor-core-pool-size: ${USAGE_LOG_EXECUTOR_CORE_POOL_SIZE:1}
+    executor-max-pool-size: ${USAGE_LOG_EXECUTOR_MAX_POOL_SIZE:2}
+    executor-queue-capacity: ${USAGE_LOG_EXECUTOR_QUEUE_CAPACITY:200}
+    max-error-message-length: ${USAGE_LOG_MAX_ERROR_MESSAGE_LENGTH:500}
+    max-user-agent-length: ${USAGE_LOG_MAX_USER_AGENT_LENGTH:500}

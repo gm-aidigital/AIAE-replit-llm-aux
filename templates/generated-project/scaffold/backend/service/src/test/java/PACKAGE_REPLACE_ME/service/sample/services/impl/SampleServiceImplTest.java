@@ -15,7 +15,7 @@ import PACKAGE_REPLACE_ME.domain.sample.entities.SampleEntity;
 import PACKAGE_REPLACE_ME.domain.sample.repositories.SampleRepository;
 import PACKAGE_REPLACE_ME.service.common.error.AppException;
 import PACKAGE_REPLACE_ME.service.common.error.ErrorReason;
-import PACKAGE_REPLACE_ME.service.sample.mappers.SampleMapper;
+import PACKAGE_REPLACE_ME.service.mappers.sample.SampleMapper;
 import PACKAGE_REPLACE_ME.service.sample.models.SampleRecord;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;

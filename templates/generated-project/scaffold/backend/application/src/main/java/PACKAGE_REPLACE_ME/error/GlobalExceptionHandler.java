@@ -129,7 +129,7 @@ public class GlobalExceptionHandler {
      * @param code canonical error code
      * @return HTTP status for the code family
      */
-    private static HttpStatus statusForCode(String code) {
+    private HttpStatus statusForCode(String code) {
         if (code == null) {
             return HttpStatus.INTERNAL_SERVER_ERROR;
         }

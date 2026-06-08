@@ -84,6 +84,9 @@ inject/request-scope it outside the generated method signature. Never call
 
 No `if`/`switch`, no DB calls, no business validation, no error wrapping,
 no manual DTO construction.
+Generated `*V1` DTO construction belongs to API mappers only. Controllers must
+not call `new OkResponseV1()`, `new UploadUrlResponseV1()`, etc.; add a mapper
+method and delegate to it.
 
 **Hard limits (Agent has violated all):**
 - Method body ≤ 6 lines (incl. braces).
@@ -127,6 +130,11 @@ Interface in `services/`, impl in `services/impl/`. Inject the interface,
 never the impl. Only `*Impl` carries `@Service`. `@LogUsage`/`@Transactional`
 on impl methods. Layout: `references/code-patterns.md` → "Service interface + impl".
 
+Service method signatures are typed business contracts. Do not expose
+`Map<String, Object>`, raw `Object`, or `List<Map<String, Object>>` as request
+or result types for business flows. Dynamic provider JSON and JSONB maps must be
+contained in named records or focused boundary converters.
+
 ### MapStruct between layers (hard rule)
 
 Two mappers per resource: `Entity ↔ ServiceRecord` in `service/`,
@@ -137,9 +145,26 @@ escape `domain`.
 
 ### One entity = one MapStruct mapper per layer (hard rule)
 
+A single `ApiDtoMapper` is forbidden. Do not put all generated DTO mapping in
+one flat/root mapper or an aggregate-owned mapper package. Each API mapper lives under `application/.../mappers/<aggregate>/`; cross-aggregate
+nesting is composed through MapStruct `uses = OtherApiMapper.class`.
+Manual default mapper methods accepting `Map<String, Object>` are forbidden; they mean the service contract is still untyped.
+Artificial mapper source wrappers such as `LessonsListSource`, `UsersListSource`,
+or `SomethingResponseSource` are forbidden. One-field service list wrappers such
+as `LessonsListRecord(List<LessonSummaryRecord> lessons)` are also forbidden.
+Simple list use cases return `List<T>` directly; API mappers map that parameter
+into wrapper response DTOs with `@Mapping(target = "items", source = "items")`.
+
+
 Exactly two mapper files per resource: `<Domain>Mapper` (service/) covers
-all directions/list/page; `<Domain>ApiMapper` (application/) covers all V1
+all directions/list/page; `<Domain>ApiMapper` (`application/.../mappers/<aggregate>/`) covers all V1
 schemas for this domain. Compose via `@Mapper(config = ..., uses = ...)`.
+
+Named OpenAPI enum schemas are not resources, but they still need explicit
+mapping ownership. Put reusable enum API mappers under
+`application/.../mappers/common/` or the owning aggregate subfolder and reuse
+them with MapStruct `uses = ...`. Never use generated inner enum types; inline
+OpenAPI enums are forbidden.
 
 Reject:
 - **Mega-mapper** bundling multiple aggregates (Order + OrderItem + Customer).
@@ -327,7 +352,7 @@ Forbidden:
 - `if (mode.equals("sso"))` — use the constant.
 - Inline HTTP status numbers — use `HttpStatus.NOT_FOUND`, not `404`.
 - Magic `@Table(name = "employees")` — define `static final String TABLE = "employees"`.
-- Magic timeouts — externalise via `@Value` or properties bean.
+- Magic timeouts — externalise via `@ConfigurationProperties` (never `@Value`).
 
 ## Testing (MVP safety suite + handoff)
 

@@ -1,9 +1,16 @@
 package PACKAGE_REPLACE_ME.auth.controllers;
 
+import PACKAGE_REPLACE_ME.mappers.auth.UserMapperImpl;
 import PACKAGE_REPLACE_ME.security.AppUserFactory;
+import PACKAGE_REPLACE_ME.security.AuthProperties;
+import PACKAGE_REPLACE_ME.security.ClerkJwtClaimsValidator;
+import PACKAGE_REPLACE_ME.security.ClerkPublishableKeyDecoder;
+import PACKAGE_REPLACE_ME.security.CompanyEmailDomainAuthorizationManager;
 import PACKAGE_REPLACE_ME.security.SecurityConfig;
+import PACKAGE_REPLACE_ME.security.SecurityProperties;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
@@ -19,16 +26,16 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-/**
- * Auth controller contract — exercises /api/v1/auth/me plus the public/private
- * path matrix from {@code SecurityConfig}. {@code @WebMvcTest} loads only the
- * web layer + the imported SSO security config + the real {@link AppUserFactory}.
- * A stub {@link JwtDecoder} satisfies SecurityConfig's
- * {@code @ConditionalOnMissingBean}; the {@code jwt()} post-processor injects
- * the authentication directly, so the decoder is never actually invoked.
- */
 @WebMvcTest(controllers = AuthController.class)
-@Import({SecurityConfig.class, AppUserFactory.class})
+@EnableConfigurationProperties({AuthProperties.class, SecurityProperties.class})
+@Import({
+    SecurityConfig.class,
+    AppUserFactory.class,
+    UserMapperImpl.class,
+    ClerkJwtClaimsValidator.class,
+    ClerkPublishableKeyDecoder.class,
+    CompanyEmailDomainAuthorizationManager.class
+})
 class AuthControllerTest {
 
     @Autowired
@@ -39,44 +46,62 @@ class AuthControllerTest {
 
     @Test
     void shouldRejectUnauthenticatedRequestToAuthMeTest() throws Exception {
-        // Given:
-
-        // When:
         ResultActions response = mvc.perform(get("/api/v1/auth/me"));
-
-        // Then:
         response.andExpect(status().isUnauthorized());
     }
 
     @Test
     void shouldReturnUserPayloadFromJwtClaimsTest() throws Exception {
-        // Given:
-
-        // When:
         ResultActions response = mvc.perform(get("/api/v1/auth/me")
             .with(jwt().jwt(j -> j
                 .subject("user_123")
-                .claim("email", "alice@example.com"))));
+                .claim("user_id", "user_123")
+                .claim("email", "alice@aidigital.com")
+                .claim("full_name", "Alice Example"))));
 
-        // Then:
         response.andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value("user_123"))
-                .andExpect(jsonPath("$.email").value("alice@example.com"));
+                .andExpect(jsonPath("$.user_id").value("user_123"))
+                .andExpect(jsonPath("$.email").value("alice@aidigital.com"))
+                .andExpect(jsonPath("$.full_name").value("Alice Example"));
     }
 
     @Test
     void shouldRejectInvalidOrExpiredTokenTest() throws Exception {
-        // Given: a presented token the decoder rejects. A real NimbusJwtDecoder
-        // throws BadJwtException for a bad signature / expired / wrong-issuer
-        // token (JwtValidationException extends it), which the resource-server
-        // maps to InvalidBearerTokenException → 401.
         when(jwtDecoder.decode(anyString())).thenThrow(new BadJwtException("invalid token"));
-
-        // When:
         ResultActions response = mvc.perform(get("/api/v1/auth/me")
             .header("Authorization", "Bearer not-a-real-token"));
-
-        // Then: the resource-server chain validates the token and rejects it
         response.andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void shouldForbidValidJwtWithForeignEmailDomainTest() throws Exception {
+        ResultActions response = mvc.perform(get("/api/v1/auth/me")
+            .with(jwt().jwt(j -> j
+                .subject("user_999")
+                .claim("user_id", "user_999")
+                .claim("email", "mallory@attacker.example"))));
+
+        response.andExpect(status().isForbidden());
+    }
+
+    @Test
+    void shouldForbidValidJwtWithoutEmailTest() throws Exception {
+        ResultActions response = mvc.perform(get("/api/v1/auth/me")
+            .with(jwt().jwt(j -> j
+                .subject("user_999")
+                .claim("user_id", "user_999"))));
+
+        response.andExpect(status().isForbidden());
+    }
+
+    @Test
+    void shouldForbidValidJwtWithSubdomainEmailTest() throws Exception {
+        ResultActions response = mvc.perform(get("/api/v1/auth/me")
+            .with(jwt().jwt(j -> j
+                .subject("user_999")
+                .claim("user_id", "user_999")
+                .claim("email", "bob@team.aidigital.com"))));
+
+        response.andExpect(status().isForbidden());
     }
 }

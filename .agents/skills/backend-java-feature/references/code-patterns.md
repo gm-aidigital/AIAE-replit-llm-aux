@@ -105,6 +105,27 @@ translation only.
 
 ## Service interface + impl — full canonical shape
 
+Service interfaces are the business contract. They must be documented even when
+the implementation is obvious: callers should understand parameters, returned
+state, authorization assumptions, and business failures without opening the
+implementation. Implementations stay focused on orchestration and delegate
+validation, algorithmic work, assembling, prompt construction, scoring, and
+provider translation to focused collaborators.
+
+Service interfaces must not expose `Map<String, Object>`, `Object`, or
+`List<Map<String, Object>>` as request/result contracts. When the source system
+is dynamic (OpenAI JSON, provider metadata, JSONB, webhook payloads), put the
+known business shape into typed records and isolate raw maps in a named boundary
+converter or provider adapter. A method named `generateRevisionBrief` returns a
+`RevisionBriefGenerationResultRecord`, not a map containing `brief` and
+`metadata` keys.
+
+Hard limits enforced by `scripts/lib/check-service-contract-quality.sh`:
+`*ServiceImpl` max 260 lines, 10 public methods, 8 private methods, 8 injected
+fields, 60 lines per public method, and 35 lines per private method. If the
+class approaches those limits, split before continuing.
+
+
 ```
 backend/service/src/main/java/<base>/service/<domain>/
   services/<X>Service.java            ← public interface, what callers inject
@@ -116,9 +137,36 @@ backend/service/src/main/java/<base>/service/<domain>/
 
 ```java
 // services/<X>Service.java — interface, no Spring annotations
+/**
+ * Coordinates business operations for <x> records.
+ */
 public interface <X>Service {
+
+    /**
+     * Finds a <x> by its persistent identifier.
+     *
+     * @param id persistent <x> identifier
+     * @return matching <x> record
+     */
     <X>Record findById(Long id);
+
+    /**
+     * Applies writable changes to a <x> visible to the caller.
+     *
+     * @param id persistent <x> identifier
+     * @param update writable fields to apply
+     * @param caller authenticated business caller
+     * @return updated <x> record
+     */
     <X>Record update(Long id, <X>Update update, AppUser caller);
+
+    /**
+     * Searches <x> records with filtering and pagination.
+     *
+     * @param query search filters
+     * @param pageable requested page and sort
+     * @return page of matching <x> records
+     */
     Page<<X>Record> search(<X>Query query, Pageable pageable);
 }
 
@@ -160,14 +208,14 @@ handles, wire them through `@Mapper(config = ..., uses = ...)` — never
 duplicate the conversion code.
 
 ```java
-// service/.../order/mappers/OrderItemMapper.java
+// service/.../mappers/order/OrderItemMapper.java
 @Mapper(config = ServiceMapperConfig.class)
 public interface OrderItemMapper {
     OrderItemRecord toRecord(OrderItemEntity entity);
     OrderItemEntity toEntity(OrderItemRecord record);
 }
 
-// service/.../order/mappers/OrderMapper.java
+// service/.../mappers/order/OrderMapper.java
 @Mapper(config = ServiceMapperConfig.class, uses = OrderItemMapper.class)
 public interface OrderMapper {
     // OrderItemMapper handles List<OrderItem> ↔ List<OrderItemRecord>
@@ -185,13 +233,97 @@ instantiate each other.
 
 ## Two MapStruct mappers per resource
 
+Never create a single `ApiDtoMapper`, `DtoMapper`, `ApplicationMapper`,
+`CommonMapper`, or `application/.../mappers/<aggregate>/*` mapper package root. That is a
+god object and hides aggregate ownership. API mappers live under `application/.../mappers/<aggregate>/` and are MapStruct interfaces, not hand-written `@Component` classes.
+Composition is explicit with `uses = ...`.
+
+Do not implement API mapper methods as `default` methods that accept `Map<String, Object>`, call `new SomeV1()`, or use generic coercion helpers. That is hand-written mapping wearing a MapStruct annotation. Fix the service contract to return typed records, then let MapStruct generate the mapping.
+
+Do not create artificial list wrappers such as `LessonsListSource`,
+`UsersListSource`, `RoadmapsListSource`, or one-field service records like
+`LessonsListRecord(List<LessonSummaryRecord> lessons)` just to let MapStruct map
+a `List<T>` into a response DTO. Those records are mapper plumbing, not business
+contracts. For simple list use cases, the service returns `List<T>` and the API
+mapper maps that parameter into the generated response wrapper.
+
+Forbidden:
+
+```java
+public record LessonsListSource(List<LessonSummaryRecord> lessons) { }
+public record LessonsListRecord(List<LessonSummaryRecord> lessons) { }
+
+@Mapper(config = ApplicationMapperConfig.class)
+public interface LessonApiMapper {
+    LessonsListResponseV1 toDto(LessonsListRecord record);
+}
+```
+
+Correct:
+
+```java
+public interface LessonService {
+    List<LessonSummaryRecord> getAllLessons(AppUser viewer);
+}
+
+@Mapper(config = ApplicationMapperConfig.class)
+public interface LessonApiMapper {
+    @Mapping(target = "lessons", source = "lessons")
+    LessonsListResponseV1 toDto(List<LessonSummaryRecord> lessons);
+}
+```
+
+Only create a list result record when it has real additional business fields,
+such as `items + total + page + pageSize`.
+
+Forbidden:
+
+```java
+@Component
+public class ApiDtoMapper {
+    LessonV1 toLesson(LessonRecord record) { ... }
+    MaterialV1 toMaterial(MaterialRecord record) { ... }
+}
+```
+
+Correct:
+
+```java
+@Mapper(config = ApplicationMapperConfig.class, uses = LessonActivityApiMapper.class)
+public interface LessonApiMapper {
+    LessonV1 toDto(LessonRecord record);
+}
+```
+
+```java
+@Mapper(config = ApplicationMapperConfig.class, uses = CommonEnumApiMapper.class)
+public interface PermissionApiMapper {
+    UserPermissionSnapshotV1 toUserPermissionSnapshotV1(PermissionSnapshotRecord record);
+}
+
+@Mapper(config = ApplicationMapperConfig.class)
+public interface CommonEnumApiMapper {
+    UserRoleCodeV1 toUserRoleCodeV1(String roleCode);
+    default String toRoleCode(UserRoleCodeV1 roleCode) {
+        return roleCode == null ? null : roleCode.getValue();
+    }
+}
+```
+
+Named OpenAPI enum schemas are reusable Java enum classes. Do not reference
+nested generated enum names such as `UserPermissionSnapshotV1.RoleCodeEnum` in
+application code. If a service record stores a code as `String` or a domain enum,
+create a small dedicated enum mapper under `application/.../mappers/common/` or
+the owning aggregate mapper folder and add it via MapStruct `uses = ...`.
+
+
 | Direction | Location | Purpose |
 |---|---|---|
 | `Entity ↔ ServiceRecord` | `service/` module | Hide JPA, return immutable records to controllers/other services |
 | `ServiceRecord ↔ ApiDto` (generated by openapi-generator) | `application/` module | Convert between business records and wire format |
 
 ```java
-// service/.../<domain>/mappers/<Domain>Mapper.java
+// service/.../mappers/<domain>/<Domain>Mapper.java
 @Mapper(config = ServiceMapperConfig.class)
 public interface <Domain>Mapper {
     <Domain>Record toRecord(<Domain>Entity entity);
@@ -199,7 +331,7 @@ public interface <Domain>Mapper {
     List<<Domain>Record> toRecords(List<<Domain>Entity> entities);
 }
 
-// application/.../<domain>/mappers/<Domain>ApiMapper.java
+// application/.../mappers/<domain>/<Domain>ApiMapper.java
 @Mapper(config = ApplicationMapperConfig.class)
 public interface <Domain>ApiMapper {
     <Domain>V1 toDto(<Domain>Record record);                  // V1 DTO from openapi-generator

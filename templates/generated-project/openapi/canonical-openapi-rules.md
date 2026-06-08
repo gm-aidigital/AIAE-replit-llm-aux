@@ -226,6 +226,108 @@ Forbidden:
 
 ## Schema discipline
 
+### Closed schemas by default
+
+Every `type: object` schema is closed by default: set
+`additionalProperties: false` unless the object is intentionally a dynamic map.
+This is mandatory for all top-level request and response DTOs under
+`components.schemas`. Do not use loose object schemas as a shortcut for fields
+that are known in the source system.
+
+Forbidden for normal DTOs:
+
+```yaml
+CreateTeacherVideoRequestV1:
+  type: object
+  additionalProperties: true
+
+TeacherVideoResponseV1:
+  type: object
+  additionalProperties: true
+```
+
+Correct:
+
+```yaml
+CreateTeacherVideoRequestV1:
+  type: object
+  additionalProperties: false
+  required: [lessonId]
+  properties:
+    lessonId:
+      type: integer
+      format: int64
+    avatarId:
+      type: string
+      nullable: true
+    voiceId:
+      type: string
+      nullable: true
+
+TeacherVideoResponseV1:
+  type: object
+  additionalProperties: false
+  required: [id, status]
+  properties:
+    id:
+      type: integer
+      format: int64
+    status:
+      type: string
+      enum: [queued, processing, completed, failed]
+    videoUrl:
+      type: string
+      nullable: true
+```
+
+Dynamic maps are allowed only when the product behavior genuinely requires
+unknown keys, for example provider metadata, arbitrary webhook payloads, JWT
+claims, or permission dictionaries. Even then, keep the containing DTO closed
+and type the map values as narrowly as possible. Reusable top-level dynamic
+helper schemas are allowed only with explicit names such as `JsonMetadataV1`,
+`JsonPayloadV1`, `ProviderPayloadV1`, `WebhookPayloadV1`, or `JwtClaimsV1`;
+ordinary request/response DTO names must never be loose.
+
+```yaml
+IntegrationEventV1:
+  type: object
+  additionalProperties: false
+  required: [provider, payload]
+  properties:
+    provider:
+      type: string
+    payload:
+      type: object
+      additionalProperties: true   # allowed: explicitly dynamic provider payload
+
+PermissionsResponseV1:
+  type: object
+  additionalProperties: false
+  required: [permissions]
+  properties:
+    permissions:
+      type: object
+      additionalProperties:
+        type: boolean
+```
+
+Controller signatures generated from regular business endpoints must not use
+`Map<String, Object>` / `Object` request or response bodies. If generation
+produces those types, the OpenAPI schema is too loose and must be tightened
+before implementation. The same applies to frontend generated types containing
+`[key: string]: unknown` except for explicitly approved dynamic map fields.
+
+**Review check (grep-able):** zero loose top-level business DTOs, every
+regular object schema explicitly declares `additionalProperties: false`, and
+zero generated frontend unknown index signatures for non-allowlisted schemas.
+
+```bash
+bash scripts/lib/check-openapi-strict-schemas.sh \
+  backend/application/src/main/resources/api/v1/specs/openapi.yaml \
+  frontend/src/shared/api/generated/schema.d.ts
+```
+
+
 - Every field has `type` and uses `format` where relevant (`date`, `date-time`, numeric sizes).
 - Entity IDs are `type: integer, format: int64` (→ Java `Long`, Postgres `BIGINT`);
   never `format: uuid`. See `custom_instruction/instructions.md` → Database policy.
@@ -233,11 +335,35 @@ Forbidden:
 - Reuse schemas from `components.schemas`.
 - Document enums with descriptions.
 - Unique, stable `operationId` per operation.
+- Every operation has both `summary` and `description`; `summary` is short,
+  `description` explains behavior, authorization/business semantics, and
+  important side effects.
+- Every schema has `description`. Every schema property has `description`,
+  including `$ref` properties. Do not rely on field names as documentation.
+- Every parameter, request body, response, and enum schema has `description`.
+  Enum schemas also carry `x-enumDescriptions` with one description per enum
+  value when values are not self-evident.
+- Generated JavaDoc is not a substitute for OpenAPI descriptions. The YAML is
+  the public API contract read by frontend, Swagger UI, and downstream clients.
+
+**Review check (grep-able):** every operation/schema/property has meaningful
+description text.
+
+```bash
+bash scripts/lib/check-openapi-documentation.sh \
+  backend/application/src/main/resources/api/v1/specs/openapi.yaml
+```
 
 ### Enums — standalone schemas, never inline (REQUIRED)
 
-Every enum MUST be a NAMED schema under `components.schemas`, referenced via
-`$ref` from every property using it. Inline `enum: [...]` on a property is forbidden.
+Every enum MUST be a NAMED, VERSIONED schema under `components.schemas`, referenced via
+`$ref` from every request, response, object property, array item, and query/path
+parameter using it. Inline `enum: [...]` on a property or parameter is forbidden.
+
+The version suffix is mandatory for enums too: `UserRoleCodeV1`, `LessonStatusV1`,
+`MaterialKindV1`. This prevents generated inner enum types such as
+`UserPermissionSnapshotV1.RoleCodeEnum` and gives mappers one reusable type for
+both requests and responses.
 
 **Why.** Spring openapi-generator handles inline vs `$ref` differently:
 - **Inline** → nested inner class (`EmployeeV1.StatusEnum`); same enum in two
@@ -293,7 +419,15 @@ EmployeeV1:
 
 **Naming.** Enum schema = `<Noun>V1` (version suffix as for DTOs).
 Examples: `EmployeeStatusV1`, `PriorityV1`, `AuthModeV1`. Generator emits
-Java enum with that exact name.
+Java enum with that exact name. Never refer to generated nested enum types in
+production code.
+
+**Review check:** reject every inline enum and every unversioned enum schema.
+
+```bash
+bash scripts/lib/check-openapi-enums.sh \
+  backend/application/src/main/resources/api/v1/specs/openapi.yaml
+```
 
 ### Enum/reference-data synchronization
 

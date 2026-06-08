@@ -4,8 +4,8 @@ import PACKAGE_REPLACE_ME.usagelogging.loggers.UsageLogger;
 import PACKAGE_REPLACE_ME.usagelogging.loggers.impl.NoOpUsageLogger;
 import PACKAGE_REPLACE_ME.usagelogging.loggers.impl.PostgresUsageLogger;
 import PACKAGE_REPLACE_ME.usagelogging.models.UsageEvent;
-import PACKAGE_REPLACE_ME.usagelogging.persistence.UsageEventPersistenceService;
 import PACKAGE_REPLACE_ME.usagelogging.repositories.UsageEventRepository;
+import PACKAGE_REPLACE_ME.usagelogging.sink.UsageEventSink;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.task.TaskExecutor;
 
@@ -16,8 +16,7 @@ import static org.mockito.Mockito.mock;
 class UsageLoggingConfigTest {
 
     private final UsageLoggingConfig config = new UsageLoggingConfig();
-    private final UsageEventPersistenceService persistence =
-        new UsageEventPersistenceService(mock(UsageEventRepository.class));
+    private final UsageEventSink usageEventSink = mock(UsageEventSink.class);
 
     private UsageLoggingProperties props(String serviceName) {
         UsageLoggingProperties p = new UsageLoggingProperties();
@@ -29,7 +28,7 @@ class UsageLoggingConfigTest {
     @Test
     void shouldBuildPostgresLoggerForValidServiceNameTest() {
         // When:
-        UsageLogger logger = config.postgresUsageLogger(persistence, props("employee-directory"));
+        UsageLogger logger = config.postgresUsageLogger(usageEventSink, props("employee-directory"));
 
         // Then:
         assertThat(logger).isInstanceOf(PostgresUsageLogger.class);
@@ -38,7 +37,7 @@ class UsageLoggingConfigTest {
     @Test
     void shouldFailFastForBlankServiceNameTest() {
         // When / Then:
-        assertThatThrownBy(() -> config.postgresUsageLogger(persistence, props("  ")))
+        assertThatThrownBy(() -> config.postgresUsageLogger(usageEventSink, props("  ")))
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("service-name");
     }
@@ -46,7 +45,7 @@ class UsageLoggingConfigTest {
     @Test
     void shouldFailFastForPlaceholderServiceNameTest() {
         // When / Then:
-        assertThatThrownBy(() -> config.postgresUsageLogger(persistence, props("replit-mvp-template")))
+        assertThatThrownBy(() -> config.postgresUsageLogger(usageEventSink, props("replit-mvp-template")))
             .isInstanceOf(IllegalStateException.class);
     }
 
@@ -54,7 +53,7 @@ class UsageLoggingConfigTest {
     void shouldProvidePersistenceExecutorAndNoOpBeansTest() {
         // When / Then:
         assertThat(config.usageEventPersistenceService(mock(UsageEventRepository.class))).isNotNull();
-        TaskExecutor executor = config.usageLoggingExecutor();
+        TaskExecutor executor = config.usageLoggingExecutor(props("svc"));
         assertThat(executor).isNotNull();
         assertThat(config.noOpUsageLogger()).isInstanceOf(NoOpUsageLogger.class);
     }
@@ -66,6 +65,6 @@ class UsageLoggingConfigTest {
 
         // When / Then: NoOp drops it; Postgres delegates to the (mocked) persistence
         config.noOpUsageLogger().record(event);
-        config.postgresUsageLogger(persistence, props("svc")).record(event);
+        config.postgresUsageLogger(usageEventSink, props("svc")).record(event);
     }
 }

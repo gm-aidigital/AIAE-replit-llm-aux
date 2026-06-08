@@ -1,5 +1,5 @@
 // @ConfigurationProperties bean — typed home for Clerk SSO settings.
-// Maps from application.yml `app.auth.sso.*` and the AUTH_* env vars.
+// Maps from application.yml `app.auth.*` and the AUTH_* / CLERK_* env vars.
 
 package PACKAGE_REPLACE_ME.security;
 
@@ -14,8 +14,46 @@ import jakarta.validation.constraints.NotNull;
 @ConfigurationProperties(prefix = "app.auth")
 public class AuthProperties {
 
+    /** Company email domain without a leading {@code @}. */
+    private String allowedEmailDomain = "aidigital.com";
+
+    /** Clerk publishable key — derives issuer/JWKS when explicit URIs are blank. */
+    private String publishableKey;
+
+    /**
+     * Comma-separated list of exact trusted browser origins for the JWT
+     * {@code azp} (authorized party) claim, e.g.
+     * {@code http://localhost:5173,https://my-app.replit.app}. Never a Clerk
+     * publishable key. Blank fails startup via {@link AuthStartupValidator}.
+     */
+    private String authorizedParties = "";
+
     @NotNull
     private Sso sso = new Sso();
+
+    public String getAllowedEmailDomain() {
+        return allowedEmailDomain;
+    }
+
+    public void setAllowedEmailDomain(String allowedEmailDomain) {
+        this.allowedEmailDomain = allowedEmailDomain;
+    }
+
+    public String getPublishableKey() {
+        return publishableKey;
+    }
+
+    public void setPublishableKey(String publishableKey) {
+        this.publishableKey = publishableKey;
+    }
+
+    public String getAuthorizedParties() {
+        return authorizedParties;
+    }
+
+    public void setAuthorizedParties(String authorizedParties) {
+        this.authorizedParties = authorizedParties;
+    }
 
     public Sso getSso() {
         return sso;

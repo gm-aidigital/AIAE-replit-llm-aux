@@ -114,26 +114,22 @@ if [ -d frontend/src ]; then
 fi
 
 if [ -f backend/application/src/main/resources/api/v1/specs/openapi.yaml ] && [ -d frontend/src ]; then
-  ruby <<'RUBY'
-require "yaml"
-spec_path = "backend/application/src/main/resources/api/v1/specs/openapi.yaml"
-spec = YAML.load_file(spec_path)
-allowed = {}
-(spec["paths"] || {}).each do |path, methods|
-  methods.each_key do |method|
-    next unless %w[get post put patch delete options head].include?(method)
-    allowed[[method.upcase, path]] = true
-  end
-end
-errors = []
-Dir["frontend/src/**/*.{ts,tsx}"].each do |file|
-  File.read(file).scan(/apiClient\.(GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD)\(\s*["']([^"']+)["']/) do |method, path|
-    next if allowed[[method, path]]
-    errors << "#{file}: apiClient.#{method}(\"#{path}\") is not defined in #{spec_path}"
-  end
-end
-abort(errors.join("\n")) unless errors.empty?
-RUBY
+  bash "${SCRIPT_DIR}/lib/check-api-client-paths.sh" \
+    "backend/application/src/main/resources/api/v1/specs/openapi.yaml" \
+    "frontend/src"
+  if [ -f "${SCRIPT_DIR}/lib/check-openapi-strict-schemas.sh" ]; then
+    bash "${SCRIPT_DIR}/lib/check-openapi-strict-schemas.sh" \
+      "backend/application/src/main/resources/api/v1/specs/openapi.yaml" \
+      "frontend/src/shared/api/generated/schema.d.ts"
+  fi
+  if [ -f "${SCRIPT_DIR}/lib/check-openapi-documentation.sh" ]; then
+    bash "${SCRIPT_DIR}/lib/check-openapi-documentation.sh" \
+      "backend/application/src/main/resources/api/v1/specs/openapi.yaml"
+  fi
+  if [ -f "${SCRIPT_DIR}/lib/check-openapi-enums.sh" ]; then
+    bash "${SCRIPT_DIR}/lib/check-openapi-enums.sh" \
+      "backend/application/src/main/resources/api/v1/specs/openapi.yaml"
+  fi
 fi
 
 if [ -f frontend/vite.config.ts ] && grep -q '"@/\*"' frontend/tsconfig.json 2>/dev/null; then
@@ -141,6 +137,49 @@ if [ -f frontend/vite.config.ts ] && grep -q '"@/\*"' frontend/tsconfig.json 2>/
     || fail "vite.config.ts must define resolve.alias for @"
   grep -q 'CLERK_PUBLISHABLE_KEY' frontend/vite.config.ts \
     || fail "vite.config.ts must map CLERK_PUBLISHABLE_KEY into VITE_CLERK_PUBLISHABLE_KEY"
+  grep -q 'VITE_CLERK_JWT_TEMPLATE' frontend/vite.config.ts \
+    || fail "vite.config.ts must define VITE_CLERK_JWT_TEMPLATE"
+fi
+
+if [ "${SCAFFOLD_SOURCE}" -eq 1 ]; then
+  backend_docker="backend/Dockerfile"
+  frontend_docker="frontend/Dockerfile"
+  if [ -f "${backend_docker}" ]; then
+    grep -q 'eclipse-temurin:21-jre' "${backend_docker}" \
+      || fail "backend/Dockerfile must use Java 21 JRE runtime"
+    grep -q 'skip.frontend=true' "${backend_docker}" \
+      || fail "backend/Dockerfile must build with -Dskip.frontend=true"
+    grep -q 'COPY frontend/' "${backend_docker}" \
+      && fail "backend/Dockerfile must not COPY frontend/"
+    grep -q 'node:' "${backend_docker}" \
+      && fail "backend/Dockerfile must not contain a Node stage"
+    grep -q '\-Duser.timezone=UTC -Xmx1G \$JAVA_OPTS' "${backend_docker}" \
+      || fail "backend/Dockerfile ENTRYPOINT must use UTC timezone, 1G heap, and JAVA_OPTS"
+  fi
+  if [ -f "${frontend_docker}" ]; then
+    grep -q 'node:22' "${frontend_docker}" \
+      || fail "frontend/Dockerfile must use Node 22 builder"
+    grep -q 'nginx' "${frontend_docker}" \
+      || fail "frontend/Dockerfile must use nginx runtime"
+    grep -q 'ARG VITE_CLERK_PUBLISHABLE_KEY' "${frontend_docker}" \
+      || fail "frontend/Dockerfile must declare VITE_CLERK_PUBLISHABLE_KEY build arg"
+  fi
+  if [ -f docker-compose.yml ]; then
+    grep -q 'dockerfile: backend/Dockerfile' docker-compose.yml \
+      || fail "docker-compose.yml must define a backend service"
+    grep -q 'dockerfile: frontend/Dockerfile' docker-compose.yml \
+      || fail "docker-compose.yml must define a frontend service"
+    grep -q 'JAVA_OPTS' docker-compose.yml \
+      || fail "docker-compose.yml must pass JAVA_OPTS to backend"
+    grep -q 'VITE_CLERK_PUBLISHABLE_KEY' docker-compose.yml \
+      || fail "docker-compose.yml must pass VITE_CLERK_PUBLISHABLE_KEY to frontend build"
+  fi
+  email_domain_authz="$(find backend/application/src/main/java -path '*/security/CompanyEmailDomainAuthorizationManager.java' -print -quit)"
+  [ -n "${email_domain_authz}" ] \
+    || fail "CompanyEmailDomainAuthorizationManager must ship in the scaffold"
+  id_aware_entity="$(find backend/domain/src/main/java -path '*/domain/common/entities/IdAwareEntity.java' -print -quit)"
+  [ -n "${id_aware_entity}" ] \
+    || fail "IdAwareEntity must ship in the domain module"
 fi
 
 if [ -d backend/application/src/main/resources ]; then
@@ -188,10 +227,14 @@ if [ -d backend/application/src/main/resources ]; then
       backend frontend/src 2>/dev/null | grep -v '/target/' | grep -q .; then
     fail "Clerk SSO only — remove mock/Replit OIDC auth code"
   fi
+  if grep -RInE 'app_user|app_user_role|user_roles' backend/db/src/main/resources 2>/dev/null | grep -q .; then
+    fail "Do not create local auth tables — Clerk SSO only"
+  fi
   for module in $(sed -n 's:.*<module>\(.*\)</module>.*:\1:p' backend/pom.xml); do
     module_dir="backend/${module}"
     [ -d "${module_dir}" ] || fail "backend/pom.xml lists missing module: ${module}"
-    find "${module_dir}/src" -type f ! -path '*/target/*' 2>/dev/null | grep -q . \
+    # -print -quit keeps this pipefail-safe (no SIGPIPE from a piped `grep -q`).
+    [ -n "$(find "${module_dir}/src" -type f ! -path '*/target/*' -print -quit 2>/dev/null)" ] \
       || fail "Maven module must not be empty/POM-only: ${module}"
   done
   if [ ! -f backend/external-services/pom.xml ]; then
@@ -248,12 +291,12 @@ if [ -f backend/service/pom.xml ]; then
 fi
 
 if [ -d backend ] && [ "${SCAFFOLD_SOURCE}" -eq 0 ]; then
-  find backend -path '*/src/test/java/*' \( -name '*Test.java' -o -name '*IT.java' \) | grep -q . \
+  [ -n "$(find backend -path '*/src/test/java/*' \( -name '*Test.java' -o -name '*IT.java' \) -print -quit)" ] \
     || fail "Backend tests are required"
-  find backend/application/src/test/java -iname '*SmokeTest.java' | grep -q . \
+  [ -n "$(find backend/application/src/test/java -iname '*SmokeTest.java' -print -quit)" ] \
     || fail "Application smoke test is required"
   if [ -d backend/db/src/main/resources/db/changelog ]; then
-    find backend/application/src/test/java -iname '*Liquibase*Test.java' -o -iname '*Changelog*Test.java' | grep -q . \
+    [ -n "$(find backend/application/src/test/java \( -iname '*Liquibase*Test.java' -o -iname '*Changelog*Test.java' \) -print -quit)" ] \
       || fail "Liquibase smoke test is required when db changelogs exist"
   fi
 fi
@@ -263,6 +306,18 @@ if [ -d frontend/src ]; then
     grep -q 'useEffect' "${debounce_hook}" && grep -q 'clearTimeout' "${debounce_hook}" \
       || fail "useDebounce hooks must use useEffect with cleanup: ${debounce_hook}"
   done < <(find frontend/src -type f \( -name '*useDebounce*.ts' -o -name '*useDebounce*.tsx' \))
+fi
+
+if [ -d backend ] && [ -f "${SCRIPT_DIR}/lib/check-production-static-methods.sh" ]; then
+  bash "${SCRIPT_DIR}/lib/check-production-static-methods.sh"
+fi
+
+if [ -d backend ] && [ -f "${SCRIPT_DIR}/lib/check-production-magic-values.sh" ]; then
+  bash "${SCRIPT_DIR}/lib/check-production-magic-values.sh"
+fi
+
+if [ -d backend/service/src/main/java ] && [ -f "${SCRIPT_DIR}/lib/check-service-contract-quality.sh" ]; then
+  bash "${SCRIPT_DIR}/lib/check-service-contract-quality.sh"
 fi
 
 echo "==> verify-gates: passed"

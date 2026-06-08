@@ -16,7 +16,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
  */
 @DataJpaTest
 @AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
-@Testcontainers
+@Testcontainers(disabledWithoutDocker = true)
 class LiquibaseChangelogSmokeTest {
 
     @Container

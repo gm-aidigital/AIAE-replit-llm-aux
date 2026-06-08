@@ -53,60 +53,66 @@ Protected endpoints require a Bearer JWT. The backend validates:
 - signature against the Clerk JWKS endpoint,
 - `iss`, `aud` (when configured), `exp`, and `nbf`.
 
-For managed Clerk, set `AUTH_ISSUER_URI` explicitly as a Secret (`iss` = the
-tenant issuer URL; `aud` = the Clerk token audience/template when used).
+Issuer and JWKS are derived from `CLERK_PUBLISHABLE_KEY` by
+`ClerkPublishableKeyDecoder`. Set `AUTH_ISSUER_URI` / `AUTH_JWKS_URI` only to
+override a non-Clerk or manually-managed tenant; leave them blank otherwise.
 
 ### Principal-key contract (REQUIRED)
 
-One claim is the canonical principal id, used EVERYWHERE ("who the user is"):
-`Authentication#getName()`, seed `user_roles.user_id`, audit /
-`usage_events.user_id`, any "logged-in person" FK.
+The canonical principal id is the Clerk **`user_id`** claim — the stable backend
+and usage-logging identity. It is bound to `Authentication#getName()` via
+`JwtAuthenticationConverter#principalClaimName="user_id"`.
 
-**Canonical claim: `email`** (lowercased, trimmed).
-- `sub` is provider-internal (Clerk user id); it changes on re-provision — do
-  not key business tables on it.
-- `email` is stable and reads naturally in seed rows / logs.
-- Clerk JWTs MUST carry an email claim. `SecurityConfig` sets
-  `JwtAuthenticationConverter#principalClaimName="email"`, so
-  `Authentication#getName()` (→ the `user_id` column) returns the email, falling
-  back to `sub` only when the claim is absent.
-- The usage aspect lifts the display name from the JWT (`full_name` → `name` →
-  `preferred_username`, then composed `first_name`+`last_name` /
-  `given_name`+`family_name`) into `usage_events.attributes->>'user_name'`.
+- `user_id` (== `sub` in the `aidigital-api` template) is the stable identity.
+  `ClerkJwtClaimsValidator` requires `sub` and `user_id` to be present and equal.
+- `email` is **not** the principal. It is stored separately (lowercased, trimmed)
+  for display and for company-domain authorization.
+- `usage_events.user_id` receives the Clerk `user_id`; `usage_events.user_email`
+  receives the normalized email. They are distinct columns.
+- The usage aspect lifts the display name from the JWT `full_name` claim into
+  `usage_events.attributes->>'user_name'`.
 
-  Recommended Clerk JWT template:
+  Required Clerk JWT template (`aidigital-api`):
   ```json
   {
-    "email":      "{{user.primary_email_address}}",
-    "full_name":  "{{user.full_name}}",
-    "first_name": "{{user.first_name}}",
-    "last_name":  "{{user.last_name}}"
+    "email":     "{{user.primary_email_address}}",
+    "user_id":   "{{user.id}}",
+    "full_name": "{{user.full_name || user.primary_email_address}}"
   }
   ```
 
-**Hard rules** (the #1 source of "logged in but no data" bugs):
-1. Every Liquibase-seeded `user_roles.user_id` equals the exact lowercased email
-   the Clerk flow produces. Seeding a role slug (e.g. `mock-hr-manager`) while the
-   principal name is `alice@company.com` → login succeeds, authorization denies
-   every protected endpoint.
-2. Audit / usage `user_id` stores the same email — cross-table joins on `user_id`
-   work without translation.
+### Authorized party (`azp`) and company-domain authorization (REQUIRED)
 
-### Authorization roles (REQUIRED for admin/role-based apps)
+- **`azp`** is the trusted browser origin, never a publishable key.
+  `ClerkJwtClaimsValidator` checks it against the exact origins in
+  `AUTH_AUTHORIZED_PARTIES` (comma-separated, e.g.
+  `http://localhost:5173,https://my-app.replit.app`). No wildcards.
+  **Blank is rejected at startup** — `AUTH_AUTHORIZED_PARTIES` is required for
+  any running SSO application; `azp` enforcement cannot be silently disabled.
+  An untrusted `azp` → **401**.
+- **Company email domain** is enforced as a *post-authentication* policy
+  (`CompanyEmailDomainAuthorizationManager`), not as a JWT decoder validator:
+  - missing / invalid token → **401**;
+  - valid token, missing email → **403**;
+  - valid token, email outside the exact `AUTH_ALLOWED_EMAIL_DOMAIN` → **403**
+    (subdomains such as `team.aidigital.com` are rejected unless configured);
+  - valid token, permitted email → continue.
 
-JWT validation answers "who is this user?"; app authorization answers "what can
-they do?". Do not rely on Spring's default `JwtGrantedAuthoritiesConverter` (it
-reads `scope`/`scp`, which Clerk templates usually omit → `403 insufficient_scope`).
+### Authorization roles (OPT-IN — only for role-based apps)
 
-When the app has roles, admin screens, or any `hasRole(...)` rule:
-1. Configure a custom `JwtAuthenticationConverter`.
-2. Resolve the canonical user id from the validated JWT email.
-3. Load roles server-side (`user_roles.user_id = lower(email)`).
-4. Convert them to Spring authorities with the `ROLE_` prefix.
+The baseline ships **no** role tables and **no** `roles` field in
+`/api/v1/auth/me`. Identity alone is the baseline contract.
+
+Add roles only when the product requires them. In that case:
+1. Configure a custom `JwtAuthenticationConverter` mapping a role source to
+   `ROLE_`-prefixed authorities (do not rely on Spring's default `scope`/`scp`
+   converter, which Clerk templates usually omit).
+2. Load roles server-side keyed on the Clerk `user_id` and add the role table
+   via Liquibase.
+3. Re-add a `roles` array to the OpenAPI `UserV1` schema at that point.
 
 Frontend role state is display-only; the backend authorizes from the validated
-JWT + backend role lookup. Seed a role table with Liquibase before protecting
-admin endpoints.
+JWT + backend role lookup.
 
 ## Frontend contract
 
@@ -135,13 +141,16 @@ CLERK_SECRET_KEY         # auto
 ```
 Backend (read in `application.yml`):
 ```
-AUTH_ISSUER_URI          # Clerk tenant issuer URL — REQUIRED (app fails fast without issuer or JWKS)
-AUTH_JWKS_URI            # optional; derived from issuer if blank
-AUTH_AUDIENCE            # Clerk token audience (optional)
+AUTH_ALLOWED_EMAIL_DOMAIN    # REQUIRED — e.g. aidigital.com
+AUTH_AUTHORIZED_PARTIES      # REQUIRED — comma-separated exact browser origins for azp
+AUTH_ISSUER_URI              # optional override; derived from CLERK_PUBLISHABLE_KEY when blank
+AUTH_JWKS_URI                # optional override; derived from issuer when blank
+AUTH_AUDIENCE                # Clerk token audience (optional)
 ```
 Frontend-readable (Vite exposes only `VITE_*`):
 ```
 VITE_CLERK_PUBLISHABLE_KEY
+VITE_CLERK_JWT_TEMPLATE       # set to aidigital-api
 VITE_CLERK_SIGN_IN_FORCE_REDIRECT_URL
 VITE_CLERK_SIGN_UP_FORCE_REDIRECT_URL
 ```

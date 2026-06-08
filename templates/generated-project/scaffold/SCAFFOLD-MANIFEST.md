@@ -10,8 +10,8 @@ replace only `PACKAGE_REPLACE_ME` and app placeholders.
 
 | File | Notes |
 |---|---|
-| `.replit` | Lives at **template repo root**; copy deployment/run settings into generated project root |
-| `replit.nix` | Template repo root; JDK 21 + Node 22 + Postgres 16 |
+| `.replit` | Materialized into generated project root by `materialize-project.sh` |
+| `replit.nix` | Materialized into generated project root; JDK 21 + Node 22 + Postgres 16 |
 | `docker-compose.yml` | `--profile local`, port 8080, Postgres health-check |
 | `.env.example` | Full `AUTH_*`, `USAGE_LOG_*`, `CLERK_*`, `VITE_*` placeholders |
 | `.gitignore` | Excludes control plane (`.agents/`, `templates/`, etc.) |
@@ -44,11 +44,14 @@ replace only `PACKAGE_REPLACE_ME` and app placeholders.
 
 | Script | Role |
 |---|---|
-| `setup-project.sh` | onBoot: gitignore, Python purge, copy scripts |
+| `setup-project.sh` | onBoot: safe cleanup (no materialization without package name); prints next-step command |
 | `apply-package-name.sh` | Package rename |
 | `strip-scaffold-samples.sh` | Remove reference sample aggregate |
 | `structure-lint.sh` | Architecture grep gate (`--scaffold` for template source) |
 | `verify-gates.sh` | Shared runtime/publish grep gate (CI + local-verify) |
+| `scripts/lib/check-openapi-strict-schemas.sh` | Rejects loose OpenAPI DTO schemas and generated unknown index signatures |
+| `scripts/lib/check-openapi-documentation.sh` | Requires descriptions on OpenAPI operations, schemas, fields, parameters, and request bodies |
+| `scripts/lib/check-service-contract-quality.sh` | Rejects undocumented service contracts and oversized ServiceImpl classes |
 | `local-verify.sh` | Pre-push: lint + gates + mvn verify + frontend test/build |
 | `ci-verify-scaffold.sh` | Template CI: materialize → strip samples → full verify |
 | `replit-build.sh` / `replit-run.sh` | Deployment |

@@ -15,9 +15,11 @@ Authoritative rules: `custom_instruction/instructions.md`. Workflows:
 
 ## Vibe-coder happy path
 
-1. **Clerk Secrets first** — before Run: `CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`,
-   `AUTH_ISSUER_URI`, `AUTH_JWKS_URI`, `AUTH_AUDIENCE` in Replit Secrets (backend
-   fails fast without them). See `.env.example` for the full list.
+1. **Clerk Auth first** — before Run: enable Replit-managed Clerk Auth so
+   `CLERK_PUBLISHABLE_KEY` and `CLERK_SECRET_KEY` are injected. Set
+   `AUTH_AUTHORIZED_PARTIES` to your app origins (required). Issuer/JWKS derive
+   from the publishable key when `AUTH_ISSUER_URI` / `AUTH_JWKS_URI` are blank.
+   See `.env.example` for the full list.
 2. **Fork bootstrap** — `setup-project.sh` on boot (Python purge + install `scripts/`).
 3. **Package** — `bash scripts/apply-package-name.sh <app-name-package>`.
 4. **Scaffold** — copy from `templates/generated-project/scaffold/` (`SCAFFOLD-MANIFEST.md`);
@@ -69,8 +71,8 @@ templates/generated-project/*              # canonical artifacts + scaffold/
 - **Frontend**: React + TypeScript + Vite + TanStack Query, typed via
   `openapi-typescript` + `openapi-fetch` from the backend OpenAPI YAML.
 - **Auth**: Clerk SSO only (required). Backend validates Clerk JWTs against the
-  Clerk JWKS via `spring-boot-starter-oauth2-resource-server`; fails fast at
-  startup if `AUTH_ISSUER_URI`/`AUTH_JWKS_URI` is unset. No mock/replit fallback.
+  Clerk JWKS via `spring-boot-starter-oauth2-resource-server`; fails fast when
+  Clerk keys or `AUTH_AUTHORIZED_PARTIES` are unset. No mock/replit fallback.
 - **Observability**: structured JSON logs to stdout, Actuator
   (`health`, `prometheus`), Postgres `usage_events` for usage estimation.
 - **Runtime split**: Replit → profile `replit`, port `5000`, Replit Postgres

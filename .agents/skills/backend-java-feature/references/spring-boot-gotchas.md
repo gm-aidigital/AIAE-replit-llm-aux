@@ -408,3 +408,42 @@ Fix:
 3. Let TypeScript reject invalid `apiClient.METHOD("/path")` combinations.
 4. Keep local/CI grep guards forbidding raw `fetch`, `axios`, and
    `XMLHttpRequest`.
+
+## Never swallow external-API error messages
+
+Symptom: the UI shows an opaque `"X failed"` (e.g. "Google Slides deck creation
+failed", "Failed to read tab \"Proposal\"") and the *actual* cause — no access,
+bad input, resource not found — is only in the server log.
+
+Root cause: a `catch` wraps the external exception but drops `ex.getMessage()`,
+and/or the frontend replaces the backend's `ApiErrorV1.message` with a generic
+string.
+
+Fix (both layers):
+1. **Backend** — when wrapping an external client exception (Google, an HTTP
+   client, etc.), include the underlying detail in the `AppException` message.
+   For typed errors, extract the clean field rather than the verbose
+   `toString()` — e.g. `GoogleJsonResponseException.getDetails().getMessage()`
+   plus the status code. Map common statuses (403/404) to an actionable hint
+   ("share the sheet with the service account, or check the link") and still
+   append the original detail.
+2. **Frontend** — in the `openapi-fetch` wrapper, throw the backend
+   `error.message` (the `ApiErrorV1` body), falling back to a clear sentence —
+   never a bare `"Failed to <verb>"`. Let the toast render the real reason.
+
+## Required external resource IDs must fail fast — no blank defaults
+
+Symptom: an integration that "should work" returns an opaque downstream error
+(404 / "deck creation failed") even though credentials are present.
+
+Root cause: a **required** external id was shipped with a blank default
+(`slides-template-id: ${SLIDES_TEMPLATE_ID:}`). Empty string is not "unset" — it
+flows into the API call (`files.copy("")`) and Google returns a confusing 404.
+The migration that "moved IDs to env vars" silently dropped the working
+default.
+
+Fix: for an id the feature cannot run without, either (a) ship a real, working
+default in `application.yml`, or (b) validate it at startup / first use and fail
+with a message that names the missing env var. Never let an empty required id
+reach an external call. (Optional/best-effort ids — e.g. chart templates — may
+stay blank since their failures are non-fatal warnings.)

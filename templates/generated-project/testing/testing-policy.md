@@ -12,14 +12,14 @@ These make every unit testable and mockable — apply to all generated code:
 - **No `static` methods on beans/services.** Use instance methods so
   collaborators can be injected and mocked; `static` can't be stubbed and forces
   integration-style tests. Pure constants stay `static final`.
-- **Self-invoked methods are package-private or `protected`, never `private`.**
-  When a public method calls another method on the same class, the callee must be
-  visible to a Mockito **spy** so the caller is unit-testable in isolation:
-  ```java
-  MyService svc = spy(new MyService(deps));
-  doReturn(stub).when(svc).helper(args);   // helper() is package-private
-  assertThat(svc.publicMethod(args)).isEqualTo(expected);
-  ```
+- **Keep short, obvious private methods private.** Do not widen visibility just
+  to enable a test. When private logic is non-trivial, algorithmic, reused, or
+  independently testable, **extract a `<Feature>ServiceHelper` interface +
+  `<Feature>ServiceHelperImpl`**, inject the interface, and unit-test the helper
+  directly. See `structure/service-helper-extraction-policy.md`.
+- **Mockito spies are not the default.** Do not reshape production code so a spy
+  can stub a self-invoked method. Spies are a last-resort seam for legacy code,
+  not a design target.
 - Prefer constructor injection (`@RequiredArgsConstructor`) so tests pass fakes.
 
 ## Phases
@@ -27,7 +27,7 @@ These make every unit testable and mockable — apply to all generated code:
 | Phase | Trigger | Tests required? | JaCoCo gate |
 |---|---|---|---|
 | **1. Building** | Initial generation; app not yet running E2E | **No final requirement yet** — `-DskipTests` allowed only for internal debug loops | `0%` (gate disabled) |
-| **2. MVP safety suite** | Replit Run launches; Clerk sign-in -> `/auth/me` -> 200; main flow reaches backend/DB and renders in frontend | **Yes** — lean backend + frontend safety tests are mandatory before completion | Soft ratchet; never decreases once raised |
+| **2. MVP safety suite** | Replit Run launches; Clerk sign-in -> `/auth/me` -> 200; main flow reaches backend/DB and renders in frontend | **Yes** — lean backend + frontend safety tests are mandatory before completion | `80%` line / `70%` branch (parent POM defaults) |
 | **3. Handoff** | Engineering takeover | **Strict** — full coverage including IT, edge cases, business invariants | `80%` enforced (`-Phandoff`) |
 
 ### Phase 1 — Building

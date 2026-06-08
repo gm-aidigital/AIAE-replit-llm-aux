@@ -105,6 +105,78 @@ if grep -rEn 'private final.*Repository' backend/application/src/main/java 2>/de
   fail "Controllers must not inject repositories — delegate to *Service"
 fi
 
+if grep -RInE 'new[[:space:]]+[A-Za-z0-9_]+V[0-9]+[[:space:]]*\(' \
+    backend/application/src/main/java 2>/dev/null | grep '/controllers/' | grep -q .; then
+  fail "Controllers must not manually construct generated *V1 DTOs — delegate DTO construction to API mappers"
+fi
+
+
+# --- MapStruct mapper ownership: one aggregate/entity = one mapper ---
+if [ -d backend/application/src/main/java ]; then
+  if find backend/application/src/main/java -path '*/mappers/ApiDtoMapper.java' -o \
+      -path '*/mappers/DtoMapper.java' -o \
+      -path '*/mappers/ApplicationMapper.java' -o \
+      -path '*/mappers/CommonMapper.java' 2>/dev/null | grep -q .; then
+    fail "Global API mapper is forbidden — create one mappers/<aggregate>/<Aggregate>ApiMapper per aggregate and compose with MapStruct uses="
+  fi
+  if grep -RInE '\bApiDtoMapper\b|\bDtoMapper\b|\bApplicationMapper\b|\bCommonMapper\b' \
+      backend/application/src/main/java 2>/dev/null | grep -v 'ApplicationMapperConfig' | grep -q .; then
+    fail "Controllers/application code must not inject/use generic ApiDtoMapper/DtoMapper; use mappers/<aggregate>/*ApiMapper"
+  fi
+  if find backend/application/src/main/java -path '*/mappers/*ListSource.java' -o \
+      -path '*/mappers/*ResponseSource.java' -o \
+      -path '*/mappers/*MapperSource.java' 2>/dev/null | grep -q .; then
+    fail "Application mapper source wrapper records (*ListSource/*ResponseSource) are forbidden — return List<T> for simple lists and map the list parameter directly"
+  fi
+  while IFS= read -r mapper_file; do
+    rel="${mapper_file#backend/application/src/main/java/}"
+    if [[ ! "${rel}" =~ ^([^/]+/){3}mappers/[^/]+/[^/]+ApiMapper\.java$ ]] \
+        && [[ ! "${rel}" =~ ^([^/]+/){3}mappers/auth/UserMapper\.java$ ]] \
+        && [[ ! "${rel}" =~ ^PACKAGE_REPLACE_ME/mappers/[^/]+/[^/]+Mapper\.java$ ]]; then
+      fail "Application API mapper must live under mappers/<aggregate>/, not aggregate/mappers or root mappers/: ${mapper_file}"
+    fi
+    grep -q '@Mapper' "${mapper_file}" \
+      || fail "Application mapper must be a MapStruct @Mapper interface: ${mapper_file}"
+    grep -Eq 'public[[:space:]]+interface[[:space:]]+[A-Za-z0-9_]+Mapper\b' "${mapper_file}" \
+      || fail "Application mapper must be an interface, not a hand-written class: ${mapper_file}"
+    ! grep -q '^[[:space:]]*default[[:space:]].*Map<String,[[:space:]]*Object>' "${mapper_file}" \
+      || fail "Application mapper must not hide manual Map<String,Object> mapping in default methods: ${mapper_file}"
+    ! grep -Eq 'new[[:space:]]+[A-Za-z0-9]+V[0-9]+[[:space:]]*\(' "${mapper_file}" \
+      || fail "Application mapper must let MapStruct construct generated DTOs; remove manual new *V1(): ${mapper_file}"
+    ! grep -q 'ApiMappingSupport' "${mapper_file}" \
+      || fail "Application mapper must not use generic ApiMappingSupport coercions; fix typed service records: ${mapper_file}"
+    ! grep -Eq 'new[[:space:]]+[A-Za-z0-9_]*(List|Response|Mapper)?Source[[:space:]]*\(' "${mapper_file}" \
+      || fail "Application mapper must not create artificial *Source wrapper records; fix typed service records: ${mapper_file}"
+  done < <(find backend/application/src/main/java -path '*/mappers/*Mapper.java' ! -name 'ApplicationMapperConfig.java' 2>/dev/null)
+fi
+
+if [ -d backend/service/src/main/java ]; then
+  if grep -RInE 'Map<String,[[:space:]]*Object>|List<Map<String,[[:space:]]*Object>>' \
+      backend/service/src/main/java --include='*Service.java' 2>/dev/null | grep -q .; then
+    fail "Service interfaces must not expose Map<String,Object>; create typed records and isolate JSON/provider maps at boundary converters"
+  fi
+  if grep -RInE 'public[[:space:]]+record[[:space:]]+[A-Za-z0-9_]+ListRecord[[:space:]]*\([[:space:]]*List<[^>]+>[[:space:]]+[A-Za-z0-9_]+[[:space:]]*\)' \
+      backend/service/src/main/java --include='*ListRecord.java' 2>/dev/null | grep -q .; then
+    fail "One-field service *ListRecord wrappers are forbidden — return List<T> directly for simple list use cases"
+  fi
+  if find backend/service/src/main/java -path '*/mappers/DtoMapper.java' -o \
+      -path '*/mappers/EntityMapper.java' -o \
+      -path '*/mappers/CommonMapper.java' 2>/dev/null | grep -q .; then
+    fail "Generic service mapper is forbidden — create one service/mappers/<aggregate>/<Entity>Mapper per entity and compose with MapStruct uses="
+  fi
+  while IFS= read -r mapper_file; do
+    rel="${mapper_file#backend/service/src/main/java/}"
+    if [[ ! "${rel}" =~ ^([^/]+/){3}service/mappers/[^/]+/[^/]+Mapper\.java$ ]] \
+        && [[ ! "${rel}" =~ ^PACKAGE_REPLACE_ME/service/mappers/[^/]+/[^/]+Mapper\.java$ ]]; then
+      fail "Service mapper must live under service/mappers/<aggregate>/, not service/<aggregate>/mappers/: ${mapper_file}"
+    fi
+    grep -q '@Mapper' "${mapper_file}" \
+      || fail "Service mapper must be a MapStruct @Mapper interface: ${mapper_file}"
+    grep -Eq 'public[[:space:]]+interface[[:space:]]+[A-Za-z0-9_]+Mapper\b' "${mapper_file}" \
+      || fail "Service mapper must be an interface, not a hand-written class: ${mapper_file}"
+  done < <(find backend/service/src/main/java -path '*/mappers/*Mapper.java' ! -name 'ServiceMapperConfig.java' 2>/dev/null)
+fi
+
 # --- No @Service orchestration in application/ ---
 if grep -rEn '^@Service' backend/application/src/main/java 2>/dev/null | grep -q .; then
   fail "@Service beans belong in service/, not application/"

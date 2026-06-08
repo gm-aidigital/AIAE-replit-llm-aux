@@ -11,6 +11,7 @@
 interface RuntimeConfig {
     apiBaseUrl: string;
     clerkPublishableKey: string;
+    clerkJwtTemplate: string;
     validate(): void;
     getAuthToken(): Promise<string | null>;
     onUnauthorized(): Promise<void>;
@@ -27,6 +28,7 @@ const cfg = {
         (env.VITE_API_CONTEXT_PATH ?? "").toString()
     ),
     clerkPublishableKey: (env.VITE_CLERK_PUBLISHABLE_KEY ?? "").toString(),
+    clerkJwtTemplate: (env.VITE_CLERK_JWT_TEMPLATE ?? "aidigital-api").toString(),
 };
 
 let ssoTokenGetter: (() => Promise<string | null>) | null = null;
@@ -38,6 +40,11 @@ export const runtimeConfig: RuntimeConfig = {
         if (!cfg.clerkPublishableKey) {
             throw new Error(
                 "Clerk SSO is required: set VITE_CLERK_PUBLISHABLE_KEY"
+            );
+        }
+        if (!cfg.clerkJwtTemplate) {
+            throw new Error(
+                "Clerk JWT template is required: set VITE_CLERK_JWT_TEMPLATE"
             );
         }
     },

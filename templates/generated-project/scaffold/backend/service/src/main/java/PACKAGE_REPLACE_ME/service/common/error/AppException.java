@@ -21,12 +21,12 @@ public class AppException extends RuntimeException {
     private final ValidationMessage validationMessage;
 
     public AppException(ErrorReason reason, Object... params) {
-        this.validationMessage = ValidationMessage.withParams(reason, params);
+        this.validationMessage = new ValidationMessage(reason, params);
     }
 
     public AppException(ErrorReason reason, Throwable cause, Object... params) {
         super(cause);
-        this.validationMessage = ValidationMessage.withParams(reason, params);
+        this.validationMessage = new ValidationMessage(reason, params);
     }
 
     public AppException(ErrorReason reason, ValidationParameter... parameters) {

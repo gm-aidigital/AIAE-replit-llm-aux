@@ -10,10 +10,18 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-JAR="$(ls backend/application/target/*.jar 2>/dev/null | grep -v '\.original$' | head -n1)"
+# Prefer the extracted (exploded) layout produced by replit-build.sh for a
+# faster cold start on the throttled Reserved VM; fall back to the fat jar if
+# extraction is absent (e.g. a plain `mvn package` without replit-build.sh).
+JAR="$(ls backend/application/target/extracted/*.jar 2>/dev/null | grep -v '\.original$' | head -n1)"
 if [ -z "${JAR}" ]; then
-  echo "ERROR: no fat jar in backend/application/target/. Run replit-build.sh first." >&2
+  JAR="$(ls backend/application/target/*.jar 2>/dev/null | grep -v '\.original$' | head -n1)"
+fi
+if [ -z "${JAR}" ]; then
+  echo "ERROR: no jar in backend/application/target/. Run replit-build.sh first." >&2
   exit 1
 fi
 
-exec java -jar "${JAR}"
+# Fast-start JVM flags: TieredStopAtLevel=1 (C1-only) cuts JIT overhead during
+# Spring init on the throttled Reserved VM; disabling JMX adds nothing here.
+exec java -XX:TieredStopAtLevel=1 -Dspring.jmx.enabled=false -jar "${JAR}"

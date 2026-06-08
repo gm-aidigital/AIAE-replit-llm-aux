@@ -6,6 +6,9 @@
 
 # OS
 .DS_Store
+# Python cache artifacts from local helper scripts
+__pycache__/
+*.pyc
 
 # Secrets — never commit
 .env

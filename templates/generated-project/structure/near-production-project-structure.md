@@ -33,7 +33,7 @@ Postgres env vars, backend 5000 → external 80, Replit Secrets) AND local-dev
     ├── vite.config.ts
     ├── tsconfig.json
     ├── Dockerfile                        # frontend image (local-dev only)
-    ├── nginx.conf                        # SPA routing + /api proxy for nginx runtime
+    ├── nginx.conf.template               # SPA routing + /api proxy for nginx runtime
     └── src/
 ```
 
@@ -98,7 +98,9 @@ external references):
 ```
 backend/domain/src/main/java/<base>/domain/sample/
 backend/service/src/main/java/<base>/service/sample/
+backend/service/src/main/java/<base>/service/mappers/sample/
 backend/service/src/test/java/<base>/service/sample/
+backend/service/src/test/java/<base>/service/mappers/sample/
 backend/db/src/main/resources/db/changelog/changes/0002-sample-reference.xml
 ```
 
@@ -278,8 +280,8 @@ build because they sit in the wrong module:
 
 | Anti-pattern | Why it breaks | Correct placement |
 |---|---|---|
-| `*ApiMapper.java` (or anything importing the generated `api.v1.*` package) in `service/` | `service` does NOT depend on `application` and therefore cannot see generated OpenAPI types. Build fails with `package <base>.api.v1 does not exist`. Agent then "fixes" by adding `application` as a dependency of `service` — reverse edge, cycle, build never recovers. | `application/<aggregate>/mappers/<X>ApiMapper.java` — converts ServiceRecord ↔ generated DTO |
-| `*Mapper.java` (Entity ↔ Record) in `application/` | `application` doesn't import JPA entities (it sees only ServiceRecord through `service`). Mapper has nothing to map. | `service/<aggregate>/mappers/<X>Mapper.java` |
+| `*ApiMapper.java` (or anything importing the generated `api.v1.*` package) in `service/` | `service` does NOT depend on `application` and therefore cannot see generated OpenAPI types. Build fails with `package <base>.api.v1 does not exist`. Agent then "fixes" by adding `application` as a dependency of `service` — reverse edge, cycle, build never recovers. | `application/mappers/<aggregate>/<X>ApiMapper.java` — converts ServiceRecord ↔ generated DTO |
+| `*Mapper.java` (Entity ↔ Record) in `application/` | `application` doesn't import JPA entities (it sees only ServiceRecord through `service`). Mapper has nothing to map. | `service/mappers/<aggregate>/<X>Mapper.java` |
 | `@RestController` in `service/` | `service` doesn't depend on `spring-web`. Compile error on `@RestController`. | `application/<aggregate>/controllers/<X>Controller.java` |
 | Controller directly under `application/<aggregate>/` (e.g. `application/sheets/SheetsProxyController.java`) instead of `application/<aggregate>/controllers/<X>Controller.java` | Breaks the "plural = collections" folder contract; future second controller for the same aggregate has nowhere consistent to land. Past sessions then "fix" by adding it next to the first — spreading inconsistency. | `application/<aggregate>/controllers/<X>Controller.java` (plural folder, always) |
 | `@RestController` class with `@RequestMapping("/api/v1/...")` and method-level `@GetMapping`/`@PostMapping` instead of `implements <Tag>Api` | Bypasses the generated OpenAPI interface contract — spec and runtime drift silently; frontend `openapi-fetch` and backend serve different paths until the first mismatch ships to prod. | `class <X>Controller implements <Tag>Api` with `@Override` on every method; only annotation on class is `@RestController`. See `openapi/canonical-openapi-rules.md` → "Backend contract boundary". |
@@ -322,7 +324,8 @@ application/src/main/java/<base>/
   observability/                                    # CorrelationIdFilter, etc. (usage logging lives in event-logging-to-db-feature/)
   <aggregate>/                                      # ONE folder per domain aggregate
     controllers/<X>Controller.java
-    mappers/<X>ApiMapper.java                       # ServiceRecord ↔ V1 DTO, ONE per entity
+  mappers/                                          # ALL API mappers live here
+    <aggregate>/<X>ApiMapper.java                   # ServiceRecord ↔ V1 DTO, ONE per entity
 
 service/src/main/java/<base>/service/
   common/                                           # cross-cutting, NOT per-aggregate
@@ -335,11 +338,12 @@ service/src/main/java/<base>/service/
   <aggregate>/                                      # ONE folder per domain aggregate
     services/<X>Service.java                        # interface
     services/impl/<X>ServiceImpl.java               # @Service impl; every public method auto-logged (UsageLoggingAspect)
-    mappers/<X>Mapper.java                          # Entity ↔ Record, ONE per entity, compose via uses=
     models/
       <X>Record.java                                # output record (immutable)
       <X>Update.java                                # write input
       <X>Query.java                                 # filter input (when needed)
+  mappers/                                          # ALL service mappers live here
+    <aggregate>/<X>Mapper.java                      # Entity ↔ Record, ONE per entity, compose via uses=
 
 domain/src/main/java/<base>/domain/
   <aggregate>/                                      # ONE folder per domain aggregate
@@ -447,6 +451,72 @@ Never write singular `service/`, `mapper/`, `entity/`, `repository/`, `model/`,
   by `UsageLoggingAspect` (`@LogUsage` optional, to override the action name).
 - Entities/repositories never appear in REST contracts.
 - DB via Liquibase. MapStruct for all conversion. One entity = one mapper per layer; compose via shared mapper config + `uses=`.
+- Service interfaces return typed records. Do not expose `Map<String,Object>` or raw `Object` for business request/result contracts; isolate dynamic provider/JSONB maps in boundary converters.
+
+### Global API mapper anti-pattern (FORBIDDEN)
+
+Never create a single mapper such as `ApiDtoMapper`, `DtoMapper`,
+`ApplicationMapper`, `CommonMapper`, or a `application/.../mappers/<aggregate>/*` package root
+class to translate every generated DTO. API mapping follows the aggregate
+boundary: one entity/resource = one API mapper under `mappers/<aggregate>/`.
+
+Correct examples:
+
+```text
+backend/application/src/main/java/<base>/mappers/lesson/LessonApiMapper.java
+backend/application/src/main/java/<base>/mappers/lessonactivity/LessonActivityApiMapper.java
+backend/application/src/main/java/<base>/mappers/roadmap/RoadmapApiMapper.java
+```
+
+When one DTO contains nested DTOs owned by another aggregate, compose mappers
+with MapStruct `uses = OtherApiMapper.class`. Do not inline nested conversion
+and do not move unrelated mappings into a generic mapper to avoid wiring
+`uses`.
+
+Forbidden examples:
+
+```text
+backend/application/src/main/java/<base>/mappers/ApiDtoMapper.java
+backend/application/src/main/java/<base>/mappers/DtoMapper.java
+backend/application/src/main/java/<base>/mappers/ApplicationMapper.java
+```
+
+Forbidden code shape:
+
+```java
+@Component
+public class ApiDtoMapper {
+    LessonV1 toLesson(LessonRecord record) { ... }
+    MaterialV1 toMaterial(MaterialRecord record) { ... }
+    RoadmapV1 toRoadmap(RoadmapRecord record) { ... }
+}
+```
+
+Correct code shape:
+
+```java
+@Mapper(config = ApplicationMapperConfig.class, uses = LessonActivityApiMapper.class)
+public interface LessonApiMapper {
+    LessonV1 toDto(LessonRecord record);
+}
+```
+
+`structure-lint.sh` rejects wrong mapper packages, root/global API mappers,
+application mappers that are not MapStruct `@Mapper` interfaces, and manual
+`default Map<String,Object> -> DTO` mapping hidden inside mapper interfaces.
+
+Artificial list wrappers are forbidden. Do not create records such as
+`LessonsListSource`, `UsersListSource`, or `SomethingResponseSource` under
+`application/.../mappers/**`, and do not replace them with one-field service
+records such as `LessonsListRecord(List<LessonSummaryRecord> lessons)`. Simple
+list use cases return `List<T>` directly; API mappers map that list parameter
+into generated wrapper response DTOs.
+
+Manual `default` mapping methods inside MapStruct mappers are forbidden except
+for tiny scalar adapters annotated by MapStruct qualifiers. API mappers must not
+construct generated DTOs with `new ...V1()` and must not import `ApiMappingSupport`;
+that is manual mapping and belongs in typed service records plus MapStruct
+abstract methods.
 - Business errors as `AppException(ErrorReason.X, ...)` — never per-domain enums.
 - Usage logging: `templates/generated-project/observability/usage-logging-rules.md`.
 

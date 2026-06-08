@@ -7,7 +7,9 @@
 # What it deletes:
 #   - backend/domain/src/main/java/<base>/domain/sample/
 #   - backend/service/src/main/java/<base>/service/sample/
+#   - backend/service/src/main/java/<base>/service/mappers/sample/
 #   - backend/service/src/test/java/<base>/service/sample/
+#   - backend/service/src/test/java/<base>/service/mappers/sample/
 #   - backend/db/src/main/resources/db/changelog/changes/0002-sample-reference.xml
 # What it edits:
 #   - backend/db/src/main/resources/db/changelog/db.changelog-master.xml
@@ -22,6 +24,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "${ROOT}"
 
 SAMPLE_CHANGELOG="backend/db/src/main/resources/db/changelog/changes/0002-sample-reference.xml"
@@ -45,6 +48,12 @@ remove_sample_dirs "domain" "main"
 remove_sample_dirs "service" "main"
 remove_sample_dirs "service" "test"
 
+while IFS= read -r path; do
+    rm -rf "${path}"
+    echo "    removed ${path}"
+    removed_any=true
+done < <(find backend/service/src/main/java backend/service/src/test/java -type d -path '*/service/mappers/sample' 2>/dev/null)
+
 if [ -f "${SAMPLE_CHANGELOG}" ]; then
     rm -f "${SAMPLE_CHANGELOG}"
     echo "    removed ${SAMPLE_CHANGELOG}"
@@ -53,23 +62,15 @@ fi
 
 if [ -f "${MASTER_CHANGELOG}" ] && grep -q '0002-sample-reference.xml' "${MASTER_CHANGELOG}"; then
     echo "==> Stripping sample-reference <include> from db.changelog-master.xml"
-    # Delete the SCAFFOLD-EXAMPLE comment block AND the include line.
-    # Portable sed (BSD + GNU): use a temp file.
-    python3 - "${MASTER_CHANGELOG}" <<'PY'
-import sys, re, pathlib
-path = pathlib.Path(sys.argv[1])
-text = path.read_text()
-# Remove the SCAFFOLD EXAMPLE comment block (multi-line) immediately above
-# the 0002-sample-reference include, plus the include line itself.
-pattern = re.compile(
-    r'\n[ \t]*<!--\s*\n[ \t]*SCAFFOLD EXAMPLE include[\s\S]*?-->\n',
-    re.MULTILINE)
-text = pattern.sub('\n', text)
-pattern2 = re.compile(
-    r'[ \t]*<include file="db/changelog/changes/0002-sample-reference\.xml"/>\n')
-text = pattern2.sub('', text)
-path.write_text(text)
-PY
+    tmp="${MASTER_CHANGELOG}.tmp"
+    awk '
+      /SCAFFOLD EXAMPLE include/ { skip=1; next }
+      skip && /-->/ { skip=0; next }
+      skip { next }
+      /0002-sample-reference\.xml/ { next }
+      { print }
+    ' "${MASTER_CHANGELOG}" > "${tmp}"
+    mv "${tmp}" "${MASTER_CHANGELOG}"
     echo "    edited ${MASTER_CHANGELOG}"
     removed_any=true
 fi

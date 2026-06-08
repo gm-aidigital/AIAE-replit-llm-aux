@@ -103,13 +103,13 @@ jobs:
           has_persistence=false
           usage_logging_enabled=true
 
-          if find . -name pom.xml -print0 | xargs -0 grep -l "<artifactId>spring-boot-starter-web</artifactId>" | grep -q .; then
+          if [ -n "$(find . -name pom.xml -print0 | xargs -0 grep -l '<artifactId>spring-boot-starter-web</artifactId>' 2>/dev/null | head -1)" ]; then
             has_backend=true
           fi
           if [ -f frontend/package.json ]; then
             has_frontend=true
           fi
-          if find . -name pom.xml -print0 | xargs -0 grep -E -l "spring-boot-starter-data-jpa|liquibase-core" | grep -q .; then
+          if [ -n "$(find . -name pom.xml -print0 | xargs -0 grep -El 'spring-boot-starter-data-jpa|liquibase-core' 2>/dev/null | head -1)" ]; then
             has_persistence=true
           fi
           if [ -f .env.example ]; then
@@ -129,9 +129,12 @@ jobs:
           set -euo pipefail
           test -f .env.example || { echo ".env.example is required"; exit 1; }
           required_vars=(
+            AUTH_ALLOWED_EMAIL_DOMAIN AUTH_AUTHORIZED_PARTIES
             AUTH_ISSUER_URI AUTH_JWKS_URI AUTH_AUDIENCE
             CLERK_PUBLISHABLE_KEY CLERK_SECRET_KEY
             CLERK_SIGN_IN_FORCE_REDIRECT_URL CLERK_SIGN_UP_FORCE_REDIRECT_URL
+            VITE_CLERK_PUBLISHABLE_KEY VITE_CLERK_JWT_TEMPLATE
+            VITE_CLERK_SIGN_IN_FORCE_REDIRECT_URL VITE_CLERK_SIGN_UP_FORCE_REDIRECT_URL
           )
           for v in "${required_vars[@]}"; do
             grep -Eq "^${v}=" .env.example || { echo "Missing ${v}= in .env.example"; exit 1; }
@@ -265,29 +268,9 @@ jobs:
             echo "Frontend must not use a left side menu/sidebar; use top navigation, tabs, filters, and toolbars"
             exit 1
           }
-          ruby <<'RUBY'
-          require "yaml"
-
-          spec_path = "backend/application/src/main/resources/api/v1/specs/openapi.yaml"
-          spec = YAML.load_file(spec_path)
-          allowed = {}
-          (spec["paths"] || {}).each do |path, methods|
-            methods.each_key do |method|
-              next unless %w[get post put patch delete options head].include?(method)
-              allowed[[method.upcase, path]] = true
-            end
-          end
-
-          errors = []
-          Dir["frontend/src/**/*.{ts,tsx}"].each do |file|
-            File.read(file).scan(/apiClient\.(GET|POST|PUT|PATCH|DELETE|OPTIONS|HEAD)\(\s*["']([^"']+)["']/) do |method, path|
-              next if allowed[[method, path]]
-              errors << "#{file}: apiClient.#{method}(\"#{path}\") is not defined in #{spec_path}"
-            end
-          end
-
-          abort(errors.join("\n")) unless errors.empty?
-          RUBY
+          bash scripts/lib/check-api-client-paths.sh \
+            backend/application/src/main/resources/api/v1/specs/openapi.yaml \
+            frontend/src
 
       - name: Verify Replit runtime anti-regressions
         run: |
@@ -587,8 +570,8 @@ jobs:
           java-version: "21"
           cache: maven
 
-      - name: Run unit tests
-        run: mvn -f backend/pom.xml ${MAVEN_CLI_OPTS} -T 1C clean test
+      - name: Run unit tests and verify (Checkstyle + JaCoCo)
+        run: mvn -f backend/pom.xml ${MAVEN_CLI_OPTS} -T 1C -Dgit-commit-id.skip=true clean verify
 
       - name: Upload test reports
         if: always()
@@ -701,6 +684,15 @@ jobs:
         run: docker compose --profile local config
 
       - name: Start local profile
+        env:
+          CLERK_PUBLISHABLE_KEY: pk_test_ci_dummy
+          CLERK_SECRET_KEY: sk_test_ci_dummy
+          VITE_CLERK_PUBLISHABLE_KEY: pk_test_ci_dummy
+          VITE_CLERK_JWT_TEMPLATE: aidigital-api
+          AUTH_ALLOWED_EMAIL_DOMAIN: aidigital.com
+          AUTH_AUTHORIZED_PARTIES: http://localhost:5173,http://localhost:8080
+          AUTH_ISSUER_URI: http://localhost:8080/fake-jwks-issuer
+          AUTH_JWKS_URI: http://localhost:8080/fake-jwks-issuer/.well-known/jwks.json
         run: docker compose --profile local up --build -d
 
       - name: Wait for health endpoint

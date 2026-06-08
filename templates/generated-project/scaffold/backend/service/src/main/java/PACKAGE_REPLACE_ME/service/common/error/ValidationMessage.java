@@ -36,6 +36,35 @@ public final class ValidationMessage {
         }
     }
 
+    /**
+     * Builds a validation message from raw parameter values.
+     *
+     * @param reason canonical application error reason
+     * @param params values interpolated into the error description
+     */
+    public ValidationMessage(@NotNull ErrorReason reason, Object... params) {
+        ValidationParameter[] validationParameters = null;
+        if (params != null) {
+            validationParameters = new ValidationParameter[params.length];
+            for (int i = 0; i < params.length; i++) {
+                validationParameters[i] = new ValidationParameter("param" + i, String.valueOf(params[i]));
+            }
+        }
+        this.code = reason.getCode();
+        this.type = ValidationMessageType.ERROR;
+        this.parameters = validationParameters != null
+            ? Arrays.asList(validationParameters)
+            : Collections.emptyList();
+        if (!this.parameters.isEmpty()) {
+            Object[] paramValues = this.parameters.stream()
+                .map(ValidationParameter::getValue)
+                .toArray();
+            this.message = String.format(reason.getDescription(), paramValues);
+        } else {
+            this.message = reason.getDescription();
+        }
+    }
+
     public String getCode() {
         return code;
     }
@@ -74,23 +103,5 @@ public final class ValidationMessage {
     @Override
     public String toString() {
         return String.format("%s: %s", code, message);
-    }
-
-    /**
-     * Builds a validation message from raw parameter values.
-     *
-     * @param reason canonical application error reason
-     * @param params values interpolated into the error description
-     * @return formatted validation message
-     */
-    public static ValidationMessage withParams(ErrorReason reason, Object... params) {
-        ValidationParameter[] validationParameters = null;
-        if (params != null) {
-            validationParameters = new ValidationParameter[params.length];
-            for (int i = 0; i < params.length; i++) {
-                validationParameters[i] = new ValidationParameter("param" + i, String.valueOf(params[i]));
-            }
-        }
-        return new ValidationMessage(reason, validationParameters);
     }
 }

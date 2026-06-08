@@ -16,6 +16,7 @@ import jakarta.persistence.Table;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.Hibernate;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
@@ -24,6 +25,15 @@ import java.util.Map;
 
 /**
  * Persistence model for a usage logging event.
+ *
+ * <p>This feature module is intentionally self-contained: it owns its Long
+ * database id and ID-based {@code equals}/{@code hashCode} directly instead of
+ * extending a shared base class, so the whole feature can be removed without
+ * leaving an internal Maven edge behind.
+ *
+ * <p>Transient instances (id == null) are equal only to themselves and hash to
+ * 0; do not place transient usage events into hash-based collections before
+ * persistence, because assigning the generated id changes {@code hashCode}.
  */
 @Entity
 @Table(name = "usage_events")
@@ -75,4 +85,34 @@ public class UsageEventEntity {
 
     @Column(name = "user_agent")
     private String userAgent;
+
+    /**
+     * Hibernate-proxy-compatible identity equality: two entities are equal only
+     * when both have the same non-null id and the same effective entity type.
+     *
+     * @param other candidate to compare against
+     * @return true when both entities share a non-null id and entity type
+     */
+    @Override
+    public final boolean equals(Object other) {
+        if (this == other) {
+            return true;
+        }
+        if (other == null || Hibernate.getClass(this) != Hibernate.getClass(other)) {
+            return false;
+        }
+        UsageEventEntity that = (UsageEventEntity) other;
+        return id != null && id.equals(that.id);
+    }
+
+    /**
+     * Stable hash derived from the entity type while transient and from the id
+     * once assigned.
+     *
+     * @return identity-based hash code
+     */
+    @Override
+    public final int hashCode() {
+        return id != null ? id.hashCode() : 0;
+    }
 }

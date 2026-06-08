@@ -19,9 +19,11 @@ import org.springframework.context.annotation.EnableAspectJAutoProxy;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
 import org.springframework.test.context.junit.jupiter.SpringJUnitConfig;
 
 import java.time.Instant;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowable;
@@ -50,8 +52,14 @@ class UsageLoggingAspectTest {
         }
 
         @Bean
-        UsageLoggingAspect usageLoggingAspect(UsageLogger logger, UsageLoggingProperties props) {
-            return new UsageLoggingAspect(logger, props);
+        UsageAttributes usageAttributes() {
+            return new UsageAttributes();
+        }
+
+        @Bean
+        UsageLoggingAspect usageLoggingAspect(UsageLogger logger, UsageLoggingProperties props,
+                                              UsageAttributes usageAttributes) {
+            return new UsageLoggingAspect(logger, props, usageAttributes);
         }
 
         @Bean
@@ -78,10 +86,8 @@ class UsageLoggingAspectTest {
 
     @Test
     void shouldAutoLogServiceImplMethodWithDerivedActionTest() {
-        // When: a public *ServiceImpl method runs through the Spring proxy
         demoService.doThing();
 
-        // Then: the aspect recorded one event with the derived action name
         ArgumentCaptor<UsageEvent> captor = ArgumentCaptor.forClass(UsageEvent.class);
         verify(usageLogger).record(captor.capture());
         UsageEvent event = captor.getValue();
@@ -93,10 +99,8 @@ class UsageLoggingAspectTest {
 
     @Test
     void shouldRecordErrorWhenServiceMethodThrowsTest() {
-        // When: the intercepted method throws
         Throwable thrown = catchThrowable(() -> demoService.boom());
 
-        // Then: the exception is rethrown unchanged and logged as an error
         assertThat(thrown).isInstanceOf(IllegalStateException.class);
         ArgumentCaptor<UsageEvent> captor = ArgumentCaptor.forClass(UsageEvent.class);
         verify(usageLogger).record(captor.capture());
@@ -109,37 +113,70 @@ class UsageLoggingAspectTest {
 
     @Test
     void shouldUseLogUsageActionOverrideWhenAnnotatedTest() {
-        // When: the method carries an explicit @LogUsage(action = ...)
         demoService.custom();
 
-        // Then: the override wins over the derived name
         ArgumentCaptor<UsageEvent> captor = ArgumentCaptor.forClass(UsageEvent.class);
         verify(usageLogger).record(captor.capture());
         assertThat(captor.getValue().action()).isEqualTo("custom.action.name");
     }
 
+    /**
+     * Proves that userId comes from the configured principal-name claim (user_id),
+     * not accidentally from JwtAuthenticationToken's default subject fallback.
+     * SecurityConfig sets setPrincipalClaimName("user_id"); the test mirrors that
+     * by building a JwtAuthenticationToken through the same converter.
+     */
     @Test
-    void shouldCaptureUserEmailAndNameFromJwtPrincipalTest() {
-        // Given: an authenticated Clerk JWT in the security context
+    void shouldCaptureUserIdFromUserIdClaimNotSubjectTest() {
+        // Given: a Clerk JWT where user_id differs from sub
         Jwt jwt = Jwt.withTokenValue("t").header("alg", "none")
-            .subject("sub-1")
-            .claim("email", "jane@example.com")
+            .subject("sub-irrelevant")
+            .claim("user_id", "user_clerk_abc123")
+            .claim("email", "jane@aidigital.com")
             .claim("full_name", "Jane Doe")
             .issuedAt(Instant.now())
             .expiresAt(Instant.now().plusSeconds(60))
             .build();
-        // 2-arg ctor → authenticated token, like the resource-server produces
-        SecurityContextHolder.getContext().setAuthentication(new JwtAuthenticationToken(jwt, java.util.List.of()));
 
-        // When:
+        // Mirror SecurityConfig's principal claim name
+        JwtAuthenticationConverter conv = new JwtAuthenticationConverter();
+        conv.setPrincipalClaimName("user_id");
+        var token = conv.convert(jwt);
+        SecurityContextHolder.getContext().setAuthentication(token);
+
         demoService.doThing();
 
-        // Then: the aspect lifts email + display name off the JWT principal
         ArgumentCaptor<UsageEvent> captor = ArgumentCaptor.forClass(UsageEvent.class);
         verify(usageLogger).record(captor.capture());
         UsageEvent event = captor.getValue();
-        assertThat(event.userEmail()).isEqualTo("jane@example.com");
-        assertThat(event.userId()).isEqualTo("sub-1");
+
+        // userId must come from the user_id claim, NOT from sub
+        assertThat(event.userId()).isEqualTo("user_clerk_abc123");
+        assertThat(event.userEmail()).isEqualTo("jane@aidigital.com");
+        assertThat(event.attributes()).containsEntry("user_name", "Jane Doe");
+    }
+
+    @Test
+    void shouldCaptureUserEmailAndNameFromJwtPrincipalTest() {
+        Jwt jwt = Jwt.withTokenValue("t").header("alg", "none")
+            .subject("user_sub1")
+            .claim("user_id", "user_sub1")
+            .claim("email", "jane@aidigital.com")
+            .claim("full_name", "Jane Doe")
+            .issuedAt(Instant.now())
+            .expiresAt(Instant.now().plusSeconds(60))
+            .build();
+        JwtAuthenticationConverter conv = new JwtAuthenticationConverter();
+        conv.setPrincipalClaimName("user_id");
+        SecurityContextHolder.getContext().setAuthentication(conv.convert(jwt));
+
+        demoService.doThing();
+
+        ArgumentCaptor<UsageEvent> captor = ArgumentCaptor.forClass(UsageEvent.class);
+        verify(usageLogger).record(captor.capture());
+        UsageEvent event = captor.getValue();
+        assertThat(event.userEmail()).isEqualTo("jane@aidigital.com");
+        assertThat(event.userId()).isEqualTo("user_sub1");
         assertThat(event.attributes()).containsEntry("user_name", "Jane Doe");
     }
 }
