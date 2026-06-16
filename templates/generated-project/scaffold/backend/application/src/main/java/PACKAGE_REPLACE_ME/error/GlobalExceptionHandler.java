@@ -1,43 +1,42 @@
 // GlobalExceptionHandler — single source of HTTP error translation.
 // Catches AppException + Spring validation/security exceptions and converts
-// them to the OpenAPI-generated ApiErrorV1 DTO. Controllers throw nothing
-// of their own; services throw AppException with ErrorReason.
+// them to OpenAPI-generated error DTOs. Controllers catch nothing;
+// services throw AppException with ErrorReason.
+//
+// All response-building helpers live in GlobalExceptionResponseHelper so this
+// class stays free of private methods.
 
 package PACKAGE_REPLACE_ME.error;
 
-import PACKAGE_REPLACE_ME.api.v1.model.ApiErrorV1;
-import PACKAGE_REPLACE_ME.api.v1.model.ValidationParameterV1;
+import PACKAGE_REPLACE_ME.api.v1.model.AppApiExceptionResponseV1;
+import PACKAGE_REPLACE_ME.api.v1.model.AppValidationExceptionResponseV1;
+import PACKAGE_REPLACE_ME.error.mapper.GlobalExceptionResponseHelper;
 import PACKAGE_REPLACE_ME.service.common.error.AppException;
 import PACKAGE_REPLACE_ME.service.common.error.ErrorReason;
-import PACKAGE_REPLACE_ME.service.common.error.ValidationMessage;
-import PACKAGE_REPLACE_ME.service.common.error.ValidationParameter;
+import jakarta.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.slf4j.MDC;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
+import org.springframework.lang.NonNull;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
-import org.springframework.web.bind.annotation.RestControllerAdvice;
-import jakarta.validation.ConstraintViolationException;
-
-import java.time.LocalDateTime;
-import java.time.ZoneOffset;
-import java.util.List;
-import java.util.stream.Collectors;
+import org.springframework.web.context.request.WebRequest;
+import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
 /**
  * Converts service and framework exceptions into the committed OpenAPI error shape.
  */
-@RestControllerAdvice
-public class GlobalExceptionHandler {
+@ControllerAdvice
+public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     private static final Logger LOG = LoggerFactory.getLogger(GlobalExceptionHandler.class);
-
-    /** MDC key for the per-request correlation id (set by a request filter). */
-    private static final String MDC_CORRELATION_ID = "correlationId";
+    private static final String REQUEST_FIELD = "request";
 
     /** Error-code prefixes that map to specific HTTP statuses. */
     private static final String NOT_FOUND_PREFIX = "C001";
@@ -45,6 +44,18 @@ public class GlobalExceptionHandler {
     private static final String UNAUTH_PREFIX = "C005";
     private static final String CONFLICT_PREFIX = "C006";
     private static final String RATE_LIMIT_PREFIX = "C007";
+    private static final String INTERNAL_PREFIX = "C000";
+
+    private final GlobalExceptionResponseHelper responseHelper;
+
+    /**
+     * Creates the exception handler.
+     *
+     * @param responseHelper helper that builds generated OpenAPI response DTOs
+     */
+    public GlobalExceptionHandler(GlobalExceptionResponseHelper responseHelper) {
+        this.responseHelper = responseHelper;
+    }
 
     /**
      * Handles canonical application exceptions.
@@ -53,31 +64,50 @@ public class GlobalExceptionHandler {
      * @return API error response with mapped HTTP status
      */
     @ExceptionHandler(AppException.class)
-    public ResponseEntity<ApiErrorV1> handleAppException(AppException ex) {
+    public ResponseEntity<AppApiExceptionResponseV1> handleAppException(AppException ex) {
         HttpStatus status = statusForCode(ex.getCode());
         if (status.is5xxServerError()) {
             LOG.error("AppException {}: {}", ex.getCode(), ex.getMessage(), ex);
         } else {
             LOG.warn("AppException {}: {}", ex.getCode(), ex.getMessage());
         }
-        return ResponseEntity.status(status).body(toDto(ex.getValidationMessage()));
+        return responseHelper.buildApiError(ex, status);
     }
 
     /**
-     * Handles bean-validation failures.
+     * Handles bean-validation failures raised by Spring MVC request-body binding.
      *
-     * @param ex validation exception from Spring or Jakarta Validation
-     * @return 400 API error response
+     * @param ex      validation exception from Spring MVC
+     * @param headers response headers passed by Spring MVC
+     * @param status  response status passed by Spring MVC
+     * @param request current web request
+     * @return 400 validation error response
      */
-    @ExceptionHandler({
-        MethodArgumentNotValidException.class,
-        ConstraintViolationException.class
-    })
-    public ResponseEntity<ApiErrorV1> handleValidation(Exception ex) {
-        LOG.warn("Validation failed: {}", ex.getMessage());
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(
-            toDto(new ValidationMessage(ErrorReason.C002,
-                new ValidationParameter("detail", ex.getMessage()))));
+    @Override
+    public ResponseEntity<Object> handleMethodArgumentNotValid(
+        MethodArgumentNotValidException ex,
+        @NonNull HttpHeaders headers,
+        @NonNull HttpStatusCode status,
+        @NonNull WebRequest request
+    ) {
+        return new ResponseEntity<>(
+            responseHelper.buildValidationErrorMessage(ex.getBindingResult().getFieldErrors()),
+            HttpStatus.BAD_REQUEST);
+    }
+
+    /**
+     * Handles validation failures raised outside request-body binding.
+     *
+     * @param ex validation exception from Jakarta Validation
+     * @return 400 validation error response
+     */
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<AppValidationExceptionResponseV1> handleConstraintViolation(
+        ConstraintViolationException ex
+    ) {
+        return new ResponseEntity<>(
+            responseHelper.buildValidationErrorMessage(REQUEST_FIELD, ex.getMessage()),
+            HttpStatus.BAD_REQUEST);
     }
 
     /**
@@ -87,9 +117,8 @@ public class GlobalExceptionHandler {
      * @return 401 API error response
      */
     @ExceptionHandler(AuthenticationException.class)
-    public ResponseEntity<ApiErrorV1> handleAuth(AuthenticationException ex) {
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(
-            toDto(new ValidationMessage(ErrorReason.C005)));
+    public ResponseEntity<AppApiExceptionResponseV1> handleAuth(AuthenticationException ex) {
+        return responseHelper.buildApiError(new AppException(ErrorReason.C005), HttpStatus.UNAUTHORIZED);
     }
 
     /**
@@ -99,10 +128,10 @@ public class GlobalExceptionHandler {
      * @return 403 API error response
      */
     @ExceptionHandler(AccessDeniedException.class)
-    public ResponseEntity<ApiErrorV1> handleAccessDenied(AccessDeniedException ex) {
-        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(
-            toDto(new ValidationMessage(ErrorReason.C004,
-                new ValidationParameter("detail", ex.getMessage()))));
+    public ResponseEntity<AppApiExceptionResponseV1> handleAccessDenied(AccessDeniedException ex) {
+        return responseHelper.buildApiError(
+            new AppException(ErrorReason.C004, "detail", ex.getMessage()),
+            HttpStatus.FORBIDDEN);
     }
 
     /**
@@ -112,24 +141,20 @@ public class GlobalExceptionHandler {
      * @return 500 API error response
      */
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<ApiErrorV1> handleUnknown(Exception ex) {
+    public ResponseEntity<AppApiExceptionResponseV1> handleUnknown(Exception ex) {
         LOG.error("Unhandled exception", ex);
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
-            toDto(new ValidationMessage(ErrorReason.C000,
-                new ValidationParameter("class", ex.getClass().getSimpleName()))));
+        return responseHelper.buildApiError(
+            new AppException(ErrorReason.C000, "class", ex.getClass().getSimpleName()),
+            HttpStatus.INTERNAL_SERVER_ERROR);
     }
 
-    // ----- helpers -----
-
     /**
-     * Maps the leading-prefix of an {@link ErrorReason} code to an HTTP status.
-     * Add a branch here when introducing a new cross-cutting code family
-     * (e.g. {@code C008} → {@code GONE}).
+     * Maps an error code prefix to the corresponding HTTP status.
      *
-     * @param code canonical error code
-     * @return HTTP status for the code family
+     * @param code application error code
+     * @return matching HTTP status
      */
-    private HttpStatus statusForCode(String code) {
+    public HttpStatus statusForCode(String code) {
         if (code == null) {
             return HttpStatus.INTERNAL_SERVER_ERROR;
         }
@@ -148,36 +173,9 @@ public class GlobalExceptionHandler {
         if (code.startsWith(RATE_LIMIT_PREFIX)) {
             return HttpStatus.TOO_MANY_REQUESTS;
         }
-        if (code.startsWith("C000")) {
+        if (code.startsWith(INTERNAL_PREFIX)) {
             return HttpStatus.INTERNAL_SERVER_ERROR;
         }
-        // All other "Cxxx" codes and any domain-specific code → 400.
         return HttpStatus.BAD_REQUEST;
-    }
-
-    /**
-     * Builds the ApiErrorV1 wire payload from an internal {@link ValidationMessage}.
-     * Timestamp is recorded in UTC as a {@code LocalDateTime} to match the
-     * project-wide time convention (see backend SKILL "Time types").
-     *
-     * @param msg internal validation message
-     * @return OpenAPI error response DTO
-     */
-    private ApiErrorV1 toDto(ValidationMessage msg) {
-        ApiErrorV1 dto = new ApiErrorV1();
-        dto.setCode(msg.getCode());
-        dto.setMessage(msg.getMessage());
-        dto.setTimestamp(LocalDateTime.now(ZoneOffset.UTC));
-        dto.setCorrelationId(MDC.get(MDC_CORRELATION_ID));
-        List<ValidationParameterV1> params = msg.getParameters().stream()
-            .map(p -> {
-                ValidationParameterV1 v = new ValidationParameterV1();
-                v.setCode(p.getCode());
-                v.setValue(p.getValue());
-                return v;
-            })
-            .collect(Collectors.toList());
-        dto.setParameters(params);
-        return dto;
     }
 }

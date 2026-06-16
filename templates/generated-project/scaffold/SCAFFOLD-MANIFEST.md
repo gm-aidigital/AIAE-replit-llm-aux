@@ -21,10 +21,25 @@ replace only `PACKAGE_REPLACE_ME` and app placeholders.
 | File | Notes |
 |---|---|
 | `backend/pom.xml` | Java 21, Spring Boot 3.4, pluginManagement |
-| `backend/application/pom.xml` | `db` dep, openapi-generator, PostgreSQL driver |
+| `backend/application/pom.xml` | `db` dep, openapi-generator, PostgreSQL driver, Ehcache / Hibernate JCache |
 | `backend/service/pom.xml` | No web/security deps |
 | `backend/domain/pom.xml`, `backend/db/pom.xml` | Leaf modules |
 | `backend/.../web/SpaFallbackController.java` | Deployment deep links |
+| `backend/.../error/GlobalExceptionHandler.java` | Extends `ResponseEntityExceptionHandler`, delegates to `GlobalExceptionResponseHelper`, no private methods |
+| `backend/.../error/mapper/GlobalExceptionResponseHelper.java` | Error response builder interface (generated API DTOs) |
+| `backend/.../error/mapper/GlobalExceptionResponseHelperImpl.java` | Error response builder implementation; public helper methods stay in a component so the handler has no private helpers |
+| `backend/.../service/common/error/AppException.java` | Single unchecked service exception, implements `CodeAwareThrowable` |
+| `backend/.../service/common/error/CodeAwareThrowable.java` | Stable code contract exposed to the REST handler |
+| `backend/.../service/common/error/ErrorReason.java` | Single enum of business error codes |
+| `backend/.../service/common/error/ValidationMessage.java` | Parameterised error message value object |
+| `backend/.../service/common/error/ValidationParameter.java` | Named error parameter |
+| `backend/.../service/common/error/ValidationMessageType.java` | `{ ERROR, WARN, INFO }` |
+| `backend/.../cache/CacheConfig.java` | Wires `CacheProperties`, `CacheWarmUpService`, and `@CacheEvict` scheduling when enabled |
+| `backend/.../cache/CacheProperties.java` | `@ConfigurationProperties("app.cache")` for cache warm-up toggle |
+| `backend/.../cache/CacheWarmUpService.java` | Startup warm-up runner for beans implementing `ToWarmUp` |
+| `backend/.../domain/ToWarmUp.java` | Marker interface for cache warm-up participants |
+| `backend/application/src/main/resources/ehcache.xml` | Ehcache 3 region template (`default` + `example`) |
+| `backend/application/src/main/resources/api/v1/specs/openapi.yaml` | Starter contract with `AppApiExceptionResponseV1`, `AppValidationExceptionResponseV1`; pagination/search schemas are added per-entity when needed |
 
 ## Frontend (copy from scaffold/frontend/)
 

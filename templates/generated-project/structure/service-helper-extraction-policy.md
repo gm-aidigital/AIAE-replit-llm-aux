@@ -26,7 +26,11 @@ service/<feature>/helpers/impl/<Feature>ServiceHelperImpl.java
 - Helpers receive external-services client interfaces when outbound calls are required.
 - Meaningful helper logic requires unit tests.
 - No `HelperUtils`, static god-classes, or empty helpers.
-- Small private methods remain acceptable when extraction adds ceremony without improving testability or reuse.
+- No `private` methods on beans/services. Helper methods that stay inside a
+  service are **package-private** so unit tests can spy/stub them; only
+  `private static final` constants and `private final` fields stay private.
+  When extraction adds no value, keep the method package-private rather than
+  private — never `private`.
 
 ## Hard service size limits
 
@@ -40,10 +44,10 @@ Generated production code must satisfy these limits:
 
 - `*ServiceImpl` max 260 physical lines.
 - `*ServiceImpl` max 10 public methods.
-- `*ServiceImpl` max 8 private methods.
+- `*ServiceImpl` max 8 package-private helper methods (no `private` methods at all).
 - `*ServiceImpl` max 8 injected fields.
 - Public service method body max 60 lines.
-- Private helper method body max 35 lines.
+- Package-private helper method body max 35 lines.
 
 If any limit is hit, split by responsibility instead of adding another private
 method. Preferred collaborators: `<Feature>Validator`, `<Feature>Policy`,
@@ -54,10 +58,13 @@ testable.
 
 Forbidden patterns:
 
-- A `*ServiceImpl` with many private methods acting as a second class hidden
-  inside the service.
+- A `*ServiceImpl` with a large pile of helper methods acting as a second class
+  hidden inside the service.
+- Any `private` method on a bean/service (use package-private so it is spyable).
+- A nested record/DTO/data class declared inside a service or other class —
+  extract it to a top-level type in `model`/`enums`.
 - Several unrelated workflows in one service because they share the same table.
-- Algorithmic logic kept private only to avoid creating another bean.
+- Algorithmic logic kept inside the service only to avoid creating another bean.
 - `HelperUtils` / static utility classes.
 
 The gate is `scripts/lib/check-service-contract-quality.sh`; `verify-gates.sh`

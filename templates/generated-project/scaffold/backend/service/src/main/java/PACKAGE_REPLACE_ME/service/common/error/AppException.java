@@ -1,7 +1,7 @@
 // AppException — canonical unchecked exception for ALL business errors.
 // Carries a ValidationMessage (code + formatted message + parameters).
 // Caught by GlobalExceptionHandler in application/ and converted to the
-// OpenAPI ApiErrorV1 response.
+// OpenAPI AppApiExceptionResponseV1 response.
 //
 // Throwing pattern (the only one allowed):
 //   throw new AppException(ErrorReason.C001, id);                    // resource not found
@@ -16,7 +16,7 @@ package PACKAGE_REPLACE_ME.service.common.error;
 /**
  * Canonical unchecked exception for business and validation errors.
  */
-public class AppException extends RuntimeException {
+public class AppException extends RuntimeException implements CodeAwareThrowable {
 
     private final ValidationMessage validationMessage;
 

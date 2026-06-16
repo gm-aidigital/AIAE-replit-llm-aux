@@ -1,21 +1,25 @@
 # Error Handling Pattern (canonical)
 
-Canonical pattern. Backend SKILL + safety-review enforce. Never invent
-`AppException`/`ErrorResponse` variants; never recreate `AppErrorReason`
-interface or per-domain `*ErrorReason` enums.
+Canonical pattern. Backend SKILL + safety-review enforce one unchecked service
+exception type carrying different stable business codes from one enum. Never
+invent ad-hoc `RuntimeException`, `ResponseStatusException`, `ErrorResponse`,
+static `*Codes` classes, or per-domain error exception classes.
 
 ## Location
 
 ```
 backend/service/src/main/java/<base>/service/common/error/
-  AppException.java          ← unchecked, carries ValidationMessage
-  ErrorReason.java           ← THE single enum: code + parameterised description
-  ValidationMessage.java     ← code + formatted message + type + parameters
-  ValidationMessageType.java ← enum ERROR | WARN | INFO
-  ValidationParameter.java   ← (name, value) pair
+  AppException.java            ← single unchecked exception, implements CodeAwareThrowable
+  CodeAwareThrowable.java      ← exposes stable code to REST handler
+  ErrorReason.java             ← THE single enum: code + parameterised description
+  ValidationMessage.java       ← parameterised error message value object
+  ValidationParameter.java     ← named error parameter
+  ValidationMessageType.java   ← { ERROR, WARN, INFO }
 
 backend/application/src/main/java/<base>/error/
-  GlobalExceptionHandler.java ← @RestControllerAdvice → AppException → ApiErrorV1
+  GlobalExceptionHandler.java  ← extends ResponseEntityExceptionHandler, no private methods
+  mapper/GlobalExceptionResponseHelper.java     ← response builder interface
+  mapper/GlobalExceptionResponseHelperImpl.java ← response builder implementation
 ```
 
 `AppException`/`ErrorReason`/validation types live in **service** module
@@ -26,11 +30,12 @@ backend/application/src/main/java/<base>/error/
 ## Three rules
 
 1. **ONE enum, `ErrorReason`.** Add codes as the project grows; never sibling enums.
-2. **NO `AppErrorReason` interface.** Constructor takes the concrete enum directly.
-3. **Only `AppException` flows from service/controller.** Never
+2. **ONE service exception, `AppException`.** It takes an `ErrorReason`
+   and optional params, formats the message, and exposes `getCode()`.
+3. **Only `AppException` flows from service business rules.** Never
    `ResponseStatusException`/`IllegalStateException`/`IllegalArgumentException`/raw
-   `RuntimeException` — they bypass `GlobalExceptionHandler` code-prefix mapping
-   and surface as opaque 500s.
+   `RuntimeException` — they bypass `GlobalExceptionHandler` code mapping and
+   surface as opaque 500s.
 
 ## `ErrorReason.java`
 
@@ -114,7 +119,13 @@ are canonical. Copy verbatim.
 ## `GlobalExceptionHandler.java`
 
 `@RestControllerAdvice` in `application` module — converts `AppException`,
-Spring validation, unhandled exceptions to the OpenAPI `ApiErrorV1` DTO.
+Spring validation, unhandled exceptions to the OpenAPI
+`AppApiExceptionResponseV1` / `AppValidationExceptionResponseV1` DTOs.
+
+The handler **extends `ResponseEntityExceptionHandler`** and delegates all
+response-body construction to `GlobalExceptionResponseHelper` (interface +
+`@Component` implementation). This keeps the handler free of private helper
+methods, which the template rule set forbids in bean classes.
 
 HTTP status mapping is by `ErrorReason` code prefix:
 
@@ -130,7 +141,7 @@ HTTP status mapping is by `ErrorReason` code prefix:
 | Domain codes (`E001`, `O001`, …) | 400 |
 
 When introducing a new prefix that needs a non-400 status, add a branch
-to `statusForCode()` — never sprinkle HTTP status logic in services
+to the helper's status mapping — never sprinkle HTTP status logic in services
 or controllers.
 
 Spring validation exceptions (`MethodArgumentNotValidException`,
@@ -139,7 +150,7 @@ Spring validation exceptions (`MethodArgumentNotValidException`,
 `AuthenticationException` → 401 with `ErrorReason.C005`.
 Last-resort `Exception` catch → 500 with `ErrorReason.C000`.
 
-Response body shape (the OpenAPI `ApiErrorV1` schema):
+Response body shape (the OpenAPI `AppApiExceptionResponseV1` schema):
 
 ```json
 {
@@ -204,6 +215,6 @@ Services throw; the global handler translates to HTTP.
 - No `ResponseStatusException` — bypasses the code/message contract.
 - No `catch (AppException)` in controllers — `@RestControllerAdvice` owns HTTP translation.
 - No raw stack traces or full exception messages to clients.
-- No `Map<String,Object>` error format — always `ApiErrorV1`.
+- No `Map<String,Object>` error format — always `AppApiExceptionResponseV1` / `AppValidationExceptionResponseV1`.
 - Controllers never throw. Validation annotations on request DTOs trigger
   `MethodArgumentNotValidException` → handler → 400.

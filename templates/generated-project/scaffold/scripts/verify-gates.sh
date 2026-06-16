@@ -81,6 +81,11 @@ if [ -f .replit ]; then
   verify_replit_file ".replit"
 fi
 
+if [ -f frontend/package.json ]; then
+  grep -Eq '"vitest"[[:space:]]*:[[:space:]]*"\^3\.2\.6"' frontend/package.json \
+    || fail "frontend/package.json must pin firewall-approved vitest ^3.2.6"
+fi
+
 if [ -f frontend/src/shared/api/client.ts ]; then
   ! grep -RInE '(baseUrl|apiBaseUrl|BASE_URL)[[:space:]]*[:=][[:space:]]*["'\'']/api/v1/?["'\'']' \
       frontend/src/shared/api frontend/src/shared/config >/dev/null || {
@@ -248,9 +253,6 @@ if [ -d backend/application/src/main/resources ]; then
     || fail "Do not call getRequest() from generated OpenAPI interfaces"
   ! grep -RIn '@Slf4j\|private static final Logger log\|Logger log' backend/application/src/main/java >/dev/null 2>&1 \
     || fail "Use explicit private static final Logger LOG in framework glue"
-  auth_props="$(find backend/application/src/main/java -path '*/security/AuthProperties.java' -print -quit)"
-  [ -z "${auth_props}" ] || ! grep -RInE '@(Getter|Setter|Data|Value|RequiredArgsConstructor)' "${auth_props}" >/dev/null 2>&1 \
-    || fail "AuthProperties must use explicit getters/setters, not Lombok"
   logbook_config="$(find backend/application/src/main/java -path '*/config/LogbookConfig.java' -print -quit)"
   [ -z "${logbook_config}" ] || grep -Fq 'new DefaultSink(new JsonHttpLogFormatter(), new DefaultHttpLogWriter())' "${logbook_config}" \
     || fail "Logbook DefaultSink must be built with formatter + writer"

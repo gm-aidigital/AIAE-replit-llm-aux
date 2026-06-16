@@ -7,14 +7,17 @@ info:
     writing controllers — the rest of the codebase generates from here
     (backend interfaces + frontend types).
 
-    Schemas are versioned EXPLICITLY in their names (UserV1, ApiErrorV1).
-    When V2 ships, add UserV2 / Create…V2 schemas alongside V1; V1 keeps
-    working until the last consumer migrates.
+    Schemas are versioned EXPLICITLY in their names (UserV1,
+    AppApiExceptionResponseV1). When V2 ships, add UserV2 / Create…V2
+    schemas alongside V1; V1 keeps working until the last consumer migrates.
 servers:
   - url: /api/v1
     description: V1 base path (DOCUMENTATION ONLY — the openapi-generator-maven-plugin
       does NOT prepend this to generated Spring routes. Path keys below carry the
       `/api/v1/` prefix verbatim. See canonical-openapi-rules.md → "/api/v1 prefix").
+
+security:
+  - bearerAuth: []
 
 tags:
   - name: auth
@@ -27,8 +30,6 @@ paths:
       operationId: getCurrentUser
       summary: Returns the authenticated user (Clerk SSO)
       description: Returns the Clerk-authenticated user identity used by the SPA bootstrap.
-      security:
-        - bearerAuth: []
       responses:
         "200":
           description: Authenticated user payload
@@ -43,9 +44,19 @@ paths:
                     email: "demo-user@example.com"
                     full_name: "Demo User"
         "401":
-          $ref: "#/components/responses/UnauthorizedV1"
+          description: The authorization token not provided or expired.
         "403":
-          $ref: "#/components/responses/ForbiddenV1"
+          description: The authorization token not correct or user not authorized.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppApiExceptionResponseV1"
+        "500":
+          description: Exception occurred while resolving authenticated user.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AppApiExceptionResponseV1"
 
 components:
   securitySchemes:
@@ -54,56 +65,55 @@ components:
       scheme: bearer
       bearerFormat: JWT
 
-  responses:
-    UnauthorizedV1:
-      description: Missing or invalid token
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/ApiErrorV1"
-          examples:
-            missingToken:
-              value: { code: "C005", message: "Authentication required", timestamp: "2026-05-24T10:00:00Z", correlationId: "abc-123" }
-    ForbiddenV1:
-      description: Authenticated but lacking permission
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/ApiErrorV1"
-
   schemas:
     UserV1:
       type: object
       additionalProperties: false
       description: Authenticated user identity projected from Clerk JWT claims.
       required: [user_id, email]
-      # Baseline payload carries identity only. Add a roles array here ONLY when
-      # the product introduces server-side role authorization.
       properties:
         user_id:   { type: string, description: "Clerk user id (sub/user_id claim)." }
         email:     { type: string, format: email, description: "Primary email address verified by Clerk." }
         full_name: { type: string, description: "Display name assembled from Clerk profile claims." }
 
-    ApiErrorV1:
+    AppValidationExceptionResponseV1:
       type: object
       additionalProperties: false
-      description: Standard API error body returned for application and validation failures.
-      required: [code, message, timestamp]
+      description: Representation of validation exception occurred in REST API format.
+      required: [errors, timestamp, correlationId]
       properties:
-        code:          { type: string, description: "Machine-readable error code" }
-        message:       { type: string, description: "Human-readable message." }
-        timestamp:     { type: string, format: date-time, description: "UTC timestamp when the error response was created." }
-        correlationId: { type: string, description: "Request correlation id used to find matching logs." }
-        parameters:
+        errors:
+          description: The list of validation errors occurred.
           type: array
-          description: Field-level validation details when validation fails.
-          items: { $ref: "#/components/schemas/ValidationParameterV1" }
+          items:
+            $ref: "#/components/schemas/FieldToErrorResponseV1"
+        timestamp:
+          type: string
+          format: date-time
+          description: The timestamp exception occurred.
+        correlationId:
+          type: string
+          description: The log stream UUID.
 
-    ValidationParameterV1:
+    FieldToErrorResponseV1:
       type: object
       additionalProperties: false
-      description: Single validation detail attached to an API error.
-      required: [code, value]
+      description: Representation of validation error bound to a field or semantic request part.
+      required: [code, field, error]
       properties:
-        code:  { type: string, description: "Machine-readable validation code or field name." }
-        value: { type: string, description: "Rejected value or validation context." }
+        code:  { type: string, description: "The code of validation error occurred." }
+        field: { type: string, description: "The field or semantic request part not passed validation." }
+        error: { type: string, description: "The validation error occurred." }
+
+    AppApiExceptionResponseV1:
+      type: object
+      additionalProperties: false
+      description: Representation of exception occurred in REST API format.
+      required: [code, message, timestamp, correlationId]
+      properties:
+        code:          { type: string, description: "The code of exception occurred." }
+        message:       { type: string, description: "The message of exception occurred." }
+        timestamp:     { type: string, format: date-time, description: "The timestamp exception occurred." }
+        correlationId: { type: string, description: "The log stream UUID." }
+
+

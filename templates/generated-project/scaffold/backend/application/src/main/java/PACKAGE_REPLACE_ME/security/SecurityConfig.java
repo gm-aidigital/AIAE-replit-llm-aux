@@ -72,14 +72,7 @@ public class SecurityConfig {
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .headers(h -> h
                 .frameOptions(frame -> frame.disable())
-                .contentSecurityPolicy(csp -> csp.policyDirectives(
-                    "default-src 'self'; "
-                    + "frame-ancestors " + securityProperties.getCsp().getFrameAncestors() + "; "
-                    + "script-src 'self' 'unsafe-inline'; "
-                    + "style-src 'self' 'unsafe-inline'; "
-                    + "img-src 'self' data: https:; "
-                    + "connect-src 'self' https:; "
-                    + "font-src 'self' data:"))
+                .contentSecurityPolicy(csp -> csp.policyDirectives(cspPolicyDirectives()))
                 .referrerPolicy(r -> r.policy(
                     ReferrerPolicyHeaderWriter.ReferrerPolicy.STRICT_ORIGIN_WHEN_CROSS_ORIGIN))
                 .contentTypeOptions(opts -> { })
@@ -92,6 +85,25 @@ public class SecurityConfig {
             .oauth2ResourceServer(oauth -> oauth.jwt(jwt -> jwt
                 .jwtAuthenticationConverter(userIdAsPrincipalConverter())))
             .build();
+    }
+
+    /**
+     * Builds the CSP header from typed, independently overridable directives.
+     *
+     * @return complete Content-Security-Policy directive string
+     */
+    String cspPolicyDirectives() {
+        SecurityProperties.Csp csp = securityProperties.getCsp();
+        return String.join(" ",
+            "default-src " + csp.getDefaultSrc() + ";",
+            "frame-ancestors " + csp.getFrameAncestors() + ";",
+            "script-src " + csp.getScriptSrc() + ";",
+            "worker-src " + csp.getWorkerSrc() + ";",
+            "frame-src " + csp.getFrameSrc() + ";",
+            "style-src " + csp.getStyleSrc() + ";",
+            "img-src " + csp.getImgSrc() + ";",
+            "connect-src " + csp.getConnectSrc() + ";",
+            "font-src " + csp.getFontSrc() + ";");
     }
 
     /**

@@ -53,4 +53,16 @@ class SecurityConfigTest {
         assertThat(props.getSso().getJwkSetUri())
             .isEqualTo("https://clerk.example.com/.well-known/jwks.json");
     }
+
+    @Test
+    void shouldBuildCspRequiredByClerkCaptchaAndYoutubeEmbedsTest() {
+        String policy = securityConfig.cspPolicyDirectives();
+
+        assertThat(policy)
+            .contains("script-src 'self' 'unsafe-inline' https://*.clerk.accounts.dev "
+                + "https://challenges.cloudflare.com;")
+            .contains("frame-src 'self' https://*.clerk.accounts.dev "
+                + "https://challenges.cloudflare.com https://www.youtube.com "
+                + "https://www.youtube-nocookie.com;");
+    }
 }

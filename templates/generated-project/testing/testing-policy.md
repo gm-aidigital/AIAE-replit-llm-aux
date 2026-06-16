@@ -3,7 +3,8 @@
 Single source of truth. MVPs do not need full production coverage, but a
 zero-test project is not complete. Build/debug loops may skip tests while the
 app is unstable; the final MVP must include a lean safety suite for backend
-and frontend before publish or handoff.
+and frontend before publish or handoff. Detailed backend naming, fixture,
+Instancio, captor, and spy conventions live in `backend-test-style-rules.md`.
 
 ## Testability rules (all production code)
 
@@ -12,14 +13,22 @@ These make every unit testable and mockable — apply to all generated code:
 - **No `static` methods on beans/services.** Use instance methods so
   collaborators can be injected and mocked; `static` can't be stubbed and forces
   integration-style tests. Pure constants stay `static final`.
-- **Keep short, obvious private methods private.** Do not widen visibility just
-  to enable a test. When private logic is non-trivial, algorithmic, reused, or
+- **No `private` methods on beans/services.** A `private` method cannot be
+  spied or stubbed, so it can only be exercised through its caller. Keep helper
+  methods **package-private** (default visibility) so same-package unit tests can
+  spy/stub them. When the logic is non-trivial, algorithmic, reused, or
   independently testable, **extract a `<Feature>ServiceHelper` interface +
-  `<Feature>ServiceHelperImpl`**, inject the interface, and unit-test the helper
-  directly. See `structure/service-helper-extraction-policy.md`.
-- **Mockito spies are not the default.** Do not reshape production code so a spy
-  can stub a self-invoked method. Spies are a last-resort seam for legacy code,
-  not a design target.
+  `<Feature>ServiceHelperImpl`** (or a `Validator`/`Policy`/`Assembler`), inject
+  the interface, and unit-test it directly. See
+  `structure/service-helper-extraction-policy.md`. Only `private static final`
+  constants and `private final` fields stay private.
+- **No nested data types.** Records, DTOs, data-holding classes, and enums are
+  top-level types in a `model`/`enums` package, never nested inside another
+  class. The only allowed nested types are `@ConfigurationProperties` sub-groups.
+- **Every handwritten production method has JavaDoc**, regardless of visibility —
+  not just public/interface methods. Generated sources, Lombok-generated
+  members, and `@Override` methods that inherit their contract are exempt.
+- **Mockito spies are not a design target, but service-layer tests may use them deliberately.** Do not reshape production code so a spy becomes the only way to test the class. When an existing public service method delegates to another package-private method of the same class and the project style needs that outer method isolated, create `spy(new <Feature>ServiceImpl(...))` and stub the inner call with `doReturn` / `doThrow`. The full style contract lives in `backend-test-style-rules.md`.
 - Prefer constructor injection (`@RequiredArgsConstructor`) so tests pass fakes.
 
 ## Phases

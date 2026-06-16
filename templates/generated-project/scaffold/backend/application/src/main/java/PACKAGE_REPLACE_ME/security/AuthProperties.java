@@ -3,13 +3,17 @@
 
 package PACKAGE_REPLACE_ME.security;
 
+import jakarta.validation.constraints.NotNull;
+import lombok.Getter;
+import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
-import jakarta.validation.constraints.NotNull;
 
 /**
  * Typed configuration for Clerk SSO authentication.
  */
+@Getter
+@Setter
 @Validated
 @ConfigurationProperties(prefix = "app.auth")
 public class AuthProperties {
@@ -31,41 +35,11 @@ public class AuthProperties {
     @NotNull
     private Sso sso = new Sso();
 
-    public String getAllowedEmailDomain() {
-        return allowedEmailDomain;
-    }
-
-    public void setAllowedEmailDomain(String allowedEmailDomain) {
-        this.allowedEmailDomain = allowedEmailDomain;
-    }
-
-    public String getPublishableKey() {
-        return publishableKey;
-    }
-
-    public void setPublishableKey(String publishableKey) {
-        this.publishableKey = publishableKey;
-    }
-
-    public String getAuthorizedParties() {
-        return authorizedParties;
-    }
-
-    public void setAuthorizedParties(String authorizedParties) {
-        this.authorizedParties = authorizedParties;
-    }
-
-    public Sso getSso() {
-        return sso;
-    }
-
-    public void setSso(Sso sso) {
-        this.sso = sso;
-    }
-
     /**
      * SSO/OIDC settings for Clerk or another compatible provider.
      */
+    @Getter
+    @Setter
     public static class Sso {
         /** Clerk issuer URI, e.g. https://clean-clerk.clerk.accounts.dev */
         private String issuerUri;
@@ -73,29 +47,5 @@ public class AuthProperties {
         private String jwkSetUri;
         /** Expected `aud` claim value. */
         private String audience;
-
-        public String getIssuerUri() {
-            return issuerUri;
-        }
-
-        public void setIssuerUri(String issuerUri) {
-            this.issuerUri = issuerUri;
-        }
-
-        public String getJwkSetUri() {
-            return jwkSetUri;
-        }
-
-        public void setJwkSetUri(String jwkSetUri) {
-            this.jwkSetUri = jwkSetUri;
-        }
-
-        public String getAudience() {
-            return audience;
-        }
-
-        public void setAudience(String audience) {
-            this.audience = audience;
-        }
     }
 }

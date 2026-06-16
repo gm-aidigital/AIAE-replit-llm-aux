@@ -1,12 +1,15 @@
 package PACKAGE_REPLACE_ME.security;
 
 import jakarta.validation.constraints.NotBlank;
+import lombok.Getter;
+import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
 
 /**
  * Typed browser security configuration bound from {@code app.security.*}.
  */
+@Getter
 @Validated
 @ConfigurationProperties(prefix = "app.security")
 public class SecurityProperties {
@@ -14,17 +17,11 @@ public class SecurityProperties {
     private final Cors cors = new Cors();
     private final Csp csp = new Csp();
 
-    public Cors getCors() {
-        return cors;
-    }
-
-    public Csp getCsp() {
-        return csp;
-    }
-
     /**
      * Cross-origin resource sharing settings.
      */
+    @Getter
+    @Setter
     public static class Cors {
         @NotBlank
         private String allowedOrigins =
@@ -32,35 +29,43 @@ public class SecurityProperties {
 
         private long maxAgeSeconds = 3600L;
 
-        public String getAllowedOrigins() {
-            return allowedOrigins;
-        }
-
-        public void setAllowedOrigins(String allowedOrigins) {
-            this.allowedOrigins = allowedOrigins;
-        }
-
-        public long getMaxAgeSeconds() {
-            return maxAgeSeconds;
-        }
-
-        public void setMaxAgeSeconds(long maxAgeSeconds) {
-            this.maxAgeSeconds = maxAgeSeconds;
-        }
     }
 
     /**
      * Content Security Policy settings.
      */
+    @Getter
+    @Setter
     public static class Csp {
+        @NotBlank
+        private String defaultSrc = "'self'";
+
+        @NotBlank
         private String frameAncestors = "'self' https://*.replit.dev https://*.repl.co";
 
-        public String getFrameAncestors() {
-            return frameAncestors;
-        }
+        @NotBlank
+        private String scriptSrc =
+            "'self' 'unsafe-inline' https://*.clerk.accounts.dev https://challenges.cloudflare.com";
 
-        public void setFrameAncestors(String frameAncestors) {
-            this.frameAncestors = frameAncestors;
-        }
+        @NotBlank
+        private String workerSrc = "'self' blob:";
+
+        @NotBlank
+        private String frameSrc =
+            "'self' https://*.clerk.accounts.dev https://challenges.cloudflare.com "
+            + "https://www.youtube.com https://www.youtube-nocookie.com";
+
+        @NotBlank
+        private String styleSrc = "'self' 'unsafe-inline'";
+
+        @NotBlank
+        private String imgSrc = "'self' data: https:";
+
+        @NotBlank
+        private String connectSrc = "'self' https:";
+
+        @NotBlank
+        private String fontSrc = "'self' data:";
+
     }
 }

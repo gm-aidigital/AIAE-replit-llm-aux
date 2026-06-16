@@ -19,7 +19,9 @@ if [ -f scripts/structure-lint.sh ]; then
   bash scripts/structure-lint.sh
 fi
 
-mvn -f backend/pom.xml -B -DskipTests package
+# Replit workspaces persist target/ between builds. Clean first so package
+# moves/renames cannot leave stale component classes in the deployable jar.
+mvn -f backend/pom.xml -B -DskipTests clean package
 
 # Extract the Spring Boot fat jar into an exploded layout (thin launcher jar +
 # lib/). On Replit's Reserved VM the CPU is throttled during the cold-boot

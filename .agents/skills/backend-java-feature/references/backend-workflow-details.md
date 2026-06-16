@@ -332,7 +332,7 @@ This skill enforces:
   `*ServiceImpl` method (no annotation needed). `@LogUsage(action = "...")` is
   an OPTIONAL override for the derived `<aggregate>.<method>` action name.
   Manual `logger.record(...)` in business code is forbidden.
-- L2 cache opt-in per region in `ehcache.xml` with `missing_cache_strategy: fail`.
+- L2 cache is application-level JCache/Ehcache: `spring.cache.type: jcache`, Hibernate L2/query cache, `hibernate-cache` region prefix, `missing_cache_strategy: fail`, and explicit regions in `ehcache.xml`. Service-level `ConcurrentMapCacheManager` is forbidden.
 
 Full contracts: references table above.
 
@@ -343,9 +343,11 @@ See `custom_instruction/instructions.md` → "Database policy".
 ## No magic values (mandatory)
 
 Business literals come from ONE of:
-1. `public static final` constant (e.g. an entry in `AuthConstants.PUBLIC_PATHS`).
-2. `@ConfigurationProperties` bean. Property names in `*Constants` class so
-   annotation parameters match.
+1. Java enum with fields (`code`, `displayName`, optional flags) for persisted
+   statuses, roles, scopes, claim names, error codes, and other semantic values.
+2. `@ConfigurationProperties` bean for environment/runtime settings.
+3. `public static final` constant only when Java/Spring requires a compile-time
+   constant (annotation attributes, logger names, public path arrays).
 3. OpenAPI YAML for HTTP status + error shapes.
 
 Forbidden:

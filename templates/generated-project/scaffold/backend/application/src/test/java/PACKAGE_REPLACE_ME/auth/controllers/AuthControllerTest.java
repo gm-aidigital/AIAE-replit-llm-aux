@@ -1,5 +1,6 @@
 package PACKAGE_REPLACE_ME.auth.controllers;
 
+import PACKAGE_REPLACE_ME.error.mapper.GlobalExceptionResponseHelperImpl;
 import PACKAGE_REPLACE_ME.mappers.auth.UserMapperImpl;
 import PACKAGE_REPLACE_ME.security.AppUserFactory;
 import PACKAGE_REPLACE_ME.security.AuthProperties;
@@ -34,7 +35,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
     UserMapperImpl.class,
     ClerkJwtClaimsValidator.class,
     ClerkPublishableKeyDecoder.class,
-    CompanyEmailDomainAuthorizationManager.class
+    CompanyEmailDomainAuthorizationManager.class,
+    GlobalExceptionResponseHelperImpl.class
 })
 class AuthControllerTest {
 

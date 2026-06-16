@@ -16,11 +16,11 @@ SCAFFOLD_ROOT="${SCAFFOLD}" \
   MATERIALIZE_DEST="${WORK}" \
   bash "${SCAFFOLD}/scripts/materialize-project.sh" replitmvp
 
-echo "==> Backend mvn verify"
+echo "==> Backend mvn clean verify"
 cd "${WORK}"
 mvn -f backend/pom.xml -B -Dgit-commit-id.skip=true \
   -Djacoco.line.coverage=0.00 -Djacoco.branch.coverage=0.00 \
-  verify
+  clean verify
 
 echo "==> Frontend test + build"
 NPM_BIN="$(pwd)/backend/application/target/frontend-toolchain/node/npm"

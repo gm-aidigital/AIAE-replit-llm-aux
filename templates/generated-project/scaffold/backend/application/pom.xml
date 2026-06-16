@@ -111,6 +111,19 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- L2 cache: Ehcache 3 (Jakarta variant) + Hibernate JCache bridge.
+             ehcache.xml on the classpath defines the cache regions; warm-up
+             is optional via CacheWarmUpService + ToWarmUp repositories. -->
+        <dependency>
+            <groupId>org.ehcache</groupId>
+            <artifactId>ehcache</artifactId>
+            <classifier>jakarta</classifier>
+        </dependency>
+        <dependency>
+            <groupId>org.hibernate.orm</groupId>
+            <artifactId>hibernate-jcache</artifactId>
+        </dependency>
+
         <!-- Test scope -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

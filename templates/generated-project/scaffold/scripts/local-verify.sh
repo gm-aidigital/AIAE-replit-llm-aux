@@ -5,7 +5,7 @@
 #
 # Steps:
 #   1. structure-lint.sh + verify-gates.sh
-#   2. Backend: `mvn -f backend/pom.xml verify`
+#   2. Backend: `mvn -f backend/pom.xml clean verify`
 #   3. Frontend: `npm test && npm run build`
 #   4. docker-compose syntax check (does NOT run containers)
 
@@ -19,8 +19,8 @@ fi
 
 bash scripts/verify-gates.sh
 
-echo "==> Backend: mvn verify"
-mvn -f backend/pom.xml -B verify
+echo "==> Backend: mvn clean verify"
+mvn -f backend/pom.xml -B clean verify
 
 if [ -f frontend/package.json ]; then
   echo "==> Frontend: npm test + build"

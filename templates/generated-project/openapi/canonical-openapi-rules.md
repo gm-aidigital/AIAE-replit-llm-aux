@@ -156,17 +156,28 @@ Every Replit/frontend workflow must run `npm run generate:api` before Vite,
 typecheck, tests, or build. Stale/missing `schema.d.ts` invalidates the
 contract-first guarantee.
 
-## Response discipline
+## Response Discipline
 
-Every protected operation explicitly declares:
-`200`/success, `400` when validation applies, `401`, `403`, `500`.
+Every protected operation explicitly declares `200`/success, `400` when validation
+applies, `401`, `403`, and `500` inline under the operation. Do not create
+`components.responses` wrappers such as `UnauthorizedV1`, `ForbiddenV1`, or
+`BadRequestV1`; Feedlot-style specs repeat the status descriptions in each
+operation so the generated contract stays local and readable.
 
-Shared schemas under `components.schemas`:
-- common API error
-- validation error
-- multistatus when `207` is used
+Canonical error schemas live under `components.schemas`:
+- `<App>ApiExceptionResponseV1` for service/business/security/internal errors:
+  `code`, `message`, `timestamp`, `correlationId`.
+- `<App>ValidationExceptionResponseV1` for request validation errors: `errors`,
+  `timestamp`, `correlationId`.
+- `FieldToErrorResponseV1`: `code`, `field`, `error`.
+- Multi-status exception schemas only when `207` is actually used.
 
-Error payload fields: machine-readable code, human message, timestamp, correlation ID.
+`401` is description-only unless the application explicitly returns a body from
+its auth entry point. `403`, service-level `400`, `404`, and `500` use
+`<App>ApiExceptionResponseV1`. DTO/path/body validation uses
+`<App>ValidationExceptionResponseV1`. If one status can legitimately return
+both validation and service-level business errors, document `oneOf` inline for
+that status.
 
 ### File exports — binary schema -> Spring `Resource`
 
@@ -194,9 +205,20 @@ paths:
               schema:
                 type: string
                 format: binary
-        "401": { $ref: "#/components/responses/Unauthorized" }
-        "403": { $ref: "#/components/responses/Forbidden" }
-        "500": { $ref: "#/components/responses/InternalServerError" }
+        "401":
+          description: The authorization token not provided or expired.
+        "403":
+          description: The authorization token not correct or user not authorized.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/<App>ApiExceptionResponseV1"
+        "500":
+          description: Exception occurred while exporting the file.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/<App>ApiExceptionResponseV1"
 ```
 
 Controller implementation:
@@ -471,7 +493,7 @@ Mandatory options:
 `additionalModelTypeAnnotations=@lombok.Generated` (exempts generated DTOs from JaCoCo).
 
 **NOT** used: `modelNameSuffix`. Schema names already carry the version
-suffix explicitly in the YAML (`ResourceV1`, `ApiErrorV1`, etc.) — see
+suffix explicitly in the YAML (`ResourceV1`, `<App>ApiExceptionResponseV1`, etc.) — see
 "Versioned DTO names" below.
 
 ### `dateLibrary=java8-localdatetime` is locked
@@ -492,7 +514,7 @@ UTC convention:
 ### Versioned DTO names (mandatory)
 
 Every schema named with explicit version suffix in YAML: `ResourceV1`,
-`CreateResourceRequestV1`, `ApiErrorV1`. Generator emits Java class verbatim.
+`CreateResourceRequestV1`, `<App>ApiExceptionResponseV1`. Generator emits Java class verbatim.
 
 **Do NOT use `<modelNameSuffix>V1</modelNameSuffix>`.** A global suffix forces
 every schema to the same version band — V2 typically changes ~30% of entities.
@@ -507,8 +529,8 @@ Breaking V2 contract:
 3. V1 endpoints/DTOs keep working; V2 emits V2 DTOs.
 4. Mark V1 `deprecated: true` before sunset.
 
-Hand-written code always uses the versioned name: `ApiErrorV1 dto = new ApiErrorV1()`.
-There is no `ApiError` (no suffix) in this project.
+Hand-written code always uses the versioned name: `<App>ApiExceptionResponseV1 dto = new <App>ApiExceptionResponseV1()`.
+There is no unversioned `ApiError` or generic response DTO in this project.
 
 Output: `${project.build.directory}/generated-sources/openapi`. Generated
 API/model/invoker packages must be separate from hand-written.

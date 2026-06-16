@@ -22,8 +22,10 @@ the scaffold. Replace every `PACKAGE_REPLACE_ME` — never use `com.example`.
 | Topic | File |
 |---|---|
 | Structure | `templates/generated-project/structure/near-production-project-structure.md` |
+| Entity-service boundary | `templates/generated-project/structure/entity-service-boundary-policy.md` |
 | Architecture rules (full) | `references/backend-workflow-details.md` |
 | Testing | `templates/generated-project/testing/testing-policy.md` |
+| Backend test style | `templates/generated-project/testing/backend-test-style-rules.md` |
 | OpenAPI | `templates/generated-project/openapi/canonical-openapi-rules.md` |
 | Auth (Clerk SSO only) | `templates/generated-project/auth/google-sso-clerk-blueprint.md` |
 | Usage logging | `templates/generated-project/observability/usage-logging-rules.md` |

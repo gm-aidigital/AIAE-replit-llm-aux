@@ -135,6 +135,8 @@ Replit datasource env wiring: see
   app/health smoke, auth boundary, main API happy/error path, service unit
   tests, Liquibase smoke when persistence exists; frontend render/auth/async
   behavior tests for the main flow.
+- Backend test shape must follow `templates/generated-project/testing/backend-test-style-rules.md`.
+- Entity access must follow `templates/generated-project/structure/entity-service-boundary-policy.md`: one entity, one repository, one paired entity service; orchestration services never inject repositories directly.
 - JaCoCo with phased coverage gate (see
   `templates/generated-project/testing/testing-policy.md`):
   - Phase 1 (internal build loops): `0.00` default, `-DskipTests` allowed only
@@ -212,6 +214,7 @@ Each topic has one canonical file. Read before generating; never duplicate.
 | Topic | Canonical file |
 |---|---|
 | Project structure | `templates/generated-project/structure/near-production-project-structure.md` |
+| Entity-service boundary | `templates/generated-project/structure/entity-service-boundary-policy.md` |
 | Service quality / helper extraction | `templates/generated-project/structure/service-helper-extraction-policy.md` |
 | OpenAPI rules | `templates/generated-project/openapi/canonical-openapi-rules.md` |
 | OpenAPI review checklist | `templates/generated-project/openapi/openapi-review-checklist.md` |
@@ -225,6 +228,7 @@ Each topic has one canonical file. Read before generating; never duplicate.
 | First aggregate checklist | `templates/generated-project/generation/first-aggregate-checklist.md` |
 | Scaffold manifest | `templates/generated-project/scaffold/SCAFFOLD-MANIFEST.md` |
 | Testing policy (phased) | `templates/generated-project/testing/testing-policy.md` |
+| Backend test style | `templates/generated-project/testing/backend-test-style-rules.md` |
 | HikariCP / JPA baseline | `.agents/skills/backend-java-feature/references/hikari-jpa-baseline.yml` |
 | Java backend workflow | `.agents/skills/backend-java-feature/SKILL.md` |
 | Spring Boot gotchas (lookup) | `.agents/skills/backend-java-feature/references/spring-boot-gotchas.md` |
@@ -257,8 +261,9 @@ Dictionary / lookup data (statuses, roles, kinds, categories) → dedicated
 `<entity>_<dimension>` table (e.g. `resource_kind`) with `id BIGINT PK`,
 `code TEXT UNIQUE`, `name TEXT`, optional `display_order INT`, `is_active BOOLEAN`.
 Other tables FK via `<dimension>_id BIGINT`. Java side: small
-`<Entity><Dimension>` JPA entity + repository; code references kinds by
-**code string** (constants in `<Entity><Dimension>Code`), looks up id once.
+`<Entity><Dimension>` JPA entity + repository; code references canonical values
+through Java enums with fields (`code`, `displayName`, optional flags). Do not
+create static-only `*Codes` classes for business values.
 
 Why: `ALTER TYPE … ADD VALUE` is irreversible, can't run in a tx on older PG;
 remove/reorder requires recreating the type; Java mirroring drifts. Dictionary
@@ -276,9 +281,13 @@ IDs. HTTP via Zalando Logbook with masking — see
 
 ## L2 cache policy
 
-Ehcache via `ehcache.xml` ONLY for explicit candidates (read-mostly
-dictionaries, stable lookups, expensive low-write queries). Use
-`hibernate-cache` prefix + `missing_cache_strategy: fail`. Never enable blindly.
+Ehcache via application-level `ehcache.xml` ONLY for explicit candidates
+(read-mostly dictionaries, stable lookups, expensive low-write queries). Use
+`spring.cache.type: jcache`, `hibernate-cache` region prefix,
+`org.hibernate.cache.jcache.JCacheRegionFactory`,
+`org.ehcache.jsr107.EhcacheCachingProvider`, and
+`missing_cache_strategy: fail`. Do not place `ConcurrentMapCacheManager` or
+service-local cache configuration in service modules.
 
 ## CI policy
 

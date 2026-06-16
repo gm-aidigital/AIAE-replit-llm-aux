@@ -1,5 +1,5 @@
 // ValidationMessage — code + formatted message + type + parameters.
-// Constructed by AppException and serialised into ApiErrorV1 by
+// Constructed by AppException and serialised into AppApiExceptionResponseV1 by
 // GlobalExceptionHandler.
 
 package PACKAGE_REPLACE_ME.service.common.error;

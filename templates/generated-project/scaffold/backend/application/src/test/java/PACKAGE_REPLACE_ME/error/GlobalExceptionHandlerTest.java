@@ -1,6 +1,8 @@
 package PACKAGE_REPLACE_ME.error;
 
-import PACKAGE_REPLACE_ME.api.v1.model.ApiErrorV1;
+import PACKAGE_REPLACE_ME.api.v1.model.AppApiExceptionResponseV1;
+import PACKAGE_REPLACE_ME.api.v1.model.AppValidationExceptionResponseV1;
+import PACKAGE_REPLACE_ME.error.mapper.GlobalExceptionResponseHelperImpl;
 import PACKAGE_REPLACE_ME.service.common.error.AppException;
 import PACKAGE_REPLACE_ME.service.common.error.ErrorReason;
 import jakarta.validation.ConstraintViolationException;
@@ -14,7 +16,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class GlobalExceptionHandlerTest {
 
-    private final GlobalExceptionHandler handler = new GlobalExceptionHandler();
+    private final GlobalExceptionHandler handler = new GlobalExceptionHandler(new GlobalExceptionResponseHelperImpl());
 
     @Test
     void shouldMapAppExceptionCodesToHttpStatusesTest() {
@@ -35,25 +37,28 @@ class GlobalExceptionHandlerTest {
     @Test
     void shouldPopulateApiErrorBodyTest() {
         // When:
-        ResponseEntity<ApiErrorV1> resp = handler.handleAppException(new AppException(ErrorReason.C001, 42L));
+        ResponseEntity<AppApiExceptionResponseV1> resp = handler.handleAppException(
+            new AppException(ErrorReason.C001, 42L));
 
         // Then:
-        ApiErrorV1 body = resp.getBody();
+        AppApiExceptionResponseV1 body = resp.getBody();
         assertThat(body).isNotNull();
         assertThat(body.getCode()).isEqualTo("C001");
         assertThat(body.getMessage()).contains("Resource not found");
         assertThat(body.getTimestamp()).isNotNull();
-        assertThat(body.getParameters()).isNotEmpty();
+        assertThat(body.getCorrelationId()).isNotBlank();
     }
 
     @Test
-    void shouldMapValidationToBadRequestTest() {
+    void shouldMapConstraintViolationToBadRequestTest() {
         // When:
-        ResponseEntity<ApiErrorV1> resp = handler.handleValidation(new ConstraintViolationException("bad", null));
+        ResponseEntity<AppValidationExceptionResponseV1> resp = handler.handleConstraintViolation(
+            new ConstraintViolationException("bad", null));
 
         // Then:
         assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.BAD_REQUEST);
-        assertThat(resp.getBody().getCode()).isEqualTo("C002");
+        assertThat(resp.getBody().getErrors()).hasSize(1);
+        assertThat(resp.getBody().getErrors().get(0).getCode()).isEqualTo("C002");
     }
 
     @Test
@@ -68,7 +73,7 @@ class GlobalExceptionHandlerTest {
     @Test
     void shouldMapUnknownToInternalServerErrorTest() {
         // When:
-        ResponseEntity<ApiErrorV1> resp = handler.handleUnknown(new RuntimeException("boom"));
+        ResponseEntity<AppApiExceptionResponseV1> resp = handler.handleUnknown(new RuntimeException("boom"));
 
         // Then:
         assertThat(resp.getStatusCode()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
