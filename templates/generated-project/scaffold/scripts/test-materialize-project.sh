@@ -7,7 +7,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SCAFFOLD="$(cd "${SCRIPT_DIR}/.." && pwd)"
-TEMPLATE_ROOT="$(cd "${SCAFFOLD}/../../../.." && pwd)"
+TEMPLATE_ROOT="$(cd "${SCAFFOLD}/../../.." && pwd)"
 PASS=0
 FAIL=0
 
@@ -61,12 +61,21 @@ assert_file "${T1}/scripts/local-verify.sh"
 assert_file "${T1}/scripts/docker-local-smoke.sh"
 assert_file "${T1}/scripts/docker-context-path-smoke.sh"
 assert_file "${T1}/scripts/lib/scan-production-java.py"
+assert_file "${T1}/CLAUDE.md"
+assert_file "${T1}/AI-DEVELOPMENT-GUIDE.md"
+assert_file "${T1}/.claude/agent_docs/index.md"
+assert_file "${T1}/.claude/rules/00-backend-hard-rules.md"
+assert_file "${T1}/.claude/rules/40-frontend-rules.md"
+assert_file "${T1}/.claude/skills/task-workflow/SKILL.md"
+assert_file "${T1}/.claude/skills/verification-gate/SKILL.md"
+assert_file "${T1}/.claude/agent_docs/skill-selection.md"
+assert_file "${T1}/.claude/tasks/README.md"
 
 trap - EXIT
 rm -rf "${T1}"
 
 # ─── Test 2: control-plane files excluded ─────────────────────────────────────
-echo "==> Test 2: control-plane files excluded from generated root"
+echo "==> Test 2: Replit control-plane files excluded from generated root"
 T2="$(mktemp_dir)"
 trap 'rm -rf "${T2}"' EXIT
 
@@ -77,6 +86,10 @@ assert_absent "${T2}/custom_instruction"
 assert_absent "${T2}/.agents"
 assert_absent "${T2}/templates"
 assert_absent "${T2}/scripts/ci-verify-scaffold.sh"
+assert_file "${T2}/CLAUDE.md"
+assert_file "${T2}/AI-DEVELOPMENT-GUIDE.md"
+assert_file "${T2}/.claude/rules/README.md"
+assert_file "${T2}/.claude/skills/verification-gate/SKILL.md"
 
 trap - EXIT
 rm -rf "${T2}"

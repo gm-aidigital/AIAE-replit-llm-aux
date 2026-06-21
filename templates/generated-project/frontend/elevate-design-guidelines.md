@@ -104,6 +104,18 @@ truth for these variables; consume the variables, don't re-hard-code the px.
 - Tables: lavender header via accent token, secondary surface for grouped rows,
   expanded child rows use accent for contrast.
 
+## Authentication Surface
+
+- Treat login as part of the product, not an unstyled identity-provider embed.
+- Use a responsive, vertically and horizontally centered auth surface by default.
+  If the approved product design defines another composition, preserve it.
+- Keep the form container focused and restrained: one heading, short supporting
+  copy, semantic border/surface/shadow tokens, and no unrelated dashboard chrome.
+- Style Clerk through its supported `appearance` API. Validate sign-in, sign-up,
+  verification, CAPTCHA, loading, and error states at mobile and desktop widths.
+- Clerk remains the only auth implementation; visual customization must not
+  recreate password handling or bypass provider flows.
+
 ## Charts
 
 Charts live inside cards. Use a secondary header strip, white plot area, `24px`

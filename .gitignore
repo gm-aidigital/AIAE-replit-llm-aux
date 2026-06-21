@@ -1,8 +1,22 @@
 # IDE
 .idea/
-.claude/
 *.iml
 .vscode/
+
+# GSD is an optional local Claude Code tool. Do not vendor its generated
+# runtime; install it explicitly when needed. Project rules and custom skills
+# under agent_docs/, rules/, skills/, and tasks/ remain committed.
+.claude/agents/
+.claude/commands/
+.claude/gsd-core/
+.claude/hooks/
+.claude/scripts/
+.claude/.gsd-profile
+.claude/gsd-file-manifest.json
+.claude/package.json
+.claude/settings.json
+.claude/settings.local.json
+.claude/gsd-install-state.json
 
 # OS
 .DS_Store

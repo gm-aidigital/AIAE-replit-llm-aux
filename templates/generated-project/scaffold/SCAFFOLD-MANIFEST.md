@@ -15,6 +15,8 @@ replace only `PACKAGE_REPLACE_ME` and app placeholders.
 | `docker-compose.yml` | `--profile local`, port 8080, Postgres health-check |
 | `.env.example` | Full `AUTH_*`, `USAGE_LOG_*`, `CLERK_*`, `VITE_*` placeholders |
 | `.gitignore` | Excludes control plane (`.agents/`, `templates/`, etc.) |
+| `CLAUDE.md`, `.claude/` | Materialized shared engineering rules and focused skills; GSD runtime remains opt-in |
+| `AI-DEVELOPMENT-GUIDE.md` | Visible decision guide for focused skills vs optional GSD |
 
 ## Backend (copy from scaffold/backend/)
 
@@ -50,6 +52,7 @@ replace only `PACKAGE_REPLACE_ME` and app placeholders.
 | `src/main.tsx` | Mounts `app/AppRoot` only — no ClerkProvider here |
 | `src/app/AppRoot.tsx` | Router + AuthProvider + ProtectedRoute |
 | `src/app/AppShell.tsx` | Top-header layout (no sidebar) |
+| `src/pages/Login.tsx`, `login.css` | Responsive centered Clerk auth surface using semantic tokens |
 | `src/shared/ui/AppHeader.tsx`, `PageHeader.tsx` | Elevate shell |
 | `src/shared/hooks/useDebounce.ts` | Canonical debounce |
 | `src/features/_template/` | Copyable feature module (panel + test) |

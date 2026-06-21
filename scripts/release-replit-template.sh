@@ -32,13 +32,16 @@ rsync -a \
   --exclude '.git' \
   "${WORK}/" "${DEST}/"
 
-# Concise entry points for Replit import (canonical rules stay in control plane).
+# Concise Replit entry point. Claude rules are materialized into CLAUDE.md and
+# .claude/; Replit-specific control-plane guidance remains in AGENTS.md.
 cat > "${DEST}/AGENTS.md" <<'EOF'
 # Generated Replit MVP
 
-Authoritative engineering rules ship with the template control plane. In this
-flattened import, follow `replit.md` and the files under `templates/` copied
-into your project on first materialize.
+Authoritative engineering rules are in `CLAUDE.md` and `.claude/`. Replit Agent
+also follows `replit.md` for environment-specific setup.
+
+Read `AI-DEVELOPMENT-GUIDE.md` to choose between focused Claude skills and the
+optional GSD lifecycle. GSD is never initialized automatically by Replit.
 
 Quick start:
 1. Add Clerk Auth in Replit (CLERK_PUBLISHABLE_KEY, CLERK_SECRET_KEY).

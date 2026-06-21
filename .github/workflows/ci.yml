@@ -25,6 +25,14 @@ jobs:
             ".replit"
             "replit.nix"
             "custom_instruction/instructions.md"
+            "CLAUDE.md"
+            "GDS-WORKFLOW-README.md"
+            ".claude/agent_docs/skill-selection.md"
+            ".claude/rules/00-backend-hard-rules.md"
+            ".claude/rules/40-frontend-rules.md"
+            ".claude/skills/task-workflow/SKILL.md"
+            ".claude/skills/verification-gate/SKILL.md"
+            "scripts/install-claude-fixtures.sh"
 
             # === SKILL files ===
             ".agents/skills/backend-java-feature/SKILL.md"
@@ -148,6 +156,7 @@ jobs:
 
             # === Scaffold frontend auth + UI ===
             "templates/generated-project/scaffold/frontend/src/pages/Login.tsx"
+            "templates/generated-project/scaffold/frontend/src/pages/login.css"
             "templates/generated-project/scaffold/frontend/src/shared/auth/AuthProvider.tsx"
             "templates/generated-project/scaffold/frontend/src/shared/auth/ProtectedRoute.tsx"
             "templates/generated-project/scaffold/frontend/src/shared/ui/LoadingBlock.tsx"

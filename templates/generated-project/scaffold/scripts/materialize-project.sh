@@ -61,6 +61,12 @@ resolve_template_repo() {
 SCAFFOLD="$(resolve_scaffold)"
 TEMPLATE_REPO="$(resolve_template_repo)"
 
+CLAUDE_SHARED_DIRS=(
+  agent_docs
+  rules
+  skills
+)
+
 RSYNC_EXCLUDES=(
   --exclude node_modules
   --exclude target
@@ -128,6 +134,25 @@ if [ -f "${GENERATED_CI}" ]; then
 elif [ -n "${TEMPLATE_REPO}" ] && [ -f "${TEMPLATE_REPO}/templates/generated-project/.github/workflows/ci.yml" ]; then
   mkdir -p "${DEST}/.github/workflows"
   cp "${TEMPLATE_REPO}/templates/generated-project/.github/workflows/ci.yml" "${DEST}/.github/workflows/ci.yml"
+fi
+
+if [ -n "${TEMPLATE_REPO}" ] && [ -f "${TEMPLATE_REPO}/CLAUDE.md" ]; then
+  cp "${TEMPLATE_REPO}/CLAUDE.md" "${DEST}/CLAUDE.md"
+  mkdir -p "${DEST}/.claude"
+  for claude_dir in "${CLAUDE_SHARED_DIRS[@]}"; do
+    if [ -d "${TEMPLATE_REPO}/.claude/${claude_dir}" ]; then
+      mkdir -p "${DEST}/.claude/${claude_dir}"
+      rsync -a "${TEMPLATE_REPO}/.claude/${claude_dir}/" "${DEST}/.claude/${claude_dir}/"
+    fi
+  done
+  if [ -f "${TEMPLATE_REPO}/.claude/tasks/README.md" ]; then
+    mkdir -p "${DEST}/.claude/tasks"
+    cp "${TEMPLATE_REPO}/.claude/tasks/README.md" "${DEST}/.claude/tasks/README.md"
+  fi
+  if [ -f "${TEMPLATE_REPO}/.claude/agent_docs/skill-selection.md" ]; then
+    cp "${TEMPLATE_REPO}/.claude/agent_docs/skill-selection.md" \
+      "${DEST}/AI-DEVELOPMENT-GUIDE.md"
+  fi
 fi
 
 version_file="${DEST}/.template-version"

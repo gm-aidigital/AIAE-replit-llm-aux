@@ -106,6 +106,13 @@ Generated artifacts:
 - No raw `fetch` calls or hardcoded backend URLs in components.
 - Components do not build URLs; the typed client owns paths.
 - TanStack Query for all backend reads/writes; no ad-hoc global state for server data.
+- Each server resource has one canonical query-key owner. Components reuse that query or its valid cached data instead of issuing equivalent requests under different keys.
+- Cache data according to its lifecycle. Data that is stable for the authenticated session stays cached until account/session change or an explicit successful update; clear user-scoped cache on sign-out and account switch.
+- Fetch only when data is required. Use conditional queries for unresolved inputs, hidden tabs, closed overlays, and permission-inaccessible branches.
+- Derive projections from cached source data when its contract is sufficient. Do not fetch detail data merely to reproduce fields already available in a cached list or parent resource.
+- When a mutation returns authoritative data, update the canonical cache directly. Otherwise invalidate only affected keys; broad invalidation and unrelated refetching are forbidden.
+- Polling and eager prefetching require a documented freshness or latency reason. Polling stops on terminal state or when its owning UI is no longer active.
+- Request count is part of frontend correctness. For affected flows, verify initial load, rerender, navigation away/back, repeated overlay use, successful mutation, sign-out, and account switch.
 - Every async surface renders loading / empty / error / success.
 - Debounce/throttle hooks must be real effects. `useDebounce` uses
   `useEffect` with `setTimeout` and cleanup via `clearTimeout`; `useState`
@@ -136,6 +143,13 @@ Follow `templates/generated-project/auth/google-sso-clerk-blueprint.md`.
 
 UI requirements:
 - Login screen renders Clerk `<SignIn/>` (Clerk SSO is the only auth mode).
+- The login route is a finished product surface, not a bare provider widget:
+  use the project's semantic tokens, responsive spacing, clear heading/supporting
+  copy, and a deliberate auth container. Center the auth surface by default when
+  that fits the approved design; preserve another documented auth composition.
+- Style Clerk through its supported `appearance` API and local BEM classes. Keep
+  sign-in, sign-up, verification, CAPTCHA, loading, and error states usable; do
+  not replace Clerk behavior with a custom password form.
 - Send `Authorization: Bearer <jwt>` to backend for protected calls.
 - `/api/v1/auth/me` bootstraps user state.
 - `401` → clear local auth state + redirect to login.
@@ -151,5 +165,6 @@ Minimum before publish/completion:
 - auth mode/session state is covered through the same UI path used by the app
 - primary server-backed surface covers loading, error, and success states
 - forms or critical user actions cover expected outcome plus one validation/error case
+- changes to query ownership, caching, lazy UI, or invalidation verify important request counts and session cache eviction
 
 Handoff expands this into deeper role-dependent and critical-flow coverage.

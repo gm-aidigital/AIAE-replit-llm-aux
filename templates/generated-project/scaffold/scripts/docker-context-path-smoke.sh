@@ -69,7 +69,10 @@ done
 
 # ── Prometheus ────────────────────────────────────────────────────────────────
 echo "==> Verifying Prometheus"
-curl -fsS "http://localhost:${BACKEND_PORT}${APP_CONTEXT_PATH}/actuator/prometheus" | grep -q 'jvm_' \
+PROMETHEUS_URL="http://localhost:${BACKEND_PORT}${APP_CONTEXT_PATH}/actuator/prometheus"
+prometheus_metrics="$(curl -fsS "${PROMETHEUS_URL}")" \
+  || fail "Prometheus endpoint is unavailable"
+grep -q 'jvm_' <<<"${prometheus_metrics}" \
   || fail "Prometheus endpoint missing jvm_* metrics"
 echo "    Prometheus OK"
 

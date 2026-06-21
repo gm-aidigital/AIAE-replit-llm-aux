@@ -2,6 +2,9 @@
 
 <one-line summary of the MVP — who uses it, what it does, replaces what>
 
+AI-assisted development workflow: see `AI-DEVELOPMENT-GUIDE.md`. GSD is an
+optional Claude Code workflow and is not initialized automatically by Replit.
+
 ## Owner
 - Product owner: <name / Slack>
 - Tech contact:  <name / Slack>
