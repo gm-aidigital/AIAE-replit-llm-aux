@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Self-contained cache-management module. Owns the GENERIC, app-agnostic
+  multi-node cache-invalidation MECHANISM only: a write publishes a
+  CacheInvalidationEvent to shared storage; every node polls on a fixed
+  delay (ScheduledCacheUpdater) and clears the cache regions registered
+  for the changed class (CacheService + CacheUpdaterService over all
+  CacheManager beans). Idempotent clears make re-observing an event
+  across a poll boundary harmless.
+
+  This module ships NO application wiring. The APPLICATION supplies:
+    - a CacheNamesByClassRegistry impl (which regions each tracked class
+      maps to);
+    - a DB-backed CacheInvalidationEventService (a JPA @Entity + repository
+      + @Service, living in domain/service) so an event written on one
+      node is visible to every other node's poller;
+    - the CacheManager beans whose regions are evictable — including a
+      bridge CacheManager that exposes the Hibernate second-level (L2)
+      cache so L2 regions are reachable by name;
+    - publishUpdateEvent(...) calls in the mutation (*ServiceImpl) services
+      that change tracked entities.
+
+  Database migrations live in the `db` module — NOT here. Liquibase
+  changelogs for the cache-invalidation event table belong in
+  `backend/db/src/main/resources/db/changelog/`, single-sourced with every
+  other migration; this feature module never carries its own changelog.
+
+  Runtime requirement: the application must be annotated with
+  @EnableScheduling, otherwise ScheduledCacheUpdater never polls.
+
+  Removal: drop <module>cache-management</module> from backend/pom.xml,
+  drop the dependency edge from whichever module depends on it, delete the
+  application's registry/event-service/CacheManager-bridge wiring and the
+  publishUpdateEvent(...) calls, and remove the event-table changelog
+  <include> from db.changelog-master.xml.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+                             https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>PACKAGE_REPLACE_ME</groupId>
+        <artifactId>app-parent</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
+    </parent>
+    <artifactId>cache-management</artifactId>
+    <name>Replit MVP — cache-management</name>
+
+    <!-- Self-contained, removable feature. Must NOT depend on any other internal
+         module (domain/service/application). The generic mechanism lives here;
+         the application supplies the registry, event store, and CacheManagers. -->
+    <dependencies>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+        </dependency>
+
+        <!-- Spring cache abstraction (Cache/CacheManager) + @Scheduled polling +
+             slf4j + jakarta.annotation (@PostConstruct), all via the core starter. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter</artifactId>
+        </dependency>
+
+        <!-- Test: JUnit 5 + Mockito + AssertJ + Spring test context. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+</project>

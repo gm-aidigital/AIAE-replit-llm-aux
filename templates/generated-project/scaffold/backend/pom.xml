@@ -41,6 +41,7 @@
         <module>domain</module>
         <module>db</module>
         <module>event-logging-to-db-feature</module>
+        <module>cache-management</module>
         <module>service</module>
         <module>application</module>
     </modules>

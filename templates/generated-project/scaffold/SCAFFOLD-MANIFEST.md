@@ -36,6 +36,7 @@ replace only `PACKAGE_REPLACE_ME` and app placeholders.
 | `backend/.../service/common/error/ValidationMessage.java` | Parameterised error message value object |
 | `backend/.../service/common/error/ValidationParameter.java` | Named error parameter |
 | `backend/.../service/common/error/ValidationMessageType.java` | `{ ERROR, WARN, INFO }` |
+| `backend/cache-management/` | Self-contained, removable backend feature module: the generic, app-agnostic multi-node cache-invalidation mechanism (publish event → poll → clear registered regions). App supplies the `CacheNamesByClassRegistry`, a DB-backed `CacheInvalidationEventService`, the `CacheManager` beans, and `publishUpdateEvent(...)` calls; requires `@EnableScheduling`. No internal-module deps; event-table migrations live in `db`. |
 | `backend/.../cache/CacheConfig.java` | Wires `CacheProperties`, `CacheWarmUpService`, and `@CacheEvict` scheduling when enabled |
 | `backend/.../cache/CacheProperties.java` | `@ConfigurationProperties("app.cache")` for cache warm-up toggle |
 | `backend/.../cache/CacheWarmUpService.java` | Startup warm-up runner for beans implementing `ToWarmUp` |

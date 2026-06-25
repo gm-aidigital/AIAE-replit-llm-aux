@@ -519,6 +519,9 @@ that is manual mapping and belongs in typed service records plus MapStruct
 abstract methods.
 - Business errors as `AppException(ErrorReason.X, ...)` — never per-domain enums.
 - Usage logging: `templates/generated-project/observability/usage-logging-rules.md`.
+- Multi-node cache invalidation: `templates/generated-project/caching/cache-management-rules.md`
+  (generic mechanism in the `cache-management` feature module; the app supplies the registry, the
+  DB-backed event store, the Hibernate-L2 `CacheManager` bridge, and `publishUpdateEvent` calls).
 
 ## JPQL / PostgreSQL query rules (known footguns)
 
