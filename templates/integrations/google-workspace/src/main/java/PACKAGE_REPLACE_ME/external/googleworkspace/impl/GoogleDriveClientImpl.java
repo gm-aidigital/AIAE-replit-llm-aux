@@ -12,8 +12,9 @@ import com.google.auth.oauth2.GoogleCredentials;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.FileInputStream;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -22,7 +23,7 @@ import java.util.stream.Collectors;
  * Production implementation of {@link GoogleDriveClient} backed by the Google
  * Drive v3 API.
  *
- * <p>Credentials are loaded from a service-account JSON key file. Files
+ * <p>Credentials are loaded from a raw service-account JSON string. Files
  * returned by the Drive API must be explicitly shared with the service account
  * (or the service account must be a domain-delegated user if impersonation is
  * configured).
@@ -48,13 +49,13 @@ public class GoogleDriveClientImpl implements GoogleDriveClient {
     /**
      * Constructs the client and authenticates with the given service-account JSON.
      *
-     * @param credentialsLocation path to the service-account JSON key file
+     * @param credentialsJson raw service-account JSON key string
      * @throws GoogleWorkspaceExternalException when initialization fails
      */
-    public GoogleDriveClientImpl(String credentialsLocation) {
+    public GoogleDriveClientImpl(String credentialsJson) {
         try {
             GoogleCredentials credentials = GoogleCredentials
-                .fromStream(new FileInputStream(credentialsLocation))
+                .fromStream(new ByteArrayInputStream(credentialsJson.getBytes(StandardCharsets.UTF_8)))
                 .createScoped(SCOPES);
             this.drive = new Drive.Builder(
                     GoogleNetHttpTransport.newTrustedTransport(),
@@ -64,7 +65,7 @@ public class GoogleDriveClientImpl implements GoogleDriveClient {
                 .build();
         } catch (Exception ex) {
             throw new GoogleWorkspaceExternalException(
-                "Failed to initialize Google Drive client — check credentials file", ex);
+                "Failed to initialize Google Drive client — check credentials JSON", ex);
         }
     }
 

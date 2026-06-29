@@ -83,11 +83,11 @@ class GoogleDocsClientImplTest {
     }
 
     @Test
-    void shouldThrowWhenCredentialsFileNotFoundTest() {
-        // Given: non-existent path
+    void shouldThrowWhenCredentialsJsonInvalidTest() {
+        // Given: invalid JSON
 
         // When / Then:
-        assertThatThrownBy(() -> new GoogleDocsClientImpl("/no/such/file.json"))
+        assertThatThrownBy(() -> new GoogleDocsClientImpl("not-valid-json"))
                 .isInstanceOf(GoogleWorkspaceExternalException.class)
                 .hasMessageContaining("credentials");
     }

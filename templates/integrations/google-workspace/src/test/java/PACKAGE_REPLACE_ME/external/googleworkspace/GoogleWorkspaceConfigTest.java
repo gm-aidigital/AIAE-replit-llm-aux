@@ -48,12 +48,12 @@ class GoogleWorkspaceConfigTest {
         // Given:
         GoogleWorkspaceProperties props = new GoogleWorkspaceProperties();
         props.setDocsEnabled(true);
-        props.setCredentialsLocation("");
+        props.setCredentialsJson("");
 
         // When / Then:
         assertThatThrownBy(() -> config.googleDocsClient(props))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("credentials-location");
+                .hasMessageContaining("credentials-json");
     }
 
     @Test
@@ -61,12 +61,12 @@ class GoogleWorkspaceConfigTest {
         // Given:
         GoogleWorkspaceProperties props = new GoogleWorkspaceProperties();
         props.setDriveEnabled(true);
-        props.setCredentialsLocation("");
+        props.setCredentialsJson("");
 
         // When / Then:
         assertThatThrownBy(() -> config.googleDriveClient(props))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("credentials-location");
+                .hasMessageContaining("credentials-json");
     }
 
     @Test
@@ -74,12 +74,12 @@ class GoogleWorkspaceConfigTest {
         // Given:
         GoogleWorkspaceProperties props = new GoogleWorkspaceProperties();
         props.setSheetsEnabled(true);
-        props.setCredentialsLocation("");
+        props.setCredentialsJson("");
 
         // When / Then:
         assertThatThrownBy(() -> config.googleSheetsClient(props))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("credentials-location");
+                .hasMessageContaining("credentials-json");
     }
 
     @Test
@@ -87,12 +87,12 @@ class GoogleWorkspaceConfigTest {
         // Given:
         GoogleWorkspaceProperties props = new GoogleWorkspaceProperties();
         props.setSlidesEnabled(true);
-        props.setCredentialsLocation("");
+        props.setCredentialsJson("");
 
         // When / Then:
         assertThatThrownBy(() -> config.googleSlidesClient(props))
                 .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("credentials-location");
+                .hasMessageContaining("credentials-json");
     }
 
     @Test
@@ -135,11 +135,11 @@ class GoogleWorkspaceConfigTest {
     }
 
     @Test
-    void shouldNotLeakCredentialPathInFailFastMessageTest() {
+    void shouldNotLeakCredentialJsonInFailFastMessageTest() {
         // Given:
         GoogleWorkspaceProperties props = new GoogleWorkspaceProperties();
         props.setDocsEnabled(true);
-        props.setCredentialsLocation("");
+        props.setCredentialsJson("");
 
         // When / Then:
         try {
@@ -150,11 +150,11 @@ class GoogleWorkspaceConfigTest {
     }
 
     @Test
-    void shouldThrowGoogleWorkspaceExternalExceptionWhenCredentialsFileNotFoundTest() {
+    void shouldThrowGoogleWorkspaceExternalExceptionWhenCredentialsJsonInvalidTest() {
         // Given:
         GoogleWorkspaceProperties props = new GoogleWorkspaceProperties();
         props.setDocsEnabled(true);
-        props.setCredentialsLocation("/nonexistent/path/svc-account.json");
+        props.setCredentialsJson("not-valid-json");
 
         // When / Then:
         assertThatThrownBy(() -> config.googleDocsClient(props))

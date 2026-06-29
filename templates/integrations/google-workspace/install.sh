@@ -80,7 +80,7 @@ bash "${LIB_DIR}/copy-pack-files.sh" \
 
 # ── 5. Add environment variable placeholders ────────────────────────────────
 if [ -f "$ENV_FILE" ]; then
-    bash "${LIB_DIR}/ensure-env-placeholder.sh" "$ENV_FILE" "GOOGLE_WORKSPACE_CREDENTIALS_LOCATION" ""
+    bash "${LIB_DIR}/ensure-env-placeholder.sh" "$ENV_FILE" "GOOGLE_WORKSPACE_CREDENTIALS_JSON" ""
     bash "${LIB_DIR}/ensure-env-placeholder.sh" "$ENV_FILE" "GOOGLE_WORKSPACE_STUB_ENABLED" "false"
     bash "${LIB_DIR}/ensure-env-placeholder.sh" "$ENV_FILE" "GOOGLE_WORKSPACE_DOCS_ENABLED" "false"
     bash "${LIB_DIR}/ensure-env-placeholder.sh" "$ENV_FILE" "GOOGLE_WORKSPACE_DRIVE_ENABLED" "false"
@@ -93,7 +93,7 @@ if [ -f "$APP_YML" ]; then
     GW_STUB="$(mktemp)"
     cat > "${GW_STUB}" << 'YMLEOF'
     google-workspace:
-      credentials-location: ${GOOGLE_WORKSPACE_CREDENTIALS_LOCATION:}
+      credentials-json: ${GOOGLE_WORKSPACE_CREDENTIALS_JSON:}
       stub-enabled: ${GOOGLE_WORKSPACE_STUB_ENABLED:false}
       docs-enabled: ${GOOGLE_WORKSPACE_DOCS_ENABLED:false}
       drive-enabled: ${GOOGLE_WORKSPACE_DRIVE_ENABLED:false}

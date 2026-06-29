@@ -13,8 +13,9 @@ import com.google.auth.oauth2.GoogleCredentials;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.FileInputStream;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.List;
 
@@ -22,9 +23,8 @@ import java.util.List;
  * Production implementation of {@link GoogleDocsClient} backed by the Google
  * Docs v1 API.
  *
- * <p>Credentials are loaded from a service-account JSON file whose path is
- * provided at construction time. The credential file and its contents are
- * never logged.
+ * <p>Credentials are loaded from a raw service-account JSON string provided at
+ * construction time. The credential string is never logged.
  *
  * <p>The Google API quota user is the service account. All calls are
  * synchronous on the calling thread; delegate to a thread pool or
@@ -51,14 +51,14 @@ public class GoogleDocsClientImpl implements GoogleDocsClient {
     /**
      * Constructs the client and authenticates with the given service-account JSON.
      *
-     * @param credentialsLocation absolute or relative path to the service-account JSON key file
+     * @param credentialsJson raw service-account JSON key string
      * @throws GoogleWorkspaceExternalException when credentials cannot be loaded or the
      *         transport cannot be initialized
      */
-    public GoogleDocsClientImpl(String credentialsLocation) {
+    public GoogleDocsClientImpl(String credentialsJson) {
         try {
             GoogleCredentials credentials = GoogleCredentials
-                .fromStream(new FileInputStream(credentialsLocation))
+                .fromStream(new ByteArrayInputStream(credentialsJson.getBytes(StandardCharsets.UTF_8)))
                 .createScoped(SCOPES);
             this.docs = new Docs.Builder(
                     GoogleNetHttpTransport.newTrustedTransport(),
@@ -68,7 +68,7 @@ public class GoogleDocsClientImpl implements GoogleDocsClient {
                 .build();
         } catch (Exception ex) {
             throw new GoogleWorkspaceExternalException(
-                "Failed to initialize Google Docs client — check credentials file", ex);
+                "Failed to initialize Google Docs client — check credentials JSON", ex);
         }
     }
 

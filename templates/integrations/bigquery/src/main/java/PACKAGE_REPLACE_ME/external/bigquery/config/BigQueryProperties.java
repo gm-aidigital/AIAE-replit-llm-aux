@@ -14,14 +14,15 @@ import org.springframework.validation.annotation.Validated;
  *   external:
  *     bigquery:
  *       enabled: ${BIGQUERY_ENABLED:false}
- *       credentials-location: ${BIGQUERY_CREDENTIALS_LOCATION:}
+ *       credentials-json: ${BIGQUERY_CREDENTIALS_JSON:}
  *       project-id: ${BIGQUERY_PROJECT_ID:}
  *       dataset: ${BIGQUERY_DATASET:}
  *       location: ${BIGQUERY_LOCATION:US}
  * </pre>
  *
- * <p>Security: {@code credentialsLocation} must be a file-system path to a
- * mounted service-account JSON file. Never commit credentials JSON.
+ * <p>Security: {@code credentialsJson} must contain the raw service-account JSON
+ * string. Store it in a secret manager / environment variable; never commit
+ * credentials JSON to source control.
  *
  * <p>Usage note: the default analytics sink is the PostgreSQL {@code usage_events}
  * table. BigQuery is an opt-in export sink only.
@@ -32,7 +33,7 @@ public class BigQueryProperties {
 
     private boolean enabled = false;
     private boolean stubEnabled = false;
-    private String credentialsLocation = "";
+    private String credentialsJson = "";
     private String projectId = "";
     private String dataset = "";
     private String location = "US";
@@ -74,21 +75,21 @@ public class BigQueryProperties {
     }
 
     /**
-     * Returns the file-system path to the service-account credentials JSON.
+     * Returns the raw service-account credentials JSON.
      *
-     * @return credentials file path; empty when not configured
+     * @return credentials JSON string; empty when not configured
      */
-    public String getCredentialsLocation() {
-        return credentialsLocation;
+    public String getCredentialsJson() {
+        return credentialsJson;
     }
 
     /**
-     * Sets the file-system path to the service-account credentials JSON.
+     * Sets the raw service-account credentials JSON.
      *
-     * @param credentialsLocation absolute path to the mounted credentials file
+     * @param credentialsJson service-account JSON string
      */
-    public void setCredentialsLocation(String credentialsLocation) {
-        this.credentialsLocation = credentialsLocation;
+    public void setCredentialsJson(String credentialsJson) {
+        this.credentialsJson = credentialsJson;
     }
 
     /**

@@ -21,7 +21,7 @@ class GoogleWorkspacePropertiesTest {
         assertThat(props.isSheetsEnabled()).isFalse();
         assertThat(props.isSlidesEnabled()).isFalse();
         assertThat(props.isStubEnabled()).isFalse();
-        assertThat(props.getCredentialsLocation()).isEmpty();
+        assertThat(props.getCredentialsJson()).isEmpty();
     }
 
     @Test
@@ -82,14 +82,14 @@ class GoogleWorkspacePropertiesTest {
     }
 
     @Test
-    void shouldStoreCredentialsLocationTest() {
+    void shouldStoreCredentialsJsonTest() {
         // Given:
         GoogleWorkspaceProperties props = new GoogleWorkspaceProperties();
 
         // When:
-        props.setCredentialsLocation("/run/secrets/gsa.json");
+        props.setCredentialsJson("{\"type\":\"service_account\"}");
 
         // Then:
-        assertThat(props.getCredentialsLocation()).isEqualTo("/run/secrets/gsa.json");
+        assertThat(props.getCredentialsJson()).isEqualTo("{\"type\":\"service_account\"}");
     }
 }

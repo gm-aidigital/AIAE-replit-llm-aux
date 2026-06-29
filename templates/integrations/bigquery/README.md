@@ -12,7 +12,8 @@ PROJECT_ROOT=/path/to/project bash templates/integrations/bigquery/install.sh
 
 ## Configuration
 
-Mount a service-account JSON and set the required variables:
+Set the required variables. The service-account JSON is read from an environment
+variable as a string; do not mount a file.
 
 ```env
 # Local development without Google credentials:
@@ -21,10 +22,10 @@ BIGQUERY_STUB_ENABLED=true
 BIGQUERY_PROJECT_ID=demo-project
 BIGQUERY_DATASET=analytics
 
-# Production export (requires mounted service-account JSON):
+# Production export (requires service-account JSON string):
 BIGQUERY_ENABLED=true
 BIGQUERY_STUB_ENABLED=false
-BIGQUERY_CREDENTIALS_LOCATION=/run/secrets/bq.json
+BIGQUERY_CREDENTIALS_JSON={"type":"service_account","project_id":"..."}
 BIGQUERY_PROJECT_ID=my-gcp-project
 BIGQUERY_DATASET=analytics
 BIGQUERY_LOCATION=US
@@ -37,9 +38,9 @@ Leave `BIGQUERY_ENABLED=false` (default) to keep usage analytics on PostgreSQL o
 
 ## Security
 
-- Never commit service-account JSON files.
-- Mount credentials via Docker secrets or a volume.
-- Credential file paths are never logged.
+- Never commit service-account JSON.
+- Store `BIGQUERY_CREDENTIALS_JSON` in a secret manager / environment variable.
+- Credential JSON is never logged.
 - The default sink is PostgreSQL — BigQuery is additive only.
 
 ## What is installed

@@ -18,7 +18,7 @@ class BigQueryPropertiesTest {
         // Then:
         assertThat(props.isEnabled()).isFalse();
         assertThat(props.isStubEnabled()).isFalse();
-        assertThat(props.getCredentialsLocation()).isEmpty();
+        assertThat(props.getCredentialsJson()).isEmpty();
         assertThat(props.getProjectId()).isEmpty();
         assertThat(props.getDataset()).isEmpty();
         assertThat(props.getLocation()).isEqualTo("US");
@@ -32,14 +32,14 @@ class BigQueryPropertiesTest {
         // When:
         props.setEnabled(true);
         props.setStubEnabled(false);
-        props.setCredentialsLocation("/run/secrets/bq.json");
+        props.setCredentialsJson("{\"type\":\"service_account\"}");
         props.setProjectId("my-gcp-project");
         props.setDataset("analytics");
         props.setLocation("EU");
 
         // Then:
         assertThat(props.isEnabled()).isTrue();
-        assertThat(props.getCredentialsLocation()).isEqualTo("/run/secrets/bq.json");
+        assertThat(props.getCredentialsJson()).isEqualTo("{\"type\":\"service_account\"}");
         assertThat(props.getProjectId()).isEqualTo("my-gcp-project");
         assertThat(props.getDataset()).isEqualTo("analytics");
         assertThat(props.getLocation()).isEqualTo("EU");

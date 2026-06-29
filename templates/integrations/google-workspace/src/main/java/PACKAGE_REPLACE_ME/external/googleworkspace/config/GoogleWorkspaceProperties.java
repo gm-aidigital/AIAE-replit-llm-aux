@@ -15,7 +15,7 @@ import org.springframework.validation.annotation.Validated;
  * app:
  *   external:
  *     google-workspace:
- *       credentials-location: ${GOOGLE_WORKSPACE_CREDENTIALS_LOCATION:}
+ *       credentials-json: ${GOOGLE_WORKSPACE_CREDENTIALS_JSON:}
  *       stub-enabled: ${GOOGLE_WORKSPACE_STUB_ENABLED:false}
  *       docs-enabled: ${GOOGLE_WORKSPACE_DOCS_ENABLED:false}
  *       drive-enabled: ${GOOGLE_WORKSPACE_DRIVE_ENABLED:false}
@@ -23,14 +23,15 @@ import org.springframework.validation.annotation.Validated;
  *       slides-enabled: ${GOOGLE_WORKSPACE_SLIDES_ENABLED:false}
  * </pre>
  *
- * <p>Security: {@code credentialsLocation} must be a file-system path to a
- * mounted service-account JSON file. Never commit credentials JSON.
+ * <p>Security: {@code credentialsJson} must contain the raw service-account JSON
+ * string. Store it in a secret manager / environment variable; never commit
+ * credentials JSON to source control.
  */
 @ConfigurationProperties(prefix = "app.external.google-workspace")
 @Validated
 public class GoogleWorkspaceProperties {
 
-    private String credentialsLocation = "";
+    private String credentialsJson = "";
     private boolean stubEnabled = false;
     private boolean docsEnabled = false;
     private boolean driveEnabled = false;
@@ -38,21 +39,21 @@ public class GoogleWorkspaceProperties {
     private boolean slidesEnabled = false;
 
     /**
-     * Returns the file-system path to the service-account credentials JSON.
+     * Returns the raw service-account credentials JSON.
      *
-     * @return credentials file path; empty when not configured
+     * @return credentials JSON string; empty when not configured
      */
-    public String getCredentialsLocation() {
-        return credentialsLocation;
+    public String getCredentialsJson() {
+        return credentialsJson;
     }
 
     /**
-     * Sets the file-system path to the service-account credentials JSON.
+     * Sets the raw service-account credentials JSON.
      *
-     * @param credentialsLocation absolute path to the mounted credentials file
+     * @param credentialsJson service-account JSON string
      */
-    public void setCredentialsLocation(String credentialsLocation) {
-        this.credentialsLocation = credentialsLocation;
+    public void setCredentialsJson(String credentialsJson) {
+        this.credentialsJson = credentialsJson;
     }
 
     /**

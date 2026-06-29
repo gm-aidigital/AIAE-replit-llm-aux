@@ -11,10 +11,10 @@ PROJECT_ROOT=/path/to/project bash templates/integrations/google-workspace/insta
 
 ## Configuration
 
-Mount a service-account JSON file and set its path:
+Set the service-account JSON as an environment variable string:
 
 ```env
-GOOGLE_WORKSPACE_CREDENTIALS_LOCATION=/run/secrets/gsa.json
+GOOGLE_WORKSPACE_CREDENTIALS_JSON={"type":"service_account","project_id":"..."}
 GOOGLE_WORKSPACE_DOCS_ENABLED=true
 GOOGLE_WORKSPACE_DRIVE_ENABLED=false
 GOOGLE_WORKSPACE_SHEETS_ENABLED=false
@@ -29,8 +29,8 @@ GOOGLE_WORKSPACE_STUB_ENABLED=true
 
 ## Security
 
-- Never commit service-account JSON files.
-- Mount credentials via Docker secrets or a volume — never bake them into the image.
+- Never commit service-account JSON.
+- Store `GOOGLE_WORKSPACE_CREDENTIALS_JSON` in a secret manager / environment variable; do not mount a file.
 - Credentials are never logged.
 - Add `gsa.json` and similar patterns to `.gitignore` and secret scanning rules.
 
@@ -49,7 +49,7 @@ Each service has a corresponding stub implementation for local development.
 
 The config provides placeholder `buildXxxClient` methods. Replace each
 `UnsupportedOperationException` with a real Google API Client Library
-initialization using `properties.getCredentialsLocation()`.
+initialization using `properties.getCredentialsJson()`.
 
 Add the required Google API dependencies to the `external-services/pom.xml`:
 

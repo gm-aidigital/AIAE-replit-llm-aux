@@ -27,19 +27,19 @@ class BigQueryConfigTest {
     void shouldFailFastWhenCredentialsMissingTest() {
         BigQueryProperties props = new BigQueryProperties();
         props.setEnabled(true);
-        props.setCredentialsLocation("");
+        props.setCredentialsJson("");
         props.setProjectId("my-project");
 
         assertThatThrownBy(() -> config.bigQueryClient(props))
             .isInstanceOf(IllegalStateException.class)
-            .hasMessageContaining("credentials-location");
+            .hasMessageContaining("credentials-json");
     }
 
     @Test
     void shouldFailFastWhenProjectIdMissingTest() {
         BigQueryProperties props = new BigQueryProperties();
         props.setEnabled(true);
-        props.setCredentialsLocation("/run/secrets/bq.json");
+        props.setCredentialsJson("{\"type\":\"service_account\"}");
         props.setProjectId("");
 
         assertThatThrownBy(() -> config.bigQueryClient(props))
@@ -48,22 +48,22 @@ class BigQueryConfigTest {
     }
 
     @Test
-    void shouldNotLeakCredentialPathInFailFastMessageTest() {
+    void shouldNotLeakCredentialJsonInFailFastMessageTest() {
         BigQueryProperties props = new BigQueryProperties();
         props.setEnabled(true);
-        props.setCredentialsLocation("/run/secrets/super-secret-bq.json");
+        props.setCredentialsJson("super-secret-json");
         props.setProjectId("");
 
         assertThatThrownBy(() -> config.bigQueryClient(props))
             .isInstanceOf(IllegalStateException.class)
-            .satisfies(ex -> assertThat(ex.getMessage()).doesNotContain("super-secret-bq.json"));
+            .satisfies(ex -> assertThat(ex.getMessage()).doesNotContain("super-secret-json"));
     }
 
     @Test
     void shouldCreateProductionClientWhenConfiguredTest() {
         BigQueryProperties props = new BigQueryProperties();
         props.setEnabled(true);
-        props.setCredentialsLocation("/run/secrets/bq.json");
+        props.setCredentialsJson("{\"type\":\"service_account\"}");
         props.setProjectId("my-project");
         props.setDataset("analytics");
 

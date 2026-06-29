@@ -12,8 +12,9 @@ import com.google.auth.oauth2.GoogleCredentials;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.FileInputStream;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.List;
 
@@ -42,13 +43,13 @@ public class GoogleSlidesClientImpl implements GoogleSlidesClient {
     /**
      * Constructs the client and authenticates with the given service-account JSON.
      *
-     * @param credentialsLocation path to the service-account JSON key file
+     * @param credentialsJson raw service-account JSON key string
      * @throws GoogleWorkspaceExternalException when initialization fails
      */
-    public GoogleSlidesClientImpl(String credentialsLocation) {
+    public GoogleSlidesClientImpl(String credentialsJson) {
         try {
             GoogleCredentials credentials = GoogleCredentials
-                .fromStream(new FileInputStream(credentialsLocation))
+                .fromStream(new ByteArrayInputStream(credentialsJson.getBytes(StandardCharsets.UTF_8)))
                 .createScoped(SCOPES);
             this.slides = new Slides.Builder(
                     GoogleNetHttpTransport.newTrustedTransport(),
@@ -58,7 +59,7 @@ public class GoogleSlidesClientImpl implements GoogleSlidesClient {
                 .build();
         } catch (Exception ex) {
             throw new GoogleWorkspaceExternalException(
-                "Failed to initialize Google Slides client — check credentials file", ex);
+                "Failed to initialize Google Slides client — check credentials JSON", ex);
         }
     }
 

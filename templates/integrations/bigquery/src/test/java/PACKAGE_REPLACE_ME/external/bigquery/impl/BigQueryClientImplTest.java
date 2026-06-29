@@ -43,7 +43,7 @@ class BigQueryClientImplTest {
         properties = new BigQueryProperties();
         properties.setProjectId("test-project");
         properties.setDataset("test-dataset");
-        properties.setCredentialsLocation("/fake/creds.json");
+        properties.setCredentialsJson("{\"type\":\"service_account\"}");
 
         client = new BigQueryClientImpl(properties, bigQuery);
     }

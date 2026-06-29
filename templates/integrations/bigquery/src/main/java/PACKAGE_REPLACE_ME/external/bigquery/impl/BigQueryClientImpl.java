@@ -12,17 +12,18 @@ import com.google.cloud.bigquery.TableId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.FileInputStream;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 
 /**
  * Production implementation of {@link BigQueryClient} backed by the
  * {@code com.google.cloud:google-cloud-bigquery} SDK.
  *
- * <p>A service-account JSON key is loaded once at construction from the path
- * given in {@link BigQueryProperties#getCredentialsLocation()}. The credential
- * file path is never logged; its contents are never logged.
+ * <p>A service-account JSON key is loaded once at construction from the raw
+ * JSON string in {@link BigQueryProperties#getCredentialsJson()}. The credential
+ * string is never logged.
  *
  * <p>Rows are inserted via the BigQuery Storage Write API's streaming-insert
  * path ({@link BigQuery#insertAll}). For high-volume ingestion consider
@@ -45,7 +46,7 @@ public class BigQueryClientImpl implements BigQueryClient {
     /**
      * Package-private constructor for unit testing — accepts a pre-built BigQuery service.
      *
-     * @param properties BigQuery configuration (project ID, dataset, credentials path)
+     * @param properties BigQuery configuration (project ID, dataset, credentials JSON)
      * @param bigQuery   pre-built BigQuery SDK service instance
      */
     BigQueryClientImpl(BigQueryProperties properties, com.google.cloud.bigquery.BigQuery bigQuery) {
@@ -56,7 +57,7 @@ public class BigQueryClientImpl implements BigQueryClient {
     /**
      * Constructs the client and authenticates using the configured service-account JSON.
      *
-     * @param properties BigQuery configuration (project ID, dataset, credentials path)
+     * @param properties BigQuery configuration (project ID, dataset, credentials JSON)
      * @throws BigQueryExternalException when credentials cannot be loaded
      */
     public BigQueryClientImpl(BigQueryProperties properties) {
@@ -65,7 +66,7 @@ public class BigQueryClientImpl implements BigQueryClient {
                 properties.getProjectId(), properties.getDataset());
         try {
             GoogleCredentials credentials = GoogleCredentials
-                .fromStream(new FileInputStream(properties.getCredentialsLocation()))
+                .fromStream(new ByteArrayInputStream(properties.getCredentialsJson().getBytes(StandardCharsets.UTF_8)))
                 .createScoped("https://www.googleapis.com/auth/bigquery.insertdata");
             this.bigQuery = BigQueryOptions.newBuilder()
                 .setProjectId(properties.getProjectId())
@@ -74,7 +75,7 @@ public class BigQueryClientImpl implements BigQueryClient {
                 .getService();
         } catch (IOException ex) {
             throw new BigQueryExternalException(
-                "Failed to load BigQuery credentials — check BIGQUERY_CREDENTIALS_LOCATION", ex);
+                "Failed to load BigQuery credentials — check BIGQUERY_CREDENTIALS_JSON", ex);
         }
     }
 

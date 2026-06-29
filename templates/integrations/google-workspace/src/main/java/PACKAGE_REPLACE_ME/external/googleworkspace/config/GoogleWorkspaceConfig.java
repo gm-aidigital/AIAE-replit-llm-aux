@@ -41,7 +41,7 @@ public class GoogleWorkspaceConfig {
             return null;
         }
         assertCredentialsPresent(properties, "docs-enabled");
-        return new GoogleDocsClientImpl(properties.getCredentialsLocation());
+        return new GoogleDocsClientImpl(properties.getCredentialsJson());
     }
 
     /**
@@ -61,7 +61,7 @@ public class GoogleWorkspaceConfig {
             return null;
         }
         assertCredentialsPresent(properties, "drive-enabled");
-        return new GoogleDriveClientImpl(properties.getCredentialsLocation());
+        return new GoogleDriveClientImpl(properties.getCredentialsJson());
     }
 
     /**
@@ -81,7 +81,7 @@ public class GoogleWorkspaceConfig {
             return null;
         }
         assertCredentialsPresent(properties, "sheets-enabled");
-        return new GoogleSheetsClientImpl(properties.getCredentialsLocation());
+        return new GoogleSheetsClientImpl(properties.getCredentialsJson());
     }
 
     /**
@@ -101,7 +101,7 @@ public class GoogleWorkspaceConfig {
             return null;
         }
         assertCredentialsPresent(properties, "slides-enabled");
-        return new GoogleSlidesClientImpl(properties.getCredentialsLocation());
+        return new GoogleSlidesClientImpl(properties.getCredentialsJson());
     }
 
     /**
@@ -111,11 +111,11 @@ public class GoogleWorkspaceConfig {
      * @param enabledFlag property flag that triggered production client creation
      */
     private void assertCredentialsPresent(GoogleWorkspaceProperties props, String enabledFlag) {
-        if (props.getCredentialsLocation() == null || props.getCredentialsLocation().isBlank()) {
+        if (props.getCredentialsJson() == null || props.getCredentialsJson().isBlank()) {
             throw new IllegalStateException(
-                "app.external.google-workspace.credentials-location must be set when "
+                "app.external.google-workspace.credentials-json must be set when "
                     + enabledFlag + " is true. "
-                    + "Set GOOGLE_WORKSPACE_CREDENTIALS_LOCATION to a mounted service-account JSON path.");
+                    + "Set GOOGLE_WORKSPACE_CREDENTIALS_JSON to the service-account JSON string.");
         }
     }
 }

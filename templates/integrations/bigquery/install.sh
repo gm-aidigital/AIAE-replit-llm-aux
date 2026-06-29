@@ -50,7 +50,7 @@ bash "${LIB_DIR}/copy-pack-files.sh" \
 if [ -f "$ENV_FILE" ]; then
     bash "${LIB_DIR}/ensure-env-placeholder.sh" "$ENV_FILE" "BIGQUERY_ENABLED" "false"
     bash "${LIB_DIR}/ensure-env-placeholder.sh" "$ENV_FILE" "BIGQUERY_STUB_ENABLED" "false"
-    bash "${LIB_DIR}/ensure-env-placeholder.sh" "$ENV_FILE" "BIGQUERY_CREDENTIALS_LOCATION" ""
+    bash "${LIB_DIR}/ensure-env-placeholder.sh" "$ENV_FILE" "BIGQUERY_CREDENTIALS_JSON" ""
     bash "${LIB_DIR}/ensure-env-placeholder.sh" "$ENV_FILE" "BIGQUERY_PROJECT_ID" ""
     bash "${LIB_DIR}/ensure-env-placeholder.sh" "$ENV_FILE" "BIGQUERY_DATASET" ""
     bash "${LIB_DIR}/ensure-env-placeholder.sh" "$ENV_FILE" "BIGQUERY_LOCATION" "US"
@@ -63,7 +63,7 @@ if [ -f "$APP_YML" ]; then
     bigquery:
       enabled: ${BIGQUERY_ENABLED:false}
       stub-enabled: ${BIGQUERY_STUB_ENABLED:false}
-      credentials-location: ${BIGQUERY_CREDENTIALS_LOCATION:}
+      credentials-json: ${BIGQUERY_CREDENTIALS_JSON:}
       project-id: ${BIGQUERY_PROJECT_ID:}
       dataset: ${BIGQUERY_DATASET:}
       location: ${BIGQUERY_LOCATION:US}

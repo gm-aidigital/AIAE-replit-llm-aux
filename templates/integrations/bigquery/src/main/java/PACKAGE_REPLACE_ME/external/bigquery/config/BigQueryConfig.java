@@ -42,11 +42,11 @@ public class BigQueryConfig {
     @ConditionalOnExpression(
         "${app.external.bigquery.enabled:false} && !${app.external.bigquery.stub-enabled:false}")
     public BigQueryClient bigQueryClient(BigQueryProperties properties) {
-        if (properties.getCredentialsLocation() == null
-                || properties.getCredentialsLocation().isBlank()) {
+        if (properties.getCredentialsJson() == null
+                || properties.getCredentialsJson().isBlank()) {
             throw new IllegalStateException(
-                    "app.external.bigquery.credentials-location must be set when BigQuery is enabled. "
-                            + "Mount a service-account JSON file and set BIGQUERY_CREDENTIALS_LOCATION, "
+                    "app.external.bigquery.credentials-json must be set when BigQuery is enabled. "
+                            + "Set BIGQUERY_CREDENTIALS_JSON to the service-account JSON string, "
                             + "or enable app.external.bigquery.stub-enabled for local development.");
         }
         if (properties.getProjectId() == null || properties.getProjectId().isBlank()) {
