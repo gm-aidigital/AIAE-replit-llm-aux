@@ -1,6 +1,6 @@
-import { defineConfig, loadEnv } from "vite";
-import react from "@vitejs/plugin-react";
 import { fileURLToPath, URL } from "node:url";
+import react from "@vitejs/plugin-react";
+import { defineConfig, loadEnv } from "vite";
 
 // Replit-tuned Vite config. Hard rules:
 //  - Vite stays on 5173 (backend owns 5000 → externalPort 80).

@@ -440,8 +440,24 @@ mkdir -p "${STRUCTURE_WORK}/backend/application/src/main/java/com/aidigital/demo
   "${STRUCTURE_WORK}/backend/application/src/main/java/com/aidigital/demo/web" \
   "${STRUCTURE_WORK}/backend/service/src/main/java/com/aidigital/demo/service/mappers/lesson"
 cat > "${STRUCTURE_WORK}/backend/pom.xml" <<'EOF'
-<project><groupId>com.aidigital.demo</groupId></project>
+<project>
+  <groupId>com.aidigital.demo</groupId>
+  <packaging>pom</packaging>
+  <modules>
+    <module>application</module>
+    <module>service</module>
+    <module>domain</module>
+    <module>db</module>
+    <module>event-logging-to-db-feature</module>
+  </modules>
+</project>
 EOF
+for m in application service domain db event-logging-to-db-feature; do
+  mkdir -p "${STRUCTURE_WORK}/backend/${m}/src/main/java"
+  cat > "${STRUCTURE_WORK}/backend/${m}/pom.xml" <<EOF
+<project><artifactId>${m}</artifactId></project>
+EOF
+done
 cat > "${STRUCTURE_WORK}/backend/application/src/main/java/com/aidigital/demo/web/SpaFallbackController.java" <<'EOF'
 package com.aidigital.demo.web;
 public class SpaFallbackController {}

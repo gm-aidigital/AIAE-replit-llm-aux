@@ -109,6 +109,12 @@ for file in .env.example .gitignore docker-compose.yml .replit replit.nix; do
   fi
 done
 
+if [ -d "${SCAFFOLD}/.husky" ]; then
+  mkdir -p "${DEST}/.husky"
+  rsync -a "${SCAFFOLD}/.husky/" "${DEST}/.husky/"
+  chmod +x "${DEST}/.husky/"* 2>/dev/null || true
+fi
+
 if [ -f "${SCAFFOLD}/README.md.template" ] && [ ! -f "${DEST}/README.md" ]; then
   cp "${SCAFFOLD}/README.md.template" "${DEST}/README.md"
 fi

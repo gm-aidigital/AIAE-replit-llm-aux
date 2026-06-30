@@ -22,7 +22,7 @@ mvn -f backend/pom.xml -B -Dgit-commit-id.skip=true \
   -Djacoco.line.coverage=0.00 -Djacoco.branch.coverage=0.00 \
   clean verify
 
-echo "==> Frontend test + build"
+echo "==> Frontend lint + test + build"
 NPM_BIN="$(pwd)/backend/application/target/frontend-toolchain/node/npm"
 if [ -x "${NPM_BIN}" ]; then
   export PATH="$(dirname "${NPM_BIN}"):${PATH}"
@@ -31,6 +31,7 @@ else
 fi
 ( cd frontend && \
   { [ -f package-lock.json ] && "${NPM_BIN}" ci --no-audit --no-fund || "${NPM_BIN}" install --no-audit --no-fund; } && \
+  "${NPM_BIN}" run lint && \
   "${NPM_BIN}" test && "${NPM_BIN}" run build )
 
 echo "==> ci-verify-scaffold: passed"

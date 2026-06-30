@@ -1,12 +1,10 @@
 import { UserButton } from "@clerk/clerk-react";
+
+import type { AppHeaderProps } from "./model/types";
 import "./app-shell.css";
 
-interface Props {
-    appName: string;
-}
-
 /** Top app header — Elevate layout (no left sidebar). */
-export function AppHeader({ appName }: Props) {
+export function AppHeader({ appName }: AppHeaderProps) {
     return (
         <header className="app-header">
             <span className="app-header__brand">{appName}</span>

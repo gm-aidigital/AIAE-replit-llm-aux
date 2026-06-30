@@ -15,6 +15,7 @@ replace only `PACKAGE_REPLACE_ME` and app placeholders.
 | `docker-compose.yml` | `--profile local`, port 8080, Postgres health-check |
 | `.env.example` | Full `AUTH_*`, `USAGE_LOG_*`, `CLERK_*`, `VITE_*` placeholders |
 | `.gitignore` | Excludes control plane (`.agents/`, `templates/`, etc.) |
+| `.husky/pre-commit` | Root Git hook installed by `frontend` prepare script; runs `npm --prefix frontend run lint` |
 | `CLAUDE.md`, `.claude/` | Materialized shared engineering rules and focused skills; GSD runtime remains opt-in |
 | `AI-DEVELOPMENT-GUIDE.md` | Visible decision guide for focused skills vs optional GSD |
 
@@ -49,7 +50,8 @@ replace only `PACKAGE_REPLACE_ME` and app placeholders.
 | File | Notes |
 |---|---|
 | `vite.config.ts` | `allowedHosts`, `@/` alias, port 5173, static outDir |
-| `package.json` | `generate:api`, `check:api`, `test` |
+| `package.json` | `generate:api`, `check:api`, `test`, `lint`, Husky `prepare` |
+| `eslint.config.js`, `eslint-rules/import-section-order.mjs` | ESLint rules for import sections, `.tsx` model extraction, and top-level static constants |
 | `src/main.tsx` | Mounts `app/AppRoot` only — no ClerkProvider here |
 | `src/app/AppRoot.tsx` | Router + AuthProvider + ProtectedRoute |
 | `src/app/AppShell.tsx` | Top-header layout (no sidebar) |

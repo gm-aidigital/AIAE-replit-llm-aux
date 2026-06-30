@@ -52,6 +52,31 @@ fail() {
 
 echo "==> structure-lint root=${ROOT} scaffold_mode=${SCAFFOLD_MODE}"
 
+# --- Canonical backend scaffold shape ---
+[ ! -d backend/src/main/java ] \
+  || fail "backend/src/main/java is forbidden — use backend/application, backend/service, backend/domain, and backend/db modules"
+
+[ ! -d backend/src/main/resources ] \
+  || fail "backend/src/main/resources is forbidden — module resources belong under backend/application/src/main/resources or backend/db/src/main/resources"
+
+[ ! -f Dockerfile ] \
+  || fail "root Dockerfile is forbidden — use backend/Dockerfile and frontend/Dockerfile"
+
+[ -f backend/pom.xml ] \
+  || fail "backend/pom.xml missing — copy canonical backend scaffold"
+
+grep -q '<packaging>pom</packaging>' backend/pom.xml \
+  || fail "backend/pom.xml must be a Maven parent POM with <packaging>pom</packaging>"
+
+for module in application service domain db event-logging-to-db-feature; do
+  [ -d "backend/${module}" ] \
+    || fail "backend/${module}/ missing — copy canonical backend scaffold"
+  [ -f "backend/${module}/pom.xml" ] \
+    || fail "backend/${module}/pom.xml missing — copy canonical backend scaffold"
+  grep -q "<module>${module}</module>" backend/pom.xml \
+    || fail "backend/pom.xml must list required module: ${module}"
+done
+
 # --- Package namespace (generated apps only) ---
 if [ "${SCAFFOLD_MODE}" -eq 0 ] && [ -f backend/pom.xml ]; then
   group_id="$(sed -n 's:.*<groupId>\(.*\)</groupId>.*:\1:p' backend/pom.xml | head -n 1)"

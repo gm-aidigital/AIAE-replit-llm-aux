@@ -27,3 +27,7 @@ paths:
   no explicit navigation decision, follow the installed design guidance.
 - Use plain CSS with BEM naming. Do not introduce CSS Modules, Tailwind, styled-components, Emotion, or CSS-in-JS.
 - Use semantic CSS variables/tokens for colors and spacing instead of new hardcoded color literals.
+- Interfaces and types belong in a `model/` directory, not in component files. Extract any shared or domain `interface`/`type` into a dedicated `.ts` file under `model/` next to the feature; component `.tsx` files import types, they do not declare exported interfaces.
+- Static constants belong in a `constants/` directory, not in component files. Move any runtime-independent constant (magic values, enum-like mappings, column maps, storage keys, config keys) into a `.ts` file under `constants/`; components import constants, they do not inline them.
+- Order imports in three groups separated by blank lines: (1) React, (2) third-party libraries, (3) project imports. The scaffold's local ESLint rule `project-rules/import-section-order` enforces this and fails the build on violations.
+- Component `.tsx` files must not declare inline `interface` or `type` aliases, and must not keep top-level static `const` declarations. Move types to `model/*.ts`, static values to `constants/*.ts`, and use function declarations for components.

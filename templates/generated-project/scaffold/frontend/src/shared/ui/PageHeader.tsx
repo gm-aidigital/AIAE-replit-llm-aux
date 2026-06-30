@@ -1,14 +1,8 @@
-import { ReactNode } from "react";
+import type { PageHeaderProps } from "./model/types";
 import "./app-shell.css";
 
-interface Props {
-    title: string;
-    subtitle?: string;
-    actions?: ReactNode;
-}
-
 /** Page-level title row — one primary action slot on the right. */
-export function PageHeader({ title, subtitle, actions }: Props) {
+export function PageHeader({ title, subtitle, actions }: PageHeaderProps) {
     return (
         <div className="page-header">
             <div className="page-header__text">

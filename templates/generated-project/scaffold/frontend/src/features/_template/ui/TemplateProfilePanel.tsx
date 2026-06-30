@@ -1,6 +1,6 @@
-import { LoadingBlock } from "@/shared/ui/LoadingBlock";
-import { ErrorAlert } from "@/shared/ui/ErrorAlert";
 import { EmptyState } from "@/shared/ui/EmptyState";
+import { ErrorAlert } from "@/shared/ui/ErrorAlert";
+import { LoadingBlock } from "@/shared/ui/LoadingBlock";
 import { useAuthMeQuery } from "../api/useAuthMeQuery";
 import { useRefreshSessionMutation } from "../api/useRefreshSessionMutation";
 import "./template-profile.css";

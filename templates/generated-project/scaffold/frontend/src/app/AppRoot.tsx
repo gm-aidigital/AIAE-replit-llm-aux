@@ -1,15 +1,12 @@
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
+
+import { QueryClientProvider } from "@tanstack/react-query";
+
 import App from "../App";
+import { queryClient } from "./constants/query-client";
 import Login from "../pages/Login";
 import { AuthProvider } from "../shared/auth/AuthProvider";
 import { ProtectedRoute } from "../shared/auth/ProtectedRoute";
-
-const queryClient = new QueryClient({
-    defaultOptions: {
-        queries: { staleTime: 30_000, refetchOnWindowFocus: false },
-    },
-});
 
 /** Router + providers — main.tsx mounts only this component. */
 export function AppRoot() {

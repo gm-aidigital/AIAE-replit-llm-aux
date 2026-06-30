@@ -205,6 +205,8 @@ jobs:
             "templates/generated-project/scaffold/frontend/vite.config.ts"
             "templates/generated-project/scaffold/frontend/tsconfig.json"
             "templates/generated-project/scaffold/frontend/index.html"
+            "templates/generated-project/scaffold/frontend/eslint.config.js"
+            "templates/generated-project/scaffold/frontend/eslint-rules/import-section-order.mjs"
             "templates/generated-project/scaffold/frontend/src/main.tsx"
             "templates/generated-project/scaffold/frontend/src/app/AppRoot.tsx"
             "templates/generated-project/scaffold/frontend/src/app/AppShell.tsx"

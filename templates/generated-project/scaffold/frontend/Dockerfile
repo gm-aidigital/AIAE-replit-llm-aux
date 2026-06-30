@@ -8,6 +8,7 @@ ARG VITE_CLERK_PUBLISHABLE_KEY
 ENV VITE_CLERK_PUBLISHABLE_KEY=${VITE_CLERK_PUBLISHABLE_KEY}
 ENV VITE_CLERK_JWT_TEMPLATE=aidigital-api
 COPY frontend/package*.json ./
+COPY frontend/scripts/prepare-husky.mjs ./scripts/prepare-husky.mjs
 RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 COPY frontend/ ./
 COPY backend/application/src/main/resources/api/v1/specs/openapi.yaml \

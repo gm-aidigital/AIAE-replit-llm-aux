@@ -80,6 +80,39 @@ src/entities     src/shared/api   src/shared/auth
 src/shared/ui    src/shared/lib   src/shared/config
 ```
 
+Each feature/block directory may contain a `model/` subdirectory for TypeScript
+interfaces and types, and a `constants/` subdirectory for static constants (see
+“Code organization” below).
+
+## Code organization
+
+- **Interfaces and types live in `model/`.** Any `interface` or `type` alias
+  that is shared across two or more files, or that represents a domain/model
+  contract, MUST be extracted from its component file into a dedicated `.ts`
+  file under a `model/` directory next to the feature (e.g.
+  `src/features/<block>/model/types.ts`). Component `.tsx` files must not
+  declare exported interfaces — they import them from `model/`.
+- **Static constants live in `constants/`.** Any constant whose value does not
+  depend on runtime input (magic strings/numbers, enum-like mappings, config
+  keys, column maps, storage keys) MUST be moved out of component files into a
+  dedicated `.ts` file under a `constants/` directory (e.g.
+  `src/features/<block>/constants.ts` or `src/shared/constants/...`). Components
+  import constants; they do not inline them.
+- **Imports are grouped by section, enforced by ESLint.** Every source file
+  orders imports in exactly three groups, separated by a blank line:
+  1. **React** — `react`, `react-dom`, `react-router-dom`, hooks from React.
+  2. **Third-party libraries** — everything in `node_modules` that is not React
+     (e.g. `@tanstack/react-query`, `@clerk/clerk-react`, `openapi-fetch`).
+  3. **Project imports** — relative or `@/*` imports from `src/`.
+  The scaffold ships `eslint.config.js` plus the local
+  `eslint-rules/import-section-order.mjs` rule because project imports must be
+  one visual block whether they use `@/*`, `../`, `./`, or CSS side-effect
+  imports. `npm run lint` fails on section-order violations.
+- **Component files are lint-gated.** `src/**/*.tsx` must not declare
+  `interface` or `type` aliases inline; move them to `model/*.ts`. Top-level
+  `const` declarations in `.tsx` are rejected so static values move to
+  `constants/*.ts`; use function declarations for components.
+
 ## OpenAPI client generation
 
 Source: `../backend/application/src/main/resources/api/v1/specs/openapi.yaml`

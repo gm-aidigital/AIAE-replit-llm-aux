@@ -23,7 +23,7 @@ echo "==> Backend: mvn clean verify"
 mvn -f backend/pom.xml -B clean verify
 
 if [ -f frontend/package.json ]; then
-  echo "==> Frontend: npm test + build"
+  echo "==> Frontend: lint + test + build"
   NPM_BIN="$(pwd)/backend/application/target/frontend-toolchain/node/npm"
   if [ -x "${NPM_BIN}" ]; then
     export PATH="$(dirname "${NPM_BIN}"):${PATH}"
@@ -32,6 +32,7 @@ if [ -f frontend/package.json ]; then
   fi
   ( cd frontend && \
     { [ -f package-lock.json ] && "${NPM_BIN}" ci --no-audit --no-fund || "${NPM_BIN}" install --no-audit --no-fund; } && \
+    "${NPM_BIN}" run lint && \
     "${NPM_BIN}" test && "${NPM_BIN}" run build )
 fi
 

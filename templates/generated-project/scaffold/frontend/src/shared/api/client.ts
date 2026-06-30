@@ -1,6 +1,7 @@
 import createClient from "openapi-fetch";
-import type { paths } from "./generated/schema";
+
 import { runtimeConfig } from "../config/runtime";
+import type { paths } from "./generated/schema";
 
 // Auth-aware typed client. The Authorization header is added by middleware
 // using the Bearer token from Clerk (useAuth().getToken(), bridged into

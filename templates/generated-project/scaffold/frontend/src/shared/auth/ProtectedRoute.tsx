@@ -1,14 +1,12 @@
-import { ReactNode } from "react";
 import { Navigate } from "react-router-dom";
+
 import { useAuth } from "@clerk/clerk-react";
+
+import type { ProtectedRouteProps } from "./model/types";
 import { LoadingBlock } from "../ui/LoadingBlock";
 
-interface Props {
-    children: ReactNode;
-}
-
 /** Redirects unauthenticated users to {@code /login}; shows a loading state while Clerk boots. */
-export function ProtectedRoute({ children }: Props) {
+export function ProtectedRoute({ children }: ProtectedRouteProps) {
     const { isLoaded, isSignedIn } = useAuth();
 
     if (!isLoaded) {

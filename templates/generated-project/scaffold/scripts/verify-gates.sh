@@ -84,6 +84,17 @@ fi
 if [ -f frontend/package.json ]; then
   grep -Eq '"vitest"[[:space:]]*:[[:space:]]*"\^3\.2\.6"' frontend/package.json \
     || fail "frontend/package.json must pin firewall-approved vitest ^3.2.6"
+  grep -Eq '"lint"[[:space:]]*:[[:space:]]*"eslint[[:space:]]*\.?' frontend/package.json \
+    || fail "frontend/package.json must define a \"lint\" script running eslint"
+fi
+
+if [ -f frontend/eslint.config.js ]; then
+  grep -q 'import-section-order' frontend/eslint.config.js \
+    || fail "frontend/eslint.config.js must enforce project-rules/import-section-order"
+else
+  if [ -f frontend/package.json ]; then
+    fail "frontend/eslint.config.js is required (flat config) when package.json exists"
+  fi
 fi
 
 if [ -f frontend/src/shared/api/client.ts ]; then
