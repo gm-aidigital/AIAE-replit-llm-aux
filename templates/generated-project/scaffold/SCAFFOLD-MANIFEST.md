@@ -66,12 +66,14 @@ replace only `PACKAGE_REPLACE_ME` and app placeholders.
 | Script | Role |
 |---|---|
 | `setup-project.sh` | onBoot: safe cleanup (no materialization without package name); prints next-step command |
+| `replit-env.sh` | Shared Replit env normalization for dev workflow, build, and deployment |
 | `apply-package-name.sh` | Package rename |
 | `strip-scaffold-samples.sh` | Remove reference sample aggregate |
 | `structure-lint.sh` | Architecture grep gate (`--scaffold` for template source) |
 | `verify-gates.sh` | Shared runtime/publish grep gate (CI + local-verify) |
 | `scripts/lib/check-openapi-strict-schemas.sh` | Rejects loose OpenAPI DTO schemas and generated unknown index signatures |
 | `scripts/lib/check-openapi-documentation.sh` | Requires descriptions on OpenAPI operations, schemas, fields, parameters, and request bodies |
+| `scripts/lib/check-liquibase-preconditions.sh` | Requires direct `preConditions` on every Liquibase `changeSet` |
 | `scripts/lib/check-service-contract-quality.sh` | Rejects undocumented service contracts and oversized ServiceImpl classes |
 | `local-verify.sh` | Pre-push: lint + gates + mvn verify + frontend test/build |
 | `ci-verify-scaffold.sh` | Template CI: materialize → strip samples → full verify |

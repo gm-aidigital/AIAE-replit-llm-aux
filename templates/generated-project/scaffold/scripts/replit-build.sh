@@ -15,6 +15,10 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."   # works from root/scripts and scaffold/scripts
 
+if [ -f scripts/replit-env.sh ]; then
+  . scripts/replit-env.sh
+fi
+
 if [ -f scripts/structure-lint.sh ]; then
   bash scripts/structure-lint.sh
 fi

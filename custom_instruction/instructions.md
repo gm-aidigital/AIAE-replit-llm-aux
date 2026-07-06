@@ -25,6 +25,16 @@ Ambiguous → stay on Java + Spring + React.
 **Why**: engineering only accepts Java/Spring/Postgres. Switching stacks
 voids the handoff path.
 
+## PROJECT SHAPE DECISION
+
+Read `templates/generated-project/generation/project-shape-decision.md` before
+deciding frontend-only vs full-stack.
+
+Default to full-stack. Frontend-only is allowed only for an explicitly static
+front-end/mockup/prototype with no auth, persistence, usage logging, analytics,
+backend API, secrets, multi-user state, or action review. If any backend trigger
+is present, use `frontend/` + Java `backend/`.
+
 **Clerk on Replit**: Clerk's "auto-mounted Express middleware" is Node-only.
 Our Spring backend validates JWTs via `spring-boot-starter-oauth2-resource-server`
 against Clerk JWKS — no Express.
@@ -155,6 +165,11 @@ Replit datasource env wiring: see
   size limits in `service-helper-extraction-policy.md`; extract validators,
   policies, assemblers, workflows, or helper services instead of adding
   private-method piles.
+- BigQuery-backed search/list flows must follow
+  `templates/generated-project/integrations/bigquery-query-rules.md`: SDK
+  client in `external-services`, whitelisted SQL builder in `service`, one
+  configured builder for data + count queries, and no user-controlled SQL
+  fragments.
 - OpenAPI is a user-facing contract: every operation, schema, enum, parameter,
   request body, response, and schema property must carry meaningful
   `description` text.
@@ -224,7 +239,10 @@ Each topic has one canonical file. Read before generating; never duplicate.
 | Usage logging | `templates/generated-project/observability/usage-logging-rules.md` |
 | HTTP request/response logging | `templates/generated-project/observability/logbook-http-logging-rules.md` |
 | Error handling | `templates/generated-project/errors/error-handling-pattern.md` |
+| BigQuery query construction | `templates/generated-project/integrations/bigquery-query-rules.md` |
 | Token-efficient generation | `templates/generated-project/generation/token-efficient-generation-rules.md` |
+| Project shape decision | `templates/generated-project/generation/project-shape-decision.md` |
+| HTML-only project migration | `templates/generated-project/generation/html-only-project-migration.md` |
 | First aggregate checklist | `templates/generated-project/generation/first-aggregate-checklist.md` |
 | Scaffold manifest | `templates/generated-project/scaffold/SCAFFOLD-MANIFEST.md` |
 | Testing policy (phased) | `templates/generated-project/testing/testing-policy.md` |
@@ -255,6 +273,12 @@ PostgreSQL is required whenever there is any JPA entity, repository,
 Liquibase changelog, audit state, or persisted user/upload data. Liquibase
 changelog skeleton must exist before any JPA entity is added.
 
+Every Liquibase `changeSet` must include direct `preConditions`. Use
+`onFail="MARK_RAN"` with existence checks for idempotent create-table/create-index
+style changes. Generated projects run `scripts/lib/check-liquibase-preconditions.sh`
+from `scripts/verify-gates.sh`; a changelog without `preConditions` is a failed
+publish gate.
+
 ### No `CREATE TYPE … AS ENUM`
 
 Dictionary / lookup data (statuses, roles, kinds, categories) → dedicated
@@ -272,6 +296,22 @@ tables also carry localised labels + lifecycle flags.
 ## Usage logging policy
 
 See `templates/generated-project/observability/usage-logging-rules.md`.
+
+When a project logs UI actions explicitly by calling `POST /api/v1/usage-events`,
+set `app.usage-logging.enabled: false` (or default
+`USAGE_LOGGING_ENABLED=false`) so the AOP/service auto-logger does not write
+duplicate rows for the same action. The explicit endpoint should write through
+the usage event sink directly.
+
+## HTML-only source project policy
+
+If the source is only HTML/CSS/JS and the user asks for usage logging,
+analytics, review of user actions, persistence, auth, or multi-user visibility,
+do not keep it static-only. Follow
+`templates/generated-project/generation/html-only-project-migration.md`: migrate
+the UI into `frontend/`, add the fixed Java backend in `backend/`, persist
+sanitized usage events to PostgreSQL, and publish as one Spring Boot-hosted
+Replit app.
 
 ## Logging policy
 

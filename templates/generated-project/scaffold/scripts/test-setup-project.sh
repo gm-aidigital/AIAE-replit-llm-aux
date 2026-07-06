@@ -72,6 +72,7 @@ PROJECT_ROOT="${T2}" \
   bash "${SCRIPT_DIR}/setup-project.sh" replitmvp 2>&1 >/dev/null
 assert_file "${T2}/backend/pom.xml"
 assert_file "${T2}/frontend/package.json"
+assert_file "${T2}/scripts/replit-env.sh"
 assert_file "${T2}/.replit"
 assert_file "${T2}/replit.nix"
 assert_file "${T2}/.template-version"

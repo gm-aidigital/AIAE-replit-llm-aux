@@ -36,6 +36,18 @@ creates. To disable: see "Disabling" below.
 | `app.usage-logging.enabled=false` (env `USAGE_LOGGING_ENABLED=false`) | `NoOpUsageLogger` binds; aspect drops via `@ConditionalOnProperty`; `usage_events` table stays; `@LogUsage` annotations stay as inert markers. **No code edits, no rebuild required.** |
 | Full removal | Drop `<module>event-logging-to-db-feature</module>` from `backend/pom.xml`, drop the `event-logging-to-db-feature` dep line from `backend/service/pom.xml`, remove every `@LogUsage` import + annotation from `*ServiceImpl`, remove the `<include file="db/changelog/changes/0001-usage-events.xml"/>` line from `backend/db/.../db.changelog-master.xml`. Optionally drop the table with a follow-up changelog. |
 
+## Explicit UI action endpoint
+
+When the frontend logs user actions explicitly by calling
+`POST /api/v1/usage-events`, set `app.usage-logging.enabled=false` (or default
+`USAGE_LOGGING_ENABLED=false`). That disables the AOP/service auto-logging
+aspect so the same click/action is not recorded twice.
+
+The explicit endpoint must write through the usage event sink directly. Do not
+route explicit UI events through `UsageLogger`, because `UsageLogger` is the
+AOP-facing abstraction that becomes `NoOpUsageLogger` when auto-logging is
+disabled.
+
 ## Default behavior
 
 Ships with `USAGE_LOGGING_ENABLED=true` + `PostgresUsageLogger`. Binding
@@ -95,6 +107,10 @@ USAGE_LOG_ENVIRONMENT=dev
 ```
 
 That is the entire usage-logging configuration surface.
+
+For projects with explicit UI action ingestion, default
+`USAGE_LOGGING_ENABLED=false` and keep the frontend's explicit event endpoint
+enabled instead.
 
 `USAGE_LOG_SERVICE_NAME` should be set to the actual service identifier before
 handoff. `replit-mvp-template` is a recognisable rejected placeholder. When

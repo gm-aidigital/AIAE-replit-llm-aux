@@ -12,6 +12,7 @@ paths:
 - PostgreSQL only.
 - New schema changes go through Liquibase under `backend/db/src/main/resources/db/changelog`.
 - Do not rewrite existing applied changelogs unless the user explicitly asks for it.
+- Every Liquibase `changeSet` must declare direct `preConditions`; use `onFail="MARK_RAN"` plus existence checks for idempotent create-table/create-index changes.
 - Database identifiers use Java `Long` and PostgreSQL `BIGINT`.
 - Text columns use PostgreSQL `TEXT`, not `VARCHAR`.
 - Entity equality/hash code must be based on the persistent identifier.

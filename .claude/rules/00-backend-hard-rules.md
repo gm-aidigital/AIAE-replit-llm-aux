@@ -5,6 +5,7 @@ description: Always-on backend engineering rules.
 # Backend Hard Rules
 
 - Backend stack is fixed: Java 21, Spring Boot 3.x, Maven multi-module, PostgreSQL, Liquibase.
+- Every Liquibase `changeSet` must include direct `preConditions`; publish gates reject changelogs without them.
 - Discover and preserve one production package root. Do not introduce
   `com.example`, `org.example`, `io.replit`, or another parallel package root.
 - Backend controllers implement generated OpenAPI interfaces and stay thin.

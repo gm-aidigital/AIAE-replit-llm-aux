@@ -16,10 +16,12 @@ from the current checkout before applying examples.
 ## What to Read
 
 - Read `project_structure.md` when locating modules, packages, generated code, frontend features, shared frontend utilities, or deciding where new classes/components belong.
+- Read `project_shape_decision.md` before deciding frontend-only vs full-stack work.
 - Read `building_the_project.md` before compiling, packaging, running Vite, or choosing Maven/npm commands.
 - Read `running_tests.md` before adding or changing backend or frontend tests.
 - Read `code_conventions.md` before changing backend production code.
 - Read `database_schema.md` before touching backend JPA entities, repositories, JPQL/HQL, cache settings, or Liquibase.
+- Read `html_only_project_migration.md` before converting a standalone HTML/CSS/JS project that needs logging, auth, persistence, analytics, or multi-user review.
 - Read `service_architecture.md` before changing backend entity services, RBAC services, orchestrators, validators, or external-service boundaries.
 - Read `frontend_architecture.md` before changing React components, frontend API access, auth flow, routing, feature layout, or Vite configuration.
 - Read `frontend_style.md` before changing CSS, visual layout, component classes, or UI structure.

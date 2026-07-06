@@ -16,6 +16,12 @@
       Reference aggregate used only to prove the scaffold compiles and boots.
     -->
     <changeSet id="sample-reference-initial" author="agent">
+        <preConditions onFail="MARK_RAN">
+            <not>
+                <tableExists tableName="samples"/>
+            </not>
+        </preConditions>
+
         <createTable tableName="samples">
             <column name="id" type="BIGINT" autoIncrement="true">
                 <constraints primaryKey="true" nullable="false"/>

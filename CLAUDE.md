@@ -43,6 +43,8 @@ Common top-level areas:
 
 - Keep the rule set self-contained when it is installed into a project; do not
   depend on another local checkout or a machine-specific absolute path.
+- Read `.claude/agent_docs/project_shape_decision.md` before deciding
+  frontend-only vs full-stack work.
 - Do not hand-edit generated backend OpenAPI sources or generated frontend OpenAPI types.
 - Do not add dependencies casually. Use the existing stack and local patterns first.
 - Keep secrets out of frontend code and public environment variables.
@@ -52,11 +54,21 @@ Common top-level areas:
 ## Backend Hard Constraints
 
 - Backend stack is fixed: Java 21, Spring Boot 3.x, Maven multi-module, PostgreSQL, Liquibase.
+- Every Liquibase `changeSet` must declare direct `preConditions`; the generated verify gate rejects changelogs without them.
 - Discover and preserve the repository's single production package root; do not
   introduce a second root or placeholder packages.
 - Backend controllers implement generated OpenAPI interfaces and stay thin.
 - Backend JPA repositories are accessed only through their paired entity service.
 - Backend tests follow the project style from `.claude/rules/20-tests.md`.
+
+## HTML-Only Source Projects
+
+If the input project is standalone HTML/CSS/JS but the user needs usage
+logging, analytics, action review, persistence, auth, or multi-user visibility,
+do not keep it static-only. Migrate the UI into `frontend/`, add the fixed Java
+backend under `backend/`, persist events to PostgreSQL `usage_events`, and serve
+the built Vite app from Spring Boot for Replit deployment. Read
+`.claude/agent_docs/html_only_project_migration.md` before implementing.
 
 ## Frontend Hard Constraints
 

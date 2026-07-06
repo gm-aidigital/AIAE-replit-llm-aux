@@ -20,6 +20,11 @@ Hard recap:
 - When an external integration is added later, add `external-services` in the
   same change as the first real client/adapter source files and wire
   `service -> external-services` then.
+- BigQuery is split deliberately: the Google SDK client lives in
+  `external-services`, while the whitelisted SQL request builder lives in
+  `service` because it maps business search fields, filters, visibility,
+  sorting, and paging. Follow
+  `templates/generated-project/integrations/bigquery-query-rules.md`.
 - Plural folders (`services/`, `mappers/`, `models/`, `entities/`,
   `repositories/`, `controllers/`) hold many artifacts of one kind. Singular
   (`common/`, `error/`, `observability/`, `security/`, `config/`, `usage/`)

@@ -143,7 +143,7 @@ fi
 if [ -n "${SCAFFOLD}" ] && [ -d "${SCAFFOLD}/scripts" ]; then
   mkdir -p "${ROOT}/scripts" "${ROOT}/scripts/lib"
   RUNTIME_SCRIPTS=(
-    replit-build.sh replit-run.sh local-verify.sh structure-lint.sh verify-gates.sh
+    replit-build.sh replit-run.sh replit-env.sh local-verify.sh structure-lint.sh verify-gates.sh
     apply-package-name.sh strip-scaffold-samples.sh materialize-project.sh
     configure-clerk-development.sh setup-project.sh
     docker-local-smoke.sh docker-context-path-smoke.sh

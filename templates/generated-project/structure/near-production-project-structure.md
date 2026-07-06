@@ -191,6 +191,15 @@ cross-cutting service-layer types (AppException, ErrorReason) live under
   TRUE LEAF (no internal deps). Throws `<Provider>ExternalException`;
   `service/` catches and wraps into `AppException(ErrorReason.X, ...)`.
 
+  **BigQuery query construction:** the Google BigQuery SDK client lives in
+  `external-services`, but BigQuery SQL construction belongs in `service`
+  because it maps business search fields, filters, visibility, sorting, and
+  paging to whitelisted SQL fragments. Follow
+  `templates/generated-project/integrations/bigquery-query-rules.md`: one typed
+  builder emits both the paged data query and the matching count query over the
+  same `WHERE` clause; user input never supplies table names, columns, raw
+  predicates, field lists, or order expressions.
+
   **Past failure mode:** an LLM reads "OPTIONAL" and decides the project
   doesn't "really" need a separate module, drops the Google Sheets fetch
   into the controller directly. The controller then carries HTTP-client
@@ -380,6 +389,11 @@ referenced from `db.changelog-master.xml`. Feature modules
 `@Repository` Java code, but never their own `src/main/resources/db/`. One
 place for migrations means one classpath, one tool to grep, one location to
 review when answering "what's the current schema?".
+
+**Migration precondition rule:** every Liquibase `changeSet` must declare
+direct `preConditions`. For create-table changes, use `onFail="MARK_RAN"` plus
+`not/tableExists`; for create-index changes, use the matching index existence
+check. `scripts/verify-gates.sh` runs `scripts/lib/check-liquibase-preconditions.sh`.
 
 ## Testing layout (MVP safety suite)
 

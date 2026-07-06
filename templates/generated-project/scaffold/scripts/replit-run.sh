@@ -10,6 +10,10 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+if [ -f scripts/replit-env.sh ]; then
+  . scripts/replit-env.sh
+fi
+
 # Prefer the extracted (exploded) layout produced by replit-build.sh for a
 # faster cold start on the throttled Reserved VM; fall back to the fat jar if
 # extraction is absent (e.g. a plain `mvn package` without replit-build.sh).

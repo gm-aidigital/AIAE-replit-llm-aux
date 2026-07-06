@@ -108,6 +108,12 @@ app:
 - **Same JCache instance** for the Hibernate L2 bridge (see #3) — otherwise clears silently no-op.
 - **UTC everywhere** — both the event `updatedAt` and the poller cursor use `LocalDateTime.now(ZoneOffset.UTC)`,
   so nodes in any timezone agree.
+- **No implicit Hibernate regions** — every `@org.hibernate.annotations.Cache` usage must set an
+  explicit `region = "..."`, and `ehcache.xml` must declare the matching alias after applying
+  `hibernate.cache.region_prefix` (for example `hibernate-cache.com.example.Entity`).
+- **No implicit query cache regions** — every `@QueryHint(name = HINT_CACHEABLE, value = "true")`
+  must also set `HINT_CACHE_REGION`, and `ehcache.xml` must declare the matching prefixed alias
+  (for example `hibernate-cache.com.example.Repository.findByCode`).
 - **Region names must match exactly** — a typo means the region is never cleared. Turn on
   `verify-registry` in CI/dev to assert at startup that every registered name resolves to a region.
 - **Bound the event table** — keep the scheduled retention cleanup; the poll only needs recent rows.

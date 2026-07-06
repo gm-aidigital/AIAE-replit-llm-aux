@@ -17,6 +17,11 @@ Liquibase · PostgreSQL · package root `com.aidigital.<app-name-package>.*`.
 Run `bash scripts/apply-package-name.sh <app-name-package>` once after copying
 the scaffold. Replace every `PACKAGE_REPLACE_ME` — never use `com.example`.
 
+HTML-only inputs still get the Java backend when usage logging, persistence,
+auth, analytics, or multi-user review is required. Migrate UI code into
+`frontend/`, keep the backend in `backend/`, and follow
+`templates/generated-project/generation/html-only-project-migration.md`.
+
 ## Canonical references (do not duplicate)
 
 | Topic | File |
@@ -29,6 +34,7 @@ the scaffold. Replace every `PACKAGE_REPLACE_ME` — never use `com.example`.
 | OpenAPI | `templates/generated-project/openapi/canonical-openapi-rules.md` |
 | Auth (Clerk SSO only) | `templates/generated-project/auth/google-sso-clerk-blueprint.md` |
 | Usage logging | `templates/generated-project/observability/usage-logging-rules.md` |
+| BigQuery query construction | `templates/generated-project/integrations/bigquery-query-rules.md` |
 | Code patterns | `references/code-patterns.md` |
 | Spring gotchas | `references/spring-boot-gotchas.md` |
 | Hikari/JPA YAML | `references/hikari-jpa-baseline.yml` |
@@ -42,9 +48,10 @@ the scaffold. Replace every `PACKAGE_REPLACE_ME` — never use `com.example`.
 3. **Thin controllers** — implement generated `*Api`; ≤6 lines; no repositories; `@Transactional` on controller.
 4. **Service interface + impl** — business logic in `*ServiceImpl`; inject interface, not impl.
 5. **Two MapStruct mappers** — entity↔record in `service/`, record↔DTO in `application/`.
-6. **Errors** — single `ErrorReason` enum + `AppException` only.
-7. **Auth** — Clerk JWT via `SecurityConfig`; resolve caller with `AppUserFactory`; no mock/Replit OIDC.
-8. **Tests** — Phase 2 minimums per `testing-policy.md` before publish.
+6. **Liquibase** — every `changeSet` has direct `preConditions`; verify gates reject missing preconditions.
+7. **Errors** — single `ErrorReason` enum + `AppException` only.
+8. **Auth** — Clerk JWT via `SecurityConfig`; resolve caller with `AppUserFactory`; no mock/Replit OIDC.
+9. **Tests** — Phase 2 minimums per `testing-policy.md` before publish.
 
 Full architecture, module matrix, port lock, build flags, gotcha table:
 `references/backend-workflow-details.md`.

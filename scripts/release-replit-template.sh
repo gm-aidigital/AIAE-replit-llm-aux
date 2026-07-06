@@ -42,6 +42,8 @@ also follows `replit.md` for environment-specific setup.
 
 Read `AI-DEVELOPMENT-GUIDE.md` to choose between focused Claude skills and the
 optional GSD lifecycle. GSD is never initialized automatically by Replit.
+Read `.claude/agent_docs/project_shape_decision.md` before deciding frontend-only
+vs full-stack work.
 
 Quick start:
 1. Add Clerk Auth in Replit (CLERK_PUBLISHABLE_KEY, CLERK_SECRET_KEY).

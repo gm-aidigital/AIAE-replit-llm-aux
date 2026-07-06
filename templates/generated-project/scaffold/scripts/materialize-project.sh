@@ -80,6 +80,7 @@ RSYNC_EXCLUDES=(
 RUNTIME_SCRIPTS=(
   replit-build.sh
   replit-run.sh
+  replit-env.sh
   local-verify.sh
   structure-lint.sh
   verify-gates.sh

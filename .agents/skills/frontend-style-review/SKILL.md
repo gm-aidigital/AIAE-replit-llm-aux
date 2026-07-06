@@ -10,8 +10,10 @@ output plus network behavior, not merely CSS naming.
 
 ## Inputs
 
-1. Read `AGENTS.md`, `.Codex/rules/40-frontend-rules.md`,
-   `.Codex/agent_docs/frontend_architecture.md`, and `frontend_style.md`.
+1. Read `AGENTS.md`,
+   `templates/generated-project/frontend/canonical-react-frontend-rules.md`,
+   `.claude/agent_docs/frontend_architecture.md`, and
+   `.claude/agent_docs/frontend_style.md`.
 2. Establish scope from requested files, diff/range, or the whole frontend.
 3. Determine whether the task is visual parity, a constrained improvement, or a
    new design. Review against that mode; do not reward redesign during parity.

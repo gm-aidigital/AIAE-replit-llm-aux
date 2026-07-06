@@ -53,6 +53,8 @@ verify_replit_file() {
     || fail "${replit_file}: frontend workflow must run npm run generate:api before Vite"
   grep -q 'PORT = "5000"' "${replit_file}" \
     || fail "${replit_file}: [env] must keep PORT = \"5000\""
+  grep -q 'scripts/replit-env.sh' "${replit_file}" \
+    || fail "${replit_file}: workflows must source scripts/replit-env.sh"
   grep -q 'localPort = 5000' "${replit_file}" && grep -q 'externalPort = 80' "${replit_file}" \
     || fail "${replit_file}: expose exactly backend 5000 -> externalPort 80"
   ! grep -Eq 'npm run dev.*--port 5000|vite.*--port 5000|localPort = 5173' "${replit_file}" \
@@ -79,6 +81,14 @@ fi
 
 if [ -f .replit ]; then
   verify_replit_file ".replit"
+fi
+
+if [ -f scripts/replit-build.sh ] || [ -f scripts/replit-run.sh ]; then
+  [ -f scripts/replit-env.sh ] || fail "scripts/replit-env.sh is required for Replit dev/build/deployment env normalization"
+  grep -q 'scripts/replit-env.sh' scripts/replit-build.sh \
+    || fail "scripts/replit-build.sh must source scripts/replit-env.sh"
+  grep -q 'scripts/replit-env.sh' scripts/replit-run.sh \
+    || fail "scripts/replit-run.sh must source scripts/replit-env.sh"
 fi
 
 if [ -f frontend/package.json ]; then
@@ -146,6 +156,10 @@ if [ -f backend/application/src/main/resources/api/v1/specs/openapi.yaml ] && [ 
     bash "${SCRIPT_DIR}/lib/check-openapi-enums.sh" \
       "backend/application/src/main/resources/api/v1/specs/openapi.yaml"
   fi
+fi
+
+if [ -d backend/db/src/main/resources/db/changelog ] && [ -f "${SCRIPT_DIR}/lib/check-liquibase-preconditions.sh" ]; then
+  bash "${SCRIPT_DIR}/lib/check-liquibase-preconditions.sh"
 fi
 
 if [ -f frontend/vite.config.ts ] && grep -q '"@/\*"' frontend/tsconfig.json 2>/dev/null; then
@@ -281,6 +295,11 @@ if [ -d backend/application/src/main/resources ]; then
         && grep -Fq 'Map<String, Object> attributes' "${usage_entity}" \
         || fail "UsageEventEntity.attributes must be JSONB Map<String,Object>"
     }
+  fi
+  explicit_usage_controller="$(find backend/application/src/main/java -path '*/usageevents/controllers/UsageEventController.java' -print -quit 2>/dev/null || true)"
+  if [ -n "${explicit_usage_controller}" ]; then
+    grep -Eq 'enabled:[[:space:]]*(false|\$\{USAGE_LOGGING_ENABLED:false\})' backend/application/src/main/resources/application.yml \
+      || fail "Explicit /api/v1/usage-events logging requires app.usage-logging.enabled=false to avoid duplicate AOP usage rows"
   fi
   ! grep -RInE "LOWER\\(CONCAT\\('%',[[:space:]]*:[A-Za-z0-9_]+" \
       backend/domain/src/main/java backend/service/src/main/java >/dev/null 2>&1 \

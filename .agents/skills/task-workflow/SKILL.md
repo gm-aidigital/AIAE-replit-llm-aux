@@ -7,7 +7,7 @@ Run a structured multi-role enterprise development workflow for: **$ARGUMENTS**
 
 Arguments: `<task ID or short description> [| <context prompt for the analytic role>]`.
 
-Each role works through files in `.Codex/tasks/<task>/`. The orchestrator should stay lightweight and use those files as the task state.
+Each role works through files in `.agents/tasks/<task>/`. The orchestrator should stay lightweight and use those files as the task state.
 
 Parse `$ARGUMENTS` by splitting on the first ` | ` separator:
 - **Part 1**: task identifier or short description
@@ -19,7 +19,7 @@ Derive `<task>` from Part 1:
 
 ## Step 1 — Analytic role
 
-Create `.Codex/tasks/<task>/plan.md`.
+Create `.agents/tasks/<task>/plan.md`.
 
 The plan must contain:
 
@@ -56,7 +56,7 @@ If the user requests changes, revise the same `plan.md` file.
 
 ## Step 2 — Developer role
 
-Read `.Codex/tasks/<task>/plan.md` in full before editing code.
+Read `.agents/tasks/<task>/plan.md` in full before editing code.
 
 Backend implementation rules:
 - Java 21 + Spring Boot 3.x + Maven multi-module
@@ -110,7 +110,7 @@ When the OpenAPI contract changes, also run:
 cd frontend && npm run generate:api
 ```
 
-Then write `.Codex/tasks/<task>/dev-summary.md` with:
+Then write `.agents/tasks/<task>/dev-summary.md` with:
 
 ```md
 ## Changed Files
@@ -130,7 +130,7 @@ Then write `.Codex/tasks/<task>/dev-summary.md` with:
 
 ## Step 3 — Reviewer role
 
-Read `.Codex/tasks/<task>/dev-summary.md`, inspect the diff, and review the changed files against repository rules.
+Read `.agents/tasks/<task>/dev-summary.md`, inspect the diff, and review the changed files against repository rules.
 
 Review at least these points:
 1. Backend code stays under the repository's discovered production package root
@@ -150,7 +150,7 @@ Review at least these points:
 15. Frontend queries have canonical ownership, avoid duplicate/inactive requests, and use narrow cache updates or invalidation
 16. User-scoped cached data is cleared on sign-out/account switch and affected request counts are verified
 
-Write `.Codex/tasks/<task>/review-report.md` with:
+Write `.agents/tasks/<task>/review-report.md` with:
 - `STATUS: APPROVED` or `STATUS: CHANGES_REQUESTED`
 - Summary
 - Critical Issues
@@ -161,7 +161,7 @@ If the review requests changes, return to the Developer role with the report as 
 
 ## Step 4 — Tester role
 
-Read `.Codex/tasks/<task>/dev-summary.md` and run tests for the affected areas.
+Read `.agents/tasks/<task>/dev-summary.md` and run tests for the affected areas.
 
 Backend default command:
 
@@ -187,7 +187,7 @@ Check:
 - whether changed classes/components have matching service/MVC/repository/component/API coverage where appropriate
 - whether any important acceptance-criteria path is still untested
 
-Write `.Codex/tasks/<task>/test-report.md` with:
+Write `.agents/tasks/<task>/test-report.md` with:
 - `STATUS: PASSED` or `STATUS: FAILED`
 - Test Run Results
 - Failures (if any)

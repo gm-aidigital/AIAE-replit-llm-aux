@@ -38,8 +38,8 @@ mode = "parallel"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "if [ -f backend/pom.xml ]; then mvn -f backend/pom.xml -DskipTests -Dskip.frontend=true -Dcheckstyle.skip=true -Djacoco.skip=true install && mvn -f backend/application/pom.xml -DskipTests -Dskip.frontend=true -Dcheckstyle.skip=true -Djacoco.skip=true spring-boot:run; else echo '[backend] Not generated yet — run: bash scripts/materialize-project.sh <app-name-package>'; fi"
+args = "bash -lc 'source scripts/replit-env.sh; if [ -f backend/pom.xml ]; then mvn -f backend/pom.xml -DskipTests -Dskip.frontend=true -Dcheckstyle.skip=true -Djacoco.skip=true install && mvn -f backend/application/pom.xml -DskipTests -Dskip.frontend=true -Dcheckstyle.skip=true -Djacoco.skip=true spring-boot:run; else echo \"[backend] Not generated yet - run: bash scripts/materialize-project.sh <app-name-package>\"; fi'"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "if [ -f frontend/package.json ]; then cd frontend && { [ -f package-lock.json ] && npm ci || npm install; } && npm run generate:api && npm run dev -- --host 0.0.0.0 --port 5173; else echo '[frontend] Not generated yet.'; fi"
+args = "bash -lc 'source scripts/replit-env.sh; if [ -f frontend/package.json ]; then cd frontend && { [ -f package-lock.json ] && npm ci || npm install; } && npm run generate:api && npm run dev -- --host 0.0.0.0 --port 5173; else echo \"[frontend] Not generated yet.\"; fi'"
