@@ -18,6 +18,7 @@ import PACKAGE_REPLACE_ME.domain.sample.entities.SampleEntity;
 import PACKAGE_REPLACE_ME.domain.sample.repositories.SampleRepository;
 import PACKAGE_REPLACE_ME.service.common.error.AppException;
 import PACKAGE_REPLACE_ME.service.common.error.ErrorReason;
+import PACKAGE_REPLACE_ME.service.common.time.CurrentTime;
 import PACKAGE_REPLACE_ME.usagelogging.LogUsage;
 import PACKAGE_REPLACE_ME.usagelogging.UsageAttributes;
 import PACKAGE_REPLACE_ME.service.mappers.sample.SampleMapper;
@@ -26,9 +27,6 @@ import PACKAGE_REPLACE_ME.service.sample.models.SampleUpdate;
 import PACKAGE_REPLACE_ME.service.sample.services.SampleService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
-
-import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 
 /**
  * Default implementation of the reference sample service.
@@ -39,6 +37,7 @@ public class SampleServiceImpl implements SampleService {
 
     private final SampleRepository repo;
     private final SampleMapper mapper;
+    private final CurrentTime currentTime;
     private final UsageAttributes usageAttributes;
 
     @Override
@@ -58,22 +57,8 @@ public class SampleServiceImpl implements SampleService {
         usageAttributes.put("sample_id", id);
         SampleEntity entity = repo.findById(id)
             .orElseThrow(() -> new AppException(ErrorReason.C001, id));
-        applyUpdate(entity, update);
+        mapper.updateEntity(update, entity);
+        entity.setUpdatedAt(currentTime.nowLocalDateTime());
         return mapper.toRecord(repo.save(entity));
-    }
-
-    /**
-     * Copies writable fields from {@link SampleUpdate} onto the entity via setters.
-     * Service-side, NOT on the entity itself — keeps domain a leaf module
-     * (entity must not import SampleUpdate or anything from the service module).
-     *
-     * @param entity managed JPA entity loaded by the caller
-     * @param update writable-fields request payload
-     */
-    private void applyUpdate(SampleEntity entity, SampleUpdate update) {
-        if (update.name() != null) {
-            entity.setName(update.name());
-        }
-        entity.setUpdatedAt(LocalDateTime.now(ZoneOffset.UTC));
     }
 }

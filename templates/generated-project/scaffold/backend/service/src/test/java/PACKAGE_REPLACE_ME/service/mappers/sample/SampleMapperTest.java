@@ -5,6 +5,7 @@ package PACKAGE_REPLACE_ME.service.mappers.sample;
 
 import PACKAGE_REPLACE_ME.domain.sample.entities.SampleEntity;
 import PACKAGE_REPLACE_ME.service.sample.models.SampleRecord;
+import PACKAGE_REPLACE_ME.service.sample.models.SampleUpdate;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
@@ -62,5 +63,20 @@ class SampleMapperTest {
         assertThat(records).hasSize(1);
         assertThat(records.get(0).id()).isEqualTo(1L);
         assertThat(records.get(0).name()).isEqualTo("a");
+    }
+
+    @Test
+    void shouldUpdateEntityFromNonNullUpdateFieldsTest() {
+        // Given:
+        SampleEntity entity = new SampleEntity();
+        entity.setName("old");
+        entity.setUpdatedAt(LocalDateTime.of(2026, 1, 1, 0, 0, 0));
+
+        // When:
+        mapper.updateEntity(new SampleUpdate("new"), entity);
+
+        // Then:
+        assertThat(entity.getName()).isEqualTo("new");
+        assertThat(entity.getUpdatedAt()).isEqualTo(LocalDateTime.of(2026, 1, 1, 0, 0, 0));
     }
 }

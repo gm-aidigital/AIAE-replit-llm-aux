@@ -10,9 +10,10 @@
 }
 
 .login__card {
-    width: min(100%, 520px);
+    width: min(100%, 32.5rem);
+    min-width: 0;
     padding: var(--space-10);
-    border: 1px solid var(--border-default);
+    border: 0.0625rem solid var(--border-default);
     border-radius: var(--radius-lg);
     background: var(--surface-elevated);
     box-shadow: var(--shadow-soft);
@@ -32,6 +33,7 @@
     font-size: var(--text-page-title);
     font-weight: 700;
     line-height: 1.15;
+    overflow-wrap: anywhere;
 }
 
 .login__subtitle {
@@ -39,6 +41,7 @@
     color: var(--text-muted);
     font-size: var(--text-table-head);
     line-height: 1.5;
+    overflow-wrap: anywhere;
 }
 
 .login__clerk-root,
@@ -65,7 +68,7 @@
     background: transparent;
 }
 
-@media (max-width: 600px) {
+@media (max-width: 37.5rem) {
     .login {
         padding: var(--space-6) var(--space-4);
     }

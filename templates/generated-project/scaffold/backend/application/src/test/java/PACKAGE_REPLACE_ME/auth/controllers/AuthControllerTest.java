@@ -9,6 +9,7 @@ import PACKAGE_REPLACE_ME.security.ClerkPublishableKeyDecoder;
 import PACKAGE_REPLACE_ME.security.CompanyEmailDomainAuthorizationManager;
 import PACKAGE_REPLACE_ME.security.SecurityConfig;
 import PACKAGE_REPLACE_ME.security.SecurityProperties;
+import PACKAGE_REPLACE_ME.service.common.time.CurrentTimeImpl;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -36,6 +37,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
     ClerkJwtClaimsValidator.class,
     ClerkPublishableKeyDecoder.class,
     CompanyEmailDomainAuthorizationManager.class,
+    CurrentTimeImpl.class,
     GlobalExceptionResponseHelperImpl.class
 })
 class AuthControllerTest {

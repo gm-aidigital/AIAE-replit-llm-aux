@@ -87,11 +87,15 @@ Frontend minimums:
    and success states.
 4. **Critical action** — forms or user actions added for the MVP have at least
    one behavior test for the expected outcome and one validation/error case.
+5. **Form/layout safety** — generated forms cover missing OpenAPI-required
+   fields and at least one long unbroken string so user/API text and wrapped
+   button labels do not break mobile or desktop layout.
 
 Final MVP verification:
 
 - `mvn -f backend/pom.xml verify`
 - `cd frontend && npm test && npm run build`
+- `bash scripts/lib/check-frontend-ui-rules.sh`
 
 Coverage may remain below production level in MVP phase. Once raised, coverage
 thresholds must not be lowered to make CI pass.

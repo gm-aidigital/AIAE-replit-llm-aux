@@ -18,7 +18,12 @@ package PACKAGE_REPLACE_ME.service.mappers.sample;
 import PACKAGE_REPLACE_ME.domain.sample.entities.SampleEntity;
 import PACKAGE_REPLACE_ME.service.common.mapping.ServiceMapperConfig;
 import PACKAGE_REPLACE_ME.service.sample.models.SampleRecord;
+import PACKAGE_REPLACE_ME.service.sample.models.SampleUpdate;
+import org.mapstruct.BeanMapping;
 import org.mapstruct.Mapper;
+import org.mapstruct.Mapping;
+import org.mapstruct.MappingTarget;
+import org.mapstruct.NullValuePropertyMappingStrategy;
 
 import java.util.List;
 
@@ -51,4 +56,15 @@ public interface SampleMapper {
      * @return service-layer sample records
      */
     List<SampleRecord> toRecords(List<SampleEntity> entities);
+
+    /**
+     * Copies non-null writable fields from an update model onto an entity.
+     *
+     * @param update writable service-layer model
+     * @param entity managed entity to mutate
+     */
+    @BeanMapping(nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
+    @Mapping(target = "id", ignore = true)
+    @Mapping(target = "updatedAt", ignore = true)
+    void updateEntity(SampleUpdate update, @MappingTarget SampleEntity entity);
 }

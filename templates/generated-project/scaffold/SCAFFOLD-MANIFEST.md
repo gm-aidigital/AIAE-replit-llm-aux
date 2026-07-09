@@ -37,6 +37,8 @@ replace only `PACKAGE_REPLACE_ME` and app placeholders.
 | `backend/.../service/common/error/ValidationMessage.java` | Parameterised error message value object |
 | `backend/.../service/common/error/ValidationParameter.java` | Named error parameter |
 | `backend/.../service/common/error/ValidationMessageType.java` | `{ ERROR, WARN, INFO }` |
+| `backend/.../service/common/time/CurrentTime.java` | Injectable application time boundary; business code must use this instead of direct `*.now()` calls |
+| `backend/.../service/common/time/CurrentTimeImpl.java` | UTC implementation of `CurrentTime` |
 | `backend/cache-management/` | Self-contained, removable backend feature module: the generic, app-agnostic multi-node cache-invalidation mechanism (publish event → poll → clear registered regions). App supplies the `CacheNamesByClassRegistry`, a DB-backed `CacheInvalidationEventService`, the `CacheManager` beans, and `publishUpdateEvent(...)` calls; requires `@EnableScheduling`. No internal-module deps; event-table migrations live in `db`. |
 | `backend/.../cache/CacheConfig.java` | Wires `CacheProperties`, `CacheWarmUpService`, and `@CacheEvict` scheduling when enabled |
 | `backend/.../cache/CacheProperties.java` | `@ConfigurationProperties("app.cache")` for cache warm-up toggle |
@@ -74,6 +76,9 @@ replace only `PACKAGE_REPLACE_ME` and app placeholders.
 | `scripts/lib/check-openapi-strict-schemas.sh` | Rejects loose OpenAPI DTO schemas and generated unknown index signatures |
 | `scripts/lib/check-openapi-documentation.sh` | Requires descriptions on OpenAPI operations, schemas, fields, parameters, and request bodies |
 | `scripts/lib/check-liquibase-preconditions.sh` | Requires direct `preConditions` on every Liquibase `changeSet` |
+| `scripts/lib/check-frontend-ui-rules.sh` | Rejects raw `px`/hex CSS drift, broken overflow/button reset, and forms without accessible validation hooks |
+| `scripts/lib/check-production-current-time.sh` | Rejects direct production `*.now()` calls in app-owned backend modules; use `CurrentTime` |
+| `scripts/lib/check-production-manual-mapping.sh` | Rejects `new *Entity()` plus setter-chain manual mapping; use MapStruct |
 | `scripts/lib/check-service-contract-quality.sh` | Rejects undocumented service contracts and oversized ServiceImpl classes |
 | `local-verify.sh` | Pre-push: lint + gates + mvn verify + frontend test/build |
 | `ci-verify-scaffold.sh` | Template CI: materialize → strip samples → full verify |

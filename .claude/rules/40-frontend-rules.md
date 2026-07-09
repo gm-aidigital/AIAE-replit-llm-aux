@@ -27,6 +27,18 @@ paths:
   no explicit navigation decision, follow the installed design guidance.
 - Use plain CSS with BEM naming. Do not introduce CSS Modules, Tailwind, styled-components, Emotion, or CSS-in-JS.
 - Use semantic CSS variables/tokens for colors and spacing instead of new hardcoded color literals.
+- Runtime CSS under `frontend/src/**/*.css` uses `rem` units and semantic
+  tokens; raw `px` units and hard-coded hex colors are forbidden.
+- Use flexbox for one-dimensional layout and CSS grid only for
+  two-dimensional/table-like layout such as data rows and multi-column forms.
+  Four-column forms use `repeat(4, minmax(0, 1fr))` with responsive collapse.
+- Long user/API text must not break layout. Shrinkable flex/grid children set
+  `min-width: 0` or `min-inline-size: 0`; text containers set
+  `overflow-wrap: anywhere`; controls and media cap at `max-inline-size: 100%`.
+- Buttons are inline-flex centered and must tolerate wrapped labels.
+- Generated forms validate OpenAPI-required fields before submit and expose
+  accessible errors through `required`/`aria-required`, `aria-invalid`,
+  `aria-describedby`, and/or `role="alert"`.
 - Interfaces and types belong in a `model/` directory, not in component files. Extract any shared or domain `interface`/`type` into a dedicated `.ts` file under `model/` next to the feature; component `.tsx` files import types, they do not declare exported interfaces.
 - Static constants belong in a `constants/` directory, not in component files. Move any runtime-independent constant (magic values, enum-like mappings, column maps, storage keys, config keys) into a `.ts` file under `constants/`; components import constants, they do not inline them.
 - Order imports in three groups separated by blank lines: (1) React, (2) third-party libraries, (3) project imports. The scaffold's local ESLint rule `project-rules/import-section-order` enforces this and fails the build on violations.

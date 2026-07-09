@@ -6,9 +6,9 @@
 // ─────────────────────────────────────────────────────────────────────────
 // SampleEntity — reference JPA entity for the sample aggregate. Plain
 // POJO + getters/setters via Lombok; no business logic, no service
-// imports (domain is a leaf module). Service-layer code copies field
-// values from SampleUpdate via setters — entity does NOT accept
-// SampleUpdate (would force domain → service edge).
+// imports (domain is a leaf module). Service-layer MapStruct mappers copy
+// writable fields from SampleUpdate — entity does NOT accept SampleUpdate
+// (would force domain → service edge).
 //
 // Delete this whole sample tree when the project has a real aggregate.
 

@@ -18,3 +18,9 @@ Rules:
 - All API calls go through `shared/api/client.ts`.
 - Use `LoadingBlock`, `ErrorAlert`, `EmptyState` for async states.
 - BEM class names — see `templates/generated-project/frontend/bem-naming-rules.md`.
+- CSS uses semantic tokens and `rem`, not raw `px`; flexbox for rows/stacks,
+  grid for table-like/multi-column layouts.
+- Forms must validate required OpenAPI fields and expose accessible errors
+  before submit.
+- Long user/API strings and wrapped button labels must not overflow mobile or
+  desktop layouts.

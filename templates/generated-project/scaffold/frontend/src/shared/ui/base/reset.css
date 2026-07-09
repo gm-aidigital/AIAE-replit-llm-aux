@@ -18,15 +18,46 @@ body {
     font-size: var(--text-base);
     color: var(--text-default);
     background: var(--surface-muted);
+    overflow-wrap: anywhere;
 }
 
 button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2);
+    min-inline-size: 0;
+    max-inline-size: 100%;
+    min-height: var(--control-height);
     font: inherit;
+    line-height: 1.2;
+    text-align: center;
+    white-space: normal;
     color: inherit;
     background: none;
     border: none;
     padding: 0;
     cursor: pointer;
+}
+
+button > * {
+    min-inline-size: 0;
+}
+
+input,
+textarea,
+select {
+    min-inline-size: 0;
+    max-inline-size: 100%;
+    font: inherit;
+}
+
+img,
+svg,
+canvas,
+video {
+    max-inline-size: 100%;
+    block-size: auto;
 }
 
 a {

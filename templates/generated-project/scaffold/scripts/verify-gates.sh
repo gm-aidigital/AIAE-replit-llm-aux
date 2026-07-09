@@ -338,6 +338,10 @@ if [ -d frontend/src ]; then
     grep -q 'useEffect' "${debounce_hook}" && grep -q 'clearTimeout' "${debounce_hook}" \
       || fail "useDebounce hooks must use useEffect with cleanup: ${debounce_hook}"
   done < <(find frontend/src -type f \( -name '*useDebounce*.ts' -o -name '*useDebounce*.tsx' \))
+
+  if [ -f "${SCRIPT_DIR}/lib/check-frontend-ui-rules.sh" ]; then
+    bash "${SCRIPT_DIR}/lib/check-frontend-ui-rules.sh"
+  fi
 fi
 
 if [ -d backend ] && [ -f "${SCRIPT_DIR}/lib/check-production-static-methods.sh" ]; then
@@ -346,6 +350,14 @@ fi
 
 if [ -d backend ] && [ -f "${SCRIPT_DIR}/lib/check-production-magic-values.sh" ]; then
   bash "${SCRIPT_DIR}/lib/check-production-magic-values.sh"
+fi
+
+if [ -d backend ] && [ -f "${SCRIPT_DIR}/lib/check-production-current-time.sh" ]; then
+  bash "${SCRIPT_DIR}/lib/check-production-current-time.sh"
+fi
+
+if [ -d backend ] && [ -f "${SCRIPT_DIR}/lib/check-production-manual-mapping.sh" ]; then
+  bash "${SCRIPT_DIR}/lib/check-production-manual-mapping.sh"
 fi
 
 if [ -d backend/service/src/main/java ] && [ -f "${SCRIPT_DIR}/lib/check-service-contract-quality.sh" ]; then

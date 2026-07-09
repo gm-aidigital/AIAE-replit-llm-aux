@@ -465,6 +465,13 @@ Never write singular `service/`, `mapper/`, `entity/`, `repository/`, `model/`,
   by `UsageLoggingAspect` (`@LogUsage` optional, to override the action name).
 - Entities/repositories never appear in REST contracts.
 - DB via Liquibase. MapStruct for all conversion. One entity = one mapper per layer; compose via shared mapper config + `uses=`.
+- Create/update field copying must stay in MapStruct (`toEntity(...)` /
+  `updateEntity(..., @MappingTarget ...)`); services must not build entities
+  with `new *Entity()` plus setter chains.
+- Service-layer inputs are records under `service/<aggregate>/models/`
+  (`Create<X>Model`, `Update<X>Model`, etc.); do not create `*Command` types.
+- Current time comes from `service/common/time/CurrentTime`; no direct
+  `LocalDateTime.now(...)` / `Instant.now()` in production business code.
 - Service interfaces return typed records. Do not expose `Map<String,Object>` or raw `Object` for business request/result contracts; isolate dynamic provider/JSONB maps in boundary converters.
 
 ### Global API mapper anti-pattern (FORBIDDEN)
@@ -518,6 +525,8 @@ public interface LessonApiMapper {
 `structure-lint.sh` rejects wrong mapper packages, root/global API mappers,
 application mappers that are not MapStruct `@Mapper` interfaces, and manual
 `default Map<String,Object> -> DTO` mapping hidden inside mapper interfaces.
+`verify-gates.sh` also runs scanners that reject entity setter-chain mapping
+and direct current-time calls in app-owned backend modules.
 
 Artificial list wrappers are forbidden. Do not create records such as
 `LessonsListSource`, `UsersListSource`, or `SomethingResponseSource` under

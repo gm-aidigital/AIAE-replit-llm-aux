@@ -231,6 +231,45 @@ unit-testable in isolation, and lets MapStruct inject the dependency via
 Spring (through the shared mapper config) so mappers don't need to manually
 instantiate each other.
 
+## Create/update mapping plus `CurrentTime`
+
+Services orchestrate; MapStruct copies service model fields; `CurrentTime` supplies
+technical timestamps.
+
+```java
+// FORBIDDEN
+CaseStudyEntity entity = new CaseStudyEntity();
+entity.setTitle(model.title());
+entity.setClientName(model.clientName());
+entity.setStatus("SUBMITTED");
+entity.setCreatedAt(LocalDateTime.now(ZoneOffset.UTC));
+
+// REQUIRED
+CaseStudyEntity entity = caseStudyMapper.toEntity(model);
+entity.setStatus(CaseStudyStatus.SUBMITTED);
+entity.setCreatedAt(currentTime.nowLocalDateTime());
+return caseStudyMapper.toRecord(caseStudyRepository.save(entity));
+```
+
+For updates, put writable field copying in a mapper method:
+
+```java
+@Mapper(config = ServiceMapperConfig.class)
+public interface CaseStudyMapper {
+    CaseStudyEntity toEntity(CreateCaseStudyModel model);
+
+    @BeanMapping(nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
+    @Mapping(target = "id", ignore = true)
+    @Mapping(target = "createdAt", ignore = true)
+    @Mapping(target = "updatedAt", ignore = true)
+    void updateEntity(UpdateCaseStudyModel model, @MappingTarget CaseStudyEntity entity);
+}
+```
+
+`CreateCaseStudyModel` and `UpdateCaseStudyModel` live under the aggregate's
+`service/.../models/` package. Do not introduce `*Command` types for service
+inputs.
+
 ## Two MapStruct mappers per resource
 
 Never create a single `ApiDtoMapper`, `DtoMapper`, `ApplicationMapper`,

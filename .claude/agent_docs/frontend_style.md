@@ -49,36 +49,41 @@ Current semantic tokens:
 | `--color-success-bg` / `--color-success-text` | success/active state |
 | `--color-neutral-bg` / `--color-neutral-text` | neutral status pill |
 | `--color-danger` / `--color-danger-border` / `--color-danger-bg` | error / destructive |
-| `--radius-card` (12px) / `--radius-control` (10px) / `--radius-pill` | card vs control vs pill radius |
+| `--radius-card` (`0.75rem`) / `--radius-control` (`0.625rem`) / `--radius-pill` | card vs control vs pill radius |
 | navigation dimension tokens | established header/sidebar dimensions when the selected shell needs them |
 
 Status colors communicate state only — never use them as decoration. Status pills
 use a leading `status__dot` (a `currentColor` dot) so state reads at a glance.
+Runtime CSS uses semantic tokens and `rem` units. Raw `px` units and hard-coded
+hex colors are forbidden under `frontend/src/**/*.css`.
 
 ## Typography
 
 - Primary typeface: Inter, weights 400/500/600/700.
-- Compact product type: page title `26–32px / 700`, section H2 `18px / 600`,
-  subhead `16px / 500`, body `13–14px / 400`, table head `12–14px / 700`
-  uppercase for column labels, pill `12px`.
-- Body copy stays between `12px` and `16px`.
+- Compact product type: page title `1.625–2rem / 700`, section H2
+  `1.125rem / 600`, subhead `1rem / 500`, body `0.8125–0.875rem / 400`,
+  table head `0.75–0.875rem / 700` uppercase for column labels, pill
+  `0.75rem`.
+- Body copy stays between `0.75rem` and `1rem`.
 - Letter spacing stays `0`. No viewport-width font scaling.
 
 ## Shape and spacing
 
-- Cards/panels use `--radius-card` (12px); controls/buttons/inputs use
-  `--radius-control` (10px); pills use `--radius-pill` (999px). Do not mix
-  unrelated radius scales (e.g. 4px and 20px).
-- Common spacing increments: 6, 8, 12, 16, 22/24. Table/list rows use ~10–14px
-  vertical padding and 12–14px horizontal padding.
+- Cards/panels use `--radius-card` (`0.75rem`); controls/buttons/inputs use
+  `--radius-control` (`0.625rem`); pills use `--radius-pill` (`999rem`). Do not
+  mix unrelated radius scales.
+- Common spacing increments are tokenized in rem. Table/list rows use compact
+  tokenized vertical and horizontal padding.
 - Parent layout blocks own spacing via `gap`/padding; blocks set no external
   margins (see CSS selector rules).
 
 ## Components
 
-- Buttons: ~40px tall, `--radius-control`, `14px / 600–700`. `button` (primary
-  accent), `button--secondary`, `button--ghost`.
-- Inputs/selects: ~40px tall, `--radius-control`, semantic border/background.
+- Buttons: at least `2.5rem` tall, `--radius-control`, `0.875rem / 600–700`,
+  inline-flex centered, wrapping-safe labels. `button` (primary accent),
+  `button--secondary`, `button--ghost`.
+- Inputs/selects: at least `2.5rem` tall, `--radius-control`, semantic
+  border/background.
 - Status pills: rounded-full, state token only, concise label.
 - Tables: muted header surface (`--color-surface-muted`), `--color-panel` rows,
   grid-based rows with explicit column tracks. Do not nest cards.
@@ -92,6 +97,8 @@ use a leading `status__dot` (a `currentColor` dot) so state reads at a glance.
 - Do not introduce CSS Modules, Tailwind, styled-components, Emotion, or CSS-in-JS.
 - Design tokens live in CSS custom properties and are consumed by components.
 - Do not hardcode new colors in component CSS when a semantic token should exist.
+- Use flexbox for one-dimensional layout. Use CSS grid for two-dimensional or
+  table-like layout such as data rows and multi-column forms.
 
 ## BEM syntax
 
@@ -149,10 +156,13 @@ A tiny local `cn` helper is acceptable for conditional class names. Do not add a
 
 ## UI quality rules
 
-- Use the radius tokens (`--radius-card` 12px, `--radius-control` 10px); do not introduce ad-hoc radii.
+- Use the radius tokens (`--radius-card` `0.75rem`, `--radius-control`
+  `0.625rem`); do not introduce ad-hoc radii.
 - Use icons for icon-like actions when an icon library is already present.
 - Do not create nested cards.
 - Text must fit its container on mobile and desktop.
+- User/API text containers use `min-width: 0`/`min-inline-size: 0` and
+  `overflow-wrap: anywhere`; controls and media cap at `max-inline-size: 100%`.
 - Do not use viewport-width font scaling.
 - Letter spacing must stay `0` unless a very specific brand treatment already exists.
 - Avoid one-note palettes and decorative orb/blob backgrounds.

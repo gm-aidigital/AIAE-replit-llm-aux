@@ -49,7 +49,8 @@ public class AppCacheNamesByClassRegistry implements CacheNamesByClassRegistry {
   in the `domain` module so the existing `@EntityScan`/`@EnableJpaRepositories` pick it up.
 - Spring Data repository: `findByUpdatedAtAfterOrderByUpdatedAtAsc(LocalDateTime)` and
   `deleteByUpdatedAtBefore(LocalDateTime)`.
-- `@Service @Transactional` impl: `publishUpdateEvent` saves a row with `updatedAt = LocalDateTime.now(ZoneOffset.UTC)`;
+- `@Service @Transactional` impl: inject `CurrentTime`; `publishUpdateEvent`
+  saves a row with `updatedAt = currentTime.nowLocalDateTime()`;
   `updatesAfter` maps rows to `CacheInvalidationEvent`; a `@Scheduled` daily cleanup prunes old rows
   (only recent rows are ever polled).
 - Liquibase migration for the table goes in the **`db` module** (single-sourced), never in a feature module.
@@ -106,8 +107,8 @@ app:
 ## Critical correctness rules
 
 - **Same JCache instance** for the Hibernate L2 bridge (see #3) — otherwise clears silently no-op.
-- **UTC everywhere** — both the event `updatedAt` and the poller cursor use `LocalDateTime.now(ZoneOffset.UTC)`,
-  so nodes in any timezone agree.
+- **UTC everywhere** — both the event `updatedAt` and the poller cursor use
+  the generated `CurrentTime` boundary, so nodes in any timezone agree.
 - **No implicit Hibernate regions** — every `@org.hibernate.annotations.Cache` usage must set an
   explicit `region = "..."`, and `ehcache.xml` must declare the matching alias after applying
   `hibernate.cache.region_prefix` (for example `hibernate-cache.com.example.Entity`).

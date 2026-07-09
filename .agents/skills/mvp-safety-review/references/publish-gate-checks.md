@@ -60,6 +60,14 @@ Canonical: `templates/generated-project/observability/usage-logging-rules.md`.
       grep -RInE 'React dev server is running|Switch the preview pane to port 5173|Open on port 5173' frontend/src
       ```
       Expected: empty.
+- [ ] Frontend UI rules pass: no raw `px`/hex drift, reset keeps long strings
+      and button labels safe, and generated forms expose accessible validation:
+      ```bash
+      bash scripts/lib/check-frontend-ui-rules.sh
+      ```
+- [ ] Generated forms validate OpenAPI-required fields before submit and have
+      tests for a missing required field plus one long-string/responsive layout
+      case. Check mobile and desktop widths for changed form screens.
 - [ ] Reference/status values are synchronized across OpenAPI enum, Liquibase
       seed/reference data, backend mappers/constants, and frontend labels/badges
       / controls. A three-value enum must not have a two-way toggle.

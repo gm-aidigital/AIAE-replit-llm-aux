@@ -41,7 +41,18 @@ UI lives in `features/` composed by `pages/` or `App.tsx`. Use `AppShell`,
   filter bars, segmented controls, and contextual toolbars.
 - Follow Elevate tokens: compact Inter typography, primary `239 100% 43%`,
   secondary/accent lavender surfaces, one primary CTA per view, status colors
-  only for state, 12px card radius and 10px controls.
+  only for state, `0.75rem` card radius and `0.625rem` controls.
+- Runtime CSS uses semantic variables and `rem` units; raw `px` and hard-coded
+  hex colors are forbidden under `frontend/src/**/*.css`.
+- Layout is flex-first for one-dimensional rows/stacks/toolbars. Use CSS grid
+  for two-dimensional/table-like layouts, including four-column forms with
+  responsive collapse (`repeat(4, minmax(0, 1fr))`).
+- Long user/API text must not break UI: apply `min-width: 0`/`min-inline-size: 0`,
+  `overflow-wrap: anywhere`, and `max-inline-size: 100%` where content can
+  shrink or wrap. Buttons remain inline-flex centered.
+- Every generated form validates OpenAPI-required fields on the client, renders
+  `required`/`aria-required`, `aria-invalid`, linked accessible error text, and
+  blocks submit while invalid or pending.
 - Frontend never reaches the DB, service-account keys, or any secrets directly — backend APIs only.
 
 ## Auth UX
@@ -121,3 +132,5 @@ Minimum before final response/publish:
 - auth/session state is represented through the same UI path used by the app
 - primary server-backed surface covers loading, error, and success states
 - forms or critical user actions cover expected outcome plus one validation/error case
+- generated forms cover missing required fields and one long-string/responsive
+  safety case

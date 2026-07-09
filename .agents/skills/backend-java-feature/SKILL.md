@@ -47,11 +47,12 @@ auth, analytics, or multi-user review is required. Migrate UI code into
 2. **OpenAPI first** — update `openapi.yaml`, run review checklist, regenerate interfaces.
 3. **Thin controllers** — implement generated `*Api`; ≤6 lines; no repositories; `@Transactional` on controller.
 4. **Service interface + impl** — business logic in `*ServiceImpl`; inject interface, not impl.
-5. **Two MapStruct mappers** — entity↔record in `service/`, record↔DTO in `application/`.
-6. **Liquibase** — every `changeSet` has direct `preConditions`; verify gates reject missing preconditions.
-7. **Errors** — single `ErrorReason` enum + `AppException` only.
-8. **Auth** — Clerk JWT via `SecurityConfig`; resolve caller with `AppUserFactory`; no mock/Replit OIDC.
-9. **Tests** — Phase 2 minimums per `testing-policy.md` before publish.
+5. **MapStruct only** — entity↔record in `service/`, record↔DTO in `application/`; no `new *Entity()` / `new *V1()` setter chains.
+6. **CurrentTime only** — inject `CurrentTime` for timestamps; no direct `LocalDateTime.now(...)` / `Instant.now()` in business code.
+7. **Liquibase** — every `changeSet` has direct `preConditions`; verify gates reject missing preconditions.
+8. **Errors** — single `ErrorReason` enum + `AppException` only.
+9. **Auth** — Clerk JWT via `SecurityConfig`; resolve caller with `AppUserFactory`; no mock/Replit OIDC.
+10. **Tests** — Phase 2 minimums per `testing-policy.md` before publish.
 
 Full architecture, module matrix, port lock, build flags, gotcha table:
 `references/backend-workflow-details.md`.

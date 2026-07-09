@@ -5,9 +5,9 @@ import PACKAGE_REPLACE_ME.api.v1.model.AppValidationExceptionResponseV1;
 import PACKAGE_REPLACE_ME.api.v1.model.FieldToErrorResponseV1;
 import PACKAGE_REPLACE_ME.service.common.error.CodeAwareThrowable;
 import PACKAGE_REPLACE_ME.service.common.error.ErrorReason;
-import java.time.LocalDateTime;
-import java.time.ZoneOffset;
+import PACKAGE_REPLACE_ME.service.common.time.CurrentTime;
 import java.util.List;
+import lombok.RequiredArgsConstructor;
 import org.slf4j.MDC;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
@@ -19,10 +19,13 @@ import org.springframework.validation.FieldError;
  * Default {@link GlobalExceptionResponseHelper} implementation.
  */
 @Component
+@RequiredArgsConstructor
 public class GlobalExceptionResponseHelperImpl implements GlobalExceptionResponseHelper {
 
     private static final String MDC_CORRELATION_ID = "correlationId";
     private static final String DEFAULT_CORRELATION_ID = "n/a";
+
+    private final CurrentTime currentTime;
 
     /**
      * Builds a single-error API response entity.
@@ -40,7 +43,7 @@ public class GlobalExceptionResponseHelperImpl implements GlobalExceptionRespons
             response.setCode(ErrorReason.C000.getCode());
         }
         response.setMessage(exception.getMessage());
-        response.setTimestamp(LocalDateTime.now(ZoneOffset.UTC));
+        response.setTimestamp(currentTime.nowLocalDateTime());
         response.setCorrelationId(currentCorrelationId());
         return new ResponseEntity<>(response, HttpStatusCode.valueOf(status.value()));
     }
@@ -107,7 +110,7 @@ public class GlobalExceptionResponseHelperImpl implements GlobalExceptionRespons
      */
     AppValidationExceptionResponseV1 validationResponse(List<FieldToErrorResponseV1> errors) {
         AppValidationExceptionResponseV1 response = new AppValidationExceptionResponseV1();
-        response.setTimestamp(LocalDateTime.now(ZoneOffset.UTC));
+        response.setTimestamp(currentTime.nowLocalDateTime());
         response.setCorrelationId(currentCorrelationId());
         response.setErrors(errors);
         return response;

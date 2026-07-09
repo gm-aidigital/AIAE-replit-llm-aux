@@ -13,7 +13,7 @@ Hard recap:
   `external-services` is OPTIONAL and exists only when the project has real
   outbound integrations (HTTP APIs, queues, vendor SDKs, BigQuery clients,
   etc.). No empty Maven modules. No `common` Maven module — cross-cutting
-  types live under `service/<base>/service/common/{error,observability,security}/`.
+  types live under `service/<base>/service/common/{error,observability,security,time}/`.
 - If there are no external integrations, do NOT create `external-services`,
   do NOT list it in parent `<modules>`, do NOT add it to
   `<dependencyManagement>`, and do NOT depend on it from `service`.
@@ -209,13 +209,47 @@ logic in service/controller code.
 ResourceV1 dto = new ResourceV1();
 dto.setId(record.id()); dto.setName(record.name());
 
+CaseStudyEntity entity = new CaseStudyEntity();
+entity.setTitle(model.title());
+entity.setStatus("SUBMITTED");
+
 // REQUIRED
 return mapper.toDto(record);
+CaseStudyEntity entity = mapper.toEntity(model);
+mapper.updateEntity(model, entity);
 ```
 
 Shared module mapper configs set `unmappedTargetPolicy=ERROR`. Unmapped
 target → `@Mapping(target = "...", ignore = true)` or `constant = "..."`
 (both keep compile-time check).
+
+Create/update flows use aggregate-owned MapStruct methods:
+`toEntity(Create<X>Model model)` for creation and
+`updateEntity(Update<X>Model model, @MappingTarget entity)` for writable
+updates. Service inputs are `*Model` records under
+`service/<aggregate>/models/`; do not introduce service-layer `*Command` types.
+Services may set technical fields such as timestamps or authenticated owner ids
+after mapping, but all model/request field copying belongs in MapStruct.
+`scripts/lib/check-production-manual-mapping.sh` rejects local
+`new *Entity()` followed by setter chains in app-owned backend modules.
+
+## CurrentTime mandatory — no direct now calls (hard rule)
+
+Generated projects ship `service/common/time/CurrentTime` and
+`CurrentTimeImpl`. Inject `CurrentTime` anywhere business/application code needs
+the current time:
+
+```java
+private final CurrentTime currentTime;
+
+entity.setCreatedAt(currentTime.nowLocalDateTime());
+```
+
+Do not call `LocalDateTime.now(...)`, `LocalDate.now(...)`,
+`LocalTime.now(...)`, `Instant.now()`, `OffsetDateTime.now(...)`, or
+`ZonedDateTime.now(...)` directly outside `CurrentTimeImpl` and tests.
+`scripts/lib/check-production-current-time.sh` enforces this for app-owned
+backend modules.
 
 ## Javadoc — input/output parameters MUST be documented (hard rule)
 

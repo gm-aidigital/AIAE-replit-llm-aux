@@ -5,7 +5,10 @@ import PACKAGE_REPLACE_ME.api.v1.model.AppValidationExceptionResponseV1;
 import PACKAGE_REPLACE_ME.error.mapper.GlobalExceptionResponseHelperImpl;
 import PACKAGE_REPLACE_ME.service.common.error.AppException;
 import PACKAGE_REPLACE_ME.service.common.error.ErrorReason;
+import PACKAGE_REPLACE_ME.service.common.time.CurrentTime;
 import jakarta.validation.ConstraintViolationException;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -16,7 +19,20 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class GlobalExceptionHandlerTest {
 
-    private final GlobalExceptionHandler handler = new GlobalExceptionHandler(new GlobalExceptionResponseHelperImpl());
+    private final GlobalExceptionHandler handler =
+        new GlobalExceptionHandler(new GlobalExceptionResponseHelperImpl(new FixedCurrentTime()));
+
+    private static final class FixedCurrentTime implements CurrentTime {
+        @Override
+        public Instant nowInstant() {
+            return Instant.parse("2026-01-01T00:00:00Z");
+        }
+
+        @Override
+        public ZoneOffset getDefaultTimeZone() {
+            return ZoneOffset.UTC;
+        }
+    }
 
     @Test
     void shouldMapAppExceptionCodesToHttpStatusesTest() {

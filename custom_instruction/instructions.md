@@ -147,6 +147,17 @@ Replit datasource env wiring: see
   behavior tests for the main flow.
 - Backend test shape must follow `templates/generated-project/testing/backend-test-style-rules.md`.
 - Entity access must follow `templates/generated-project/structure/entity-service-boundary-policy.md`: one entity, one repository, one paired entity service; orchestration services never inject repositories directly.
+- Mapping across backend boundaries must be MapStruct-only. Do not handwrite
+  `new *Entity()` / `new *V1()` plus setter chains in services, controllers, or
+  mapper classes; add `toEntity(...)`, `toRecord(...)`, `toDto(...)`, or
+  `updateEntity(..., @MappingTarget ...)` methods to the aggregate-owned mapper.
+  Service inputs are `*Model` records under `service/<aggregate>/models/`;
+  do not introduce service-layer `*Command` types.
+- Application time must come from the injectable
+  `service/common/time/CurrentTime` bean. Business/application code must not call
+  `LocalDateTime.now(...)`, `LocalDate.now(...)`, `LocalTime.now(...)`,
+  `Instant.now()`, `OffsetDateTime.now(...)`, or `ZonedDateTime.now(...)`
+  directly outside `CurrentTimeImpl` and tests.
 - JaCoCo with phased coverage gate (see
   `templates/generated-project/testing/testing-policy.md`):
   - Phase 1 (internal build loops): `0.00` default, `-DskipTests` allowed only
@@ -173,6 +184,16 @@ Replit datasource env wiring: see
 - OpenAPI is a user-facing contract: every operation, schema, enum, parameter,
   request body, response, and schema property must carry meaningful
   `description` text.
+- Frontend runtime CSS uses BEM/plain CSS with semantic tokens and `rem` units;
+  raw `px` units and hard-coded hex colors are forbidden under
+  `frontend/src/**/*.css`.
+- Frontend layout is flex-first for one-dimensional rows/stacks/toolbars and
+  grid-only for two-dimensional/table-like surfaces such as data rows and
+  four-column forms. Generated UI must survive mobile/desktop widths, long
+  unbroken strings, and wrapped button labels.
+- Generated forms must validate OpenAPI-required fields before submit and expose
+  accessible errors with `required`/`aria-required`, `aria-invalid`,
+  `aria-describedby`, and/or `role="alert"`.
 
 Do not replace a requested Java/Spring backend with Node/Express without
 explicit user approval.

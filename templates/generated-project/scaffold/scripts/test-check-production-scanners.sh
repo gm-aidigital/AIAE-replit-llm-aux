@@ -83,6 +83,114 @@ else
   fail "constants and main should be allowed"
 fi
 
+echo "==> current-time scanner rejects direct now calls"
+rm -f "${JAVA_DIR}/"*.java
+cat > "${JAVA_DIR}/TimeBad.java" <<'EOF'
+package com.example.demo;
+import java.time.LocalDateTime;
+public class TimeBad {
+    public LocalDateTime run() {
+        return LocalDateTime.now();
+    }
+}
+EOF
+if (cd "${WORK}" && bash "${LIB}/check-production-current-time.sh" backend/demo/src/main/java 2>/dev/null); then
+  fail "direct now() should be rejected"
+else
+  pass "direct now() rejected"
+fi
+
+echo "==> current-time scanner accepts CurrentTime boundary"
+rm -f "${JAVA_DIR}/TimeBad.java"
+cat > "${JAVA_DIR}/TimeGood.java" <<'EOF'
+package com.example.demo;
+import java.time.LocalDateTime;
+public class TimeGood {
+    private final CurrentTime currentTime;
+    public TimeGood(CurrentTime currentTime) {
+        this.currentTime = currentTime;
+    }
+    public LocalDateTime run() {
+        return currentTime.nowLocalDateTime();
+    }
+    interface CurrentTime {
+        LocalDateTime nowLocalDateTime();
+    }
+}
+EOF
+cat > "${JAVA_DIR}/CurrentTimeImpl.java" <<'EOF'
+package com.example.demo;
+import java.time.Instant;
+public class CurrentTimeImpl {
+    public Instant nowInstant() {
+        return Instant.now();
+    }
+}
+EOF
+if (cd "${WORK}" && bash "${LIB}/check-production-current-time.sh" backend/demo/src/main/java); then
+  pass "CurrentTime boundary allowed"
+else
+  fail "CurrentTime boundary should be allowed"
+fi
+
+echo "==> manual-mapping scanner rejects entity setter chains"
+rm -f "${JAVA_DIR}/"*.java
+cat > "${JAVA_DIR}/ManualMappingBad.java" <<'EOF'
+package com.example.demo;
+public class ManualMappingBad {
+    public CaseStudyEntity create(CaseStudyModel model) {
+        CaseStudyEntity entity = new CaseStudyEntity();
+        entity.setTitle(model.title());
+        entity.setStatus("SUBMITTED");
+        return entity;
+    }
+    record CaseStudyModel(String title) {}
+    static class CaseStudyEntity {
+        void setTitle(String title) {}
+        void setStatus(String status) {}
+    }
+}
+EOF
+if (cd "${WORK}" && bash "${LIB}/check-production-manual-mapping.sh" backend/demo/src/main/java 2>/dev/null); then
+  fail "entity setter chain should be rejected"
+else
+  pass "entity setter chain rejected"
+fi
+
+echo "==> manual-mapping scanner accepts MapStruct boundary plus technical timestamp"
+rm -f "${JAVA_DIR}/ManualMappingBad.java"
+cat > "${JAVA_DIR}/ManualMappingGood.java" <<'EOF'
+package com.example.demo;
+import java.time.LocalDateTime;
+public class ManualMappingGood {
+    private final CaseStudyMapper mapper;
+    private final CurrentTime currentTime;
+    public ManualMappingGood(CaseStudyMapper mapper, CurrentTime currentTime) {
+        this.mapper = mapper;
+        this.currentTime = currentTime;
+    }
+    public CaseStudyEntity create(CaseStudyModel model) {
+        CaseStudyEntity entity = mapper.toEntity(model);
+        entity.setCreatedAt(currentTime.nowLocalDateTime());
+        return entity;
+    }
+    record CaseStudyModel(String title) {}
+    interface CaseStudyMapper {
+        CaseStudyEntity toEntity(CaseStudyModel model);
+    }
+    interface CurrentTime {
+        LocalDateTime nowLocalDateTime();
+    }
+    static class CaseStudyEntity {
+        void setCreatedAt(LocalDateTime createdAt) {}
+    }
+}
+EOF
+if (cd "${WORK}" && bash "${LIB}/check-production-manual-mapping.sh" backend/demo/src/main/java); then
+  pass "MapStruct boundary allowed"
+else
+  fail "MapStruct boundary should be allowed"
+fi
 
 OPENAPI_DIR="${WORK}/backend/application/src/main/resources/api/v1/specs"
 FRONTEND_SCHEMA_DIR="${WORK}/frontend/src/shared/api/generated"
@@ -620,7 +728,136 @@ else
 fi
 rm -f "${STRUCTURE_WORK}/backend/application/src/main/java/com/aidigital/demo/mappers/lesson/WrapperApiMapper.java"
 
-echo "==> canonical scaffold passes both scanners"
+FRONTEND_WORK="${WORK}/frontend-ui"
+FRONTEND_SRC="${FRONTEND_WORK}/frontend/src"
+RESET_DIR="${FRONTEND_SRC}/shared/ui/base"
+DEMO_DIR="${FRONTEND_SRC}/features/demo"
+mkdir -p "${RESET_DIR}" "${DEMO_DIR}"
+
+write_good_frontend_reset() {
+  cat > "${RESET_DIR}/reset.css" <<'EOF'
+body {
+    overflow-wrap: anywhere;
+}
+
+button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-inline-size: 0;
+    max-inline-size: 100%;
+    text-align: center;
+}
+EOF
+}
+
+echo "==> frontend UI scanner rejects raw px units"
+write_good_frontend_reset
+cat > "${DEMO_DIR}/demo.css" <<'EOF'
+.demo {
+    padding: 12px;
+}
+EOF
+if (cd "${FRONTEND_WORK}" && bash "${LIB}/check-frontend-ui-rules.sh" frontend/src 2>/dev/null); then
+  fail "raw px unit should be rejected"
+else
+  pass "raw px unit rejected"
+fi
+rm -f "${DEMO_DIR}/demo.css"
+
+echo "==> frontend UI scanner rejects broken button reset"
+cat > "${RESET_DIR}/reset.css" <<'EOF'
+body {
+    overflow-wrap: anywhere;
+}
+
+button {
+    display: block;
+}
+EOF
+if (cd "${FRONTEND_WORK}" && bash "${LIB}/check-frontend-ui-rules.sh" frontend/src 2>/dev/null); then
+  fail "broken button reset should be rejected"
+else
+  pass "broken button reset rejected"
+fi
+
+echo "==> frontend UI scanner rejects fixed four-column grids without responsive collapse"
+write_good_frontend_reset
+cat > "${DEMO_DIR}/demo.css" <<'EOF'
+.demo-form {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.75rem;
+}
+EOF
+if (cd "${FRONTEND_WORK}" && bash "${LIB}/check-frontend-ui-rules.sh" frontend/src 2>/dev/null); then
+  fail "fixed four-column grid should be rejected"
+else
+  pass "fixed four-column grid rejected"
+fi
+rm -f "${DEMO_DIR}/demo.css"
+
+echo "==> frontend UI scanner rejects unvalidated forms"
+write_good_frontend_reset
+cat > "${DEMO_DIR}/DemoForm.tsx" <<'EOF'
+export function DemoForm() {
+    return (
+        <form>
+            <label htmlFor="name">Name</label>
+            <input id="name" />
+            <button type="submit">Save</button>
+        </form>
+    );
+}
+EOF
+if (cd "${FRONTEND_WORK}" && bash "${LIB}/check-frontend-ui-rules.sh" frontend/src 2>/dev/null); then
+  fail "unvalidated form should be rejected"
+else
+  pass "unvalidated form rejected"
+fi
+rm -f "${DEMO_DIR}/DemoForm.tsx"
+
+echo "==> frontend UI scanner accepts validated rem-based form"
+cat > "${DEMO_DIR}/demo.css" <<'EOF'
+.demo {
+    display: grid;
+    gap: 0.75rem;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    min-width: 0;
+}
+
+@media (max-width: 48rem) {
+    .demo {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+EOF
+cat > "${DEMO_DIR}/DemoForm.tsx" <<'EOF'
+export function DemoForm() {
+    const nameError = "Name is required";
+    return (
+        <form>
+            <label htmlFor="name">Name</label>
+            <input
+                id="name"
+                required
+                aria-invalid={Boolean(nameError)}
+                aria-describedby="name-error"
+            />
+            <p id="name-error" role="alert">{nameError}</p>
+            <button type="submit">Save</button>
+        </form>
+    );
+}
+EOF
+if (cd "${FRONTEND_WORK}" && bash "${LIB}/check-frontend-ui-rules.sh" frontend/src); then
+  pass "validated rem-based form allowed"
+else
+  fail "validated rem-based form should be allowed"
+fi
+rm -f "${DEMO_DIR}/demo.css" "${DEMO_DIR}/DemoForm.tsx"
+
+echo "==> canonical scaffold passes production scanners"
 if (cd "${SCAFFOLD}" && bash "${LIB}/check-production-magic-values.sh"); then
   pass "scaffold passes magic scanner"
 else
@@ -631,6 +868,24 @@ if (cd "${SCAFFOLD}" && bash "${LIB}/check-production-static-methods.sh"); then
   pass "scaffold passes static scanner"
 else
   fail "scaffold must pass static scanner"
+fi
+
+if (cd "${SCAFFOLD}" && bash "${LIB}/check-production-current-time.sh"); then
+  pass "scaffold passes current-time scanner"
+else
+  fail "scaffold must pass current-time scanner"
+fi
+
+if (cd "${SCAFFOLD}" && bash "${LIB}/check-production-manual-mapping.sh"); then
+  pass "scaffold passes manual-mapping scanner"
+else
+  fail "scaffold must pass manual-mapping scanner"
+fi
+
+if (cd "${SCAFFOLD}" && bash "${LIB}/check-frontend-ui-rules.sh"); then
+  pass "scaffold passes frontend UI scanner"
+else
+  fail "scaffold must pass frontend UI scanner"
 fi
 
 echo ""

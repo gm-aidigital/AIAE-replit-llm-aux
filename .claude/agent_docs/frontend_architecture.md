@@ -91,3 +91,19 @@ For affected flows, validate request counts in browser tooling or automated test
   part of unrelated work.
 - Prefer page tabs, filter bars, segmented controls, and contextual toolbars.
 - Operational screens should be dense, scannable, and work-focused rather than marketing-style landing pages.
+- Use flexbox for one-dimensional rows/stacks/toolbars. Use CSS grid for
+  two-dimensional/table-like layouts such as data rows and multi-column forms;
+  four-column forms use `repeat(4, minmax(0, 1fr))` and responsive collapse.
+- Runtime CSS uses semantic tokens and `rem`; raw `px` and hard-coded hex colors
+  are forbidden under `frontend/src/**/*.css`.
+- Shrinkable content containers set `min-width: 0` or `min-inline-size: 0`, text
+  uses `overflow-wrap: anywhere`, and buttons stay inline-flex centered so long
+  labels and user/API strings do not break mobile or desktop layout.
+
+## Forms
+
+- Generated forms mirror OpenAPI `required` and validation constraints before
+  submit.
+- Required controls expose `required` or `aria-required`; invalid controls use
+  `aria-invalid` and link to an announced error with `aria-describedby` and/or
+  `role="alert"`.

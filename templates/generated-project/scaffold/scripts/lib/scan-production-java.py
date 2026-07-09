@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Production Java scanners for magic literals and static methods."""
+"""Production Java scanners for generated-project backend rules."""
 
 from __future__ import annotations
 
@@ -33,6 +33,13 @@ STATIC_METHOD = re.compile(
     r"static\s+(?!final\b)(?!class\b|interface\b|enum\b|record\b)"
     r"[^=;{]+?\([^)]*\)"
 )
+TIME_NOW = re.compile(
+    r"\b(?:Instant|LocalDate|LocalDateTime|LocalTime|OffsetDateTime|ZonedDateTime)\.now\s*\("
+)
+ENTITY_ALLOCATION = re.compile(
+    r"\b(?:[A-Za-z0-9_]*Entity|var)\s+(\w+)\s*=\s*new\s+[A-Za-z0-9_]*Entity\s*\("
+)
+SETTER_CHAIN_LIMIT = 2
 
 MAGIC_RULES = [
     ("jwt-claim-name", re.compile(r'"(?:user_id|full_name|azp)"')),
@@ -138,6 +145,47 @@ def scan_static(path: Path) -> list[str]:
     return violations
 
 
+def scan_time(path: Path) -> list[str]:
+    violations: list[str] = []
+    if path.name == "CurrentTimeImpl.java":
+        return violations
+    for i, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
+        stripped = raw.strip()
+        if not stripped or stripped.startswith("//") or stripped.startswith("/*") or stripped.startswith("*"):
+            continue
+        line = strip_comments_and_strings(raw)
+        if TIME_NOW.search(line):
+            violations.append(f"{path}:{i}: use injected CurrentTime instead of direct now(): {stripped[:120]}")
+    return violations
+
+
+def scan_manual_mapping(path: Path) -> list[str]:
+    violations: list[str] = []
+    lines = path.read_text(encoding="utf-8").splitlines()
+    for i, raw in enumerate(lines):
+        line = strip_comments_and_strings(raw)
+        match = ENTITY_ALLOCATION.search(line)
+        if not match:
+            continue
+        variable = match.group(1)
+        setter_lines: list[int] = []
+        setter = re.compile(rf"\b{re.escape(variable)}\.set[A-Z]\w*\s*\(")
+        for j in range(i + 1, min(i + 80, len(lines))):
+            candidate = strip_comments_and_strings(lines[j])
+            if METHOD_SIG.match(candidate):
+                break
+            if setter.search(candidate):
+                setter_lines.append(j + 1)
+            if len(setter_lines) >= SETTER_CHAIN_LIMIT:
+                joined = ", ".join(str(line_no) for line_no in setter_lines[:SETTER_CHAIN_LIMIT])
+                violations.append(
+                    f"{path}:{i + 1}: manual entity mapping for '{variable}' "
+                    f"(setter chain at lines {joined}); use MapStruct mapper.toEntity/updateEntity"
+                )
+                break
+    return violations
+
+
 def collect_dirs(args: list[str]) -> list[Path]:
     if args:
         return [Path(p) for p in args]
@@ -149,8 +197,8 @@ def collect_dirs(args: list[str]) -> list[Path]:
 
 
 def main() -> int:
-    if len(sys.argv) < 2 or sys.argv[1] not in {"magic", "static"}:
-        print("Usage: scan-production-java.py <magic|static> [src_root...]", file=sys.stderr)
+    if len(sys.argv) < 2 or sys.argv[1] not in {"magic", "static", "time", "mapping"}:
+        print("Usage: scan-production-java.py <magic|static|time|mapping> [src_root...]", file=sys.stderr)
         return 2
 
     mode = sys.argv[1]
@@ -168,10 +216,20 @@ def main() -> int:
                 continue
             if mode == "magic":
                 violations.extend(scan_magic(path))
-            else:
+            elif mode == "static":
                 violations.extend(scan_static(path))
+            elif mode == "time":
+                violations.extend(scan_time(path))
+            else:
+                violations.extend(scan_manual_mapping(path))
 
-    label = "check-production-magic-values" if mode == "magic" else "check-production-static-methods"
+    labels = {
+        "magic": "check-production-magic-values",
+        "static": "check-production-static-methods",
+        "time": "check-production-current-time",
+        "mapping": "check-production-manual-mapping",
+    }
+    label = labels[mode]
     if violations:
         print(f"{label}: FAIL — {len(violations)} violation(s):", file=sys.stderr)
         for v in violations:

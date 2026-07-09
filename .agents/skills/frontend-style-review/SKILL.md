@@ -22,7 +22,7 @@ output plus network behavior, not merely CSS naming.
 
 1. Inspect component logic, styles, query hooks, and tests together.
 2. Check behavior and states: loading, error, empty, success, disabled, denied,
-   mutation pending/success/failure, and long-content handling.
+   mutation pending/success/failure, form validation, and long-content handling.
 3. Check data behavior:
    - typed shared OpenAPI client only;
    - one canonical query-key owner per resource;
@@ -32,9 +32,13 @@ output plus network behavior, not merely CSS naming.
    - user-scoped cache clears on sign-out/account switch.
 4. Check UI implementation:
    - established navigation and design system remain intact;
-   - BEM/plain CSS/token rules are followed;
+   - BEM/plain CSS/token rules are followed, including `rem` units instead of
+     raw `px`;
+   - flexbox is used for one-dimensional layout, while grid is reserved for
+     two-dimensional/table-like surfaces such as multi-column forms;
    - icons, labels, spacing, and interaction states match the approved source;
-   - no overlap or overflow at supported widths;
+   - no overlap or overflow at supported widths, including long unbroken
+     user/API strings and wrapped button labels;
    - keyboard focus, semantics, contrast, reduced motion, and touch access work.
 5. When runtime access exists, inspect desktop/mobile screenshots, console, and
    network requests. Static source review alone cannot prove visual parity.
@@ -45,7 +49,7 @@ Useful discovery scans:
 ```bash
 grep -rnE "\b(fetch|axios|XMLHttpRequest)\b|http://localhost" frontend/src | grep -v "shared/api/client"
 grep -rnE "tailwind|styled-components|@emotion|\.module\.css" frontend/src frontend/package.json
-grep -rnE "#[0-9a-fA-F]{3,6}|hsl\(|rgb\(" frontend/src/features frontend/src/shared | grep -v tokens.css
+grep -rnE "[0-9.]+px|#[0-9a-fA-F]{3,8}" frontend/src --include="*.css"
 git -C frontend diff --name-only -- src/shared/api/generated/schema.d.ts
 ```
 

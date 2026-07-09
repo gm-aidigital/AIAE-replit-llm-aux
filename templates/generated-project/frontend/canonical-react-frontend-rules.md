@@ -67,6 +67,9 @@ Regeneration (major Vite upgrade): diff against scaffold MUST preserve all six.
 - **Plain CSS files with BEM naming** for styling — NOT CSS Modules,
   Tailwind, styled-components, Emotion, or CSS-in-JS. See
   `templates/generated-project/frontend/bem-naming-rules.md`.
+- Runtime CSS uses semantic CSS variables and `rem` units. Raw `px` units are
+  forbidden in `frontend/src/**/*.css`; convert design pixel specs into rem
+  tokens in `src/shared/ui/base/tokens.css`.
 - **No left side menu**. Use a top app header, page tabs, filter bars,
   segmented controls, and contextual toolbars. Do not generate `Sidebar`,
   `SideNav`, `LeftNav`, drawer-as-navigation, or a permanent left rail unless
@@ -113,6 +116,46 @@ interfaces and types, and a `constants/` subdirectory for static constants (see
   `const` declarations in `.tsx` are rejected so static values move to
   `constants/*.ts`; use function declarations for components.
 
+## Layout and CSS methodology
+
+- Use flexbox for one-dimensional layout: stacks, rows, headers, toolbars,
+  filter bars, button groups, form action rows, and compact inline metadata.
+- Use CSS grid only for two-dimensional/table-like layout: data rows, card
+  matrices, dashboards, and forms that visually read as columns. A four-column
+  form uses `grid-template-columns: repeat(4, minmax(0, 1fr))` with explicit
+  responsive breakpoints that collapse to two columns and then one column.
+- Every flex/grid child that can contain user/API text must be shrink-safe:
+  set `min-width: 0` or `min-inline-size: 0`; text containers set
+  `overflow-wrap: anywhere`; media and form controls cap at `max-width: 100%`
+  or `max-inline-size: 100%`.
+- Buttons use the shared reset or matching button block rules:
+  `display: inline-flex`, `align-items: center`, `justify-content: center`,
+  `text-align: center`, and `max-inline-size: 100%`. Do not hardcode a fixed
+  height that clips wrapped labels.
+- Page and component CSS consumes spacing, radius, type, color, shadow, and
+  control-size tokens. Do not write raw `px` values or hard-coded hex colors in
+  runtime CSS.
+- Responsive correctness is part of completion. For any changed screen, verify
+  mobile and desktop widths plus a long unbroken string in titles, cells, labels,
+  buttons, empty/error states, and user-entered/API-rendered content.
+
+## Forms and validation
+
+- OpenAPI `required`, `minLength`, `maxLength`, `format`, enum, numeric bounds,
+  and nullable/optional contracts must be reflected in the form model and
+  client-side validation before submit.
+- Required controls render a visible label plus `required` or `aria-required`.
+  Invalid controls expose `aria-invalid`, link to their error text with
+  `aria-describedby`, and announce errors with `role="alert"` or an equivalent
+  accessible error region.
+- Trim text inputs where the backend treats blank text as missing. Prevent
+  submit until required client-side validation passes; keep the submit action
+  disabled while a mutation is pending.
+- Server validation errors must map back to the relevant field when possible and
+  to a form-level alert when not.
+- Every generated form test covers at least one missing-required-field error
+  and one long-string/responsive safety case for the same form surface.
+
 ## OpenAPI client generation
 
 Source: `../backend/application/src/main/resources/api/v1/specs/openapi.yaml`
@@ -157,10 +200,12 @@ Generated artifacts:
   See `bem-naming-rules.md` for the full convention and examples.
 - Follow Elevate tokens: primary `239 100% 43%`, secondary surface
   `240 78% 98%`, accent surface `237 76% 94%`, compact Inter typography,
-  12px card radius, 10px controls, one primary CTA per view, status colors only
-  for state.
+  `0.75rem` card radius, `0.625rem` controls, one primary CTA per view, status
+  colors only for state.
 - Never hard-code colors in component CSS. Colors live in
   `src/shared/ui/base/tokens.css`; components consume semantic variables.
+- Never use raw `px` in runtime CSS. Use `rem` scale tokens and semantic
+  variables.
 - Navigation is top/header-first. Left side menu/sidebar patterns are forbidden.
 - One block per directory: `<block-name>.tsx` + `<block-name>.css` + optional `components/`.
 - Frontend never accesses the DB, service-account keys, or any secrets directly — backend APIs only.
@@ -198,6 +243,8 @@ Minimum before publish/completion:
 - auth mode/session state is covered through the same UI path used by the app
 - primary server-backed surface covers loading, error, and success states
 - forms or critical user actions cover expected outcome plus one validation/error case
+- every generated form covers missing required fields and one long-string layout
+  case; affected screens are checked at mobile and desktop widths
 - changes to query ownership, caching, lazy UI, or invalidation verify important request counts and session cache eviction
 
 Handoff expands this into deeper role-dependent and critical-flow coverage.

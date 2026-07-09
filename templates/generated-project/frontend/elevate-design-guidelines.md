@@ -15,8 +15,12 @@ workflows.
 - No left side menu, sidebar, side rail, or permanent left navigation.
 - Use a top app header, page-level tabs, segmented controls, filters, and local
   toolbars instead.
-- Keep content centered in a max-width content shell: `1265px` max width with
-  `24px` horizontal page padding.
+- Keep content centered in a max-width content shell: `79.0625rem` max width
+  with `1.5rem` horizontal page padding.
+- Use flexbox for one-dimensional layout and CSS grid only for
+  two-dimensional/table-like layouts such as multi-column forms and data rows.
+  Four-column forms use `repeat(4, minmax(0, 1fr))` and collapse at responsive
+  breakpoints.
 - Prefer dense tables, search bars, grouped rows, filters, and compact page
   headers over oversized hero sections.
 - One primary CTA per view. Secondary actions use outline, ghost, menu, or icon
@@ -55,54 +59,65 @@ Never use status colors as decoration.
 ### Scale tokens (spacing, radius, type)
 
 `tokens.css` also exposes spacing, radius, and type scales as CSS variables —
-consume these in component CSS instead of hard-coding px:
+consume these in component CSS instead of hard-coding raw units:
 
-- Spacing: `--space-1` (4px), `--space-2` (8px), `--space-3` (12px),
-  `--space-4` (16px), `--space-6` (24px), `--space-10` (40px).
-- Radius: `--radius-sm` (8px), `--radius-md` (10px),
-  `--radius-lg`/`--radius-xl` (12px), `--radius-full` (999px).
-- Type: `--text-body` (13px), `--text-table-head` (14px),
-  `--text-subhead` (16px), `--text-section` (18px),
-  `--text-page-title` (32px); aliases `--text-sm`/`--text-base`/`--text-lg`/`--text-xl`.
+- Spacing: `--space-1` (`0.25rem`), `--space-2` (`0.5rem`),
+  `--space-3` (`0.75rem`), `--space-4` (`1rem`),
+  `--space-6` (`1.5rem`), `--space-10` (`2.5rem`).
+- Radius: `--radius-sm` (`0.5rem`), `--radius-md` (`0.625rem`),
+  `--radius-lg`/`--radius-xl` (`0.75rem`),
+  `--radius-full` (`999rem`).
+- Type: `--text-body` (`0.8125rem`), `--text-table-head` (`0.875rem`),
+  `--text-subhead` (`1rem`), `--text-section` (`1.125rem`),
+  `--text-page-title` (`2rem`); aliases
+  `--text-sm`/`--text-base`/`--text-lg`/`--text-xl`.
+- Layout/control: `--content-max-width` (`79.0625rem`) and
+  `--control-height` (`2.5rem`).
 - Surface/text/border aliases: `--surface-default`, `--surface-muted`,
   `--surface-accent`, `--text-default`, `--text-muted`, `--accent-primary`,
   `--border-default`.
 
-The px values in "Shape and Spacing" and "Typography" below are the source of
-truth for these variables; consume the variables, don't re-hard-code the px.
+Runtime CSS under `frontend/src` uses `rem` tokens, not raw `px`. Pixel values
+from design specs must be converted into tokens before use.
 
 ## Typography
 
 - Primary typeface: Inter, weights 400, 500, 600, 700.
 - Poppins 500 is reserved for rare display moments only.
 - Product surfaces use compact type:
-  - page title: `32px / 700`
-  - section H2: `18px / 600`
-  - subhead: `16px / 500`
-  - body: `13px / 400`
-  - table head: `14px / 500`
-  - pill: `12px / 400`
-  - badge: `11px / 600`, uppercase
-- Body copy in product surfaces must stay between `12px` and `16px`.
+  - page title: `2rem / 700`
+  - section H2: `1.125rem / 600`
+  - subhead: `1rem / 500`
+  - body: `0.8125rem / 400`
+  - table head: `0.875rem / 500`
+  - pill: `0.75rem / 400`
+  - badge: `0.6875rem / 600`, uppercase
+- Body copy in product surfaces must stay between `0.75rem` and `1rem`.
 
 ## Shape and Spacing
 
-- Base radius: `12px`.
-- Controls: `10px`; compact elements: `8px`; pills: `999px`.
-- Common spacing increments: `6`, `8`, `12`, `16`, `24`, `40`.
-- Table/list rows use `16px` gaps and `24px` horizontal padding when space
+- Base radius: `0.75rem`.
+- Controls: `0.625rem`; compact elements: `0.5rem`; pills: `999rem`.
+- Common spacing increments: `0.375rem`, `0.5rem`, `0.75rem`, `1rem`,
+  `1.5rem`, `2.5rem`.
+- Table/list rows use `1rem` gaps and `1.5rem` horizontal padding when space
   allows.
 
 ## Components
 
-- Buttons: primary button is `40px` tall, `10px` radius, `14px / 500`.
+- Buttons: primary button is at least `2.5rem` tall, `0.625rem` radius,
+  `0.875rem / 500`, and centered with inline-flex so labels wrap cleanly.
 - Rounded-full pill buttons are exceptions for floating card/chart actions,
   onboarding, empty states, and modal confirmations. Never use two pill buttons
   in one view.
-- Inputs: `40px` tall, `10px` radius, semantic border/background tokens.
+- Inputs: at least `2.5rem` tall, `0.625rem` radius, semantic
+  border/background tokens.
 - Status pills: rounded-full, state token only, concise labels.
 - Tables: lavender header via accent token, secondary surface for grouped rows,
   expanded child rows use accent for contrast.
+- User-entered/API-rendered text must not break layout: text containers use
+  `min-width: 0`/`min-inline-size: 0` and `overflow-wrap: anywhere`; controls
+  and media cap at `max-inline-size: 100%`.
 
 ## Authentication Surface
 
@@ -118,8 +133,8 @@ truth for these variables; consume the variables, don't re-hard-code the px.
 
 ## Charts
 
-Charts live inside cards. Use a secondary header strip, white plot area, `24px`
-internal padding, muted tick labels, and dotted border-token gridlines.
+Charts live inside cards. Use a secondary header strip, white plot area,
+`1.5rem` internal padding, muted tick labels, and dotted border-token gridlines.
 
 Categorical series use this order:
 
@@ -148,5 +163,5 @@ Do not:
 - hard-code colors in components,
 - introduce new accent colors without extending tokens,
 - use status colors for non-status UI,
-- mix radius scales such as `4px` and `20px`,
+- mix unrelated radius scales such as `0.25rem` and `1.25rem`,
 - place multiple primary buttons in one row.
