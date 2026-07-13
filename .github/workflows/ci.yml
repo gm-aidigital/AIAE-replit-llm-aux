@@ -61,6 +61,7 @@ jobs:
             "templates/generated-project/generation/first-aggregate-checklist.md"
             "templates/generated-project/observability/usage-logging-rules.md"
             "templates/generated-project/observability/logbook-http-logging-rules.md"
+            "templates/generated-project/performance/performance-engineering-rules.md"
             "templates/generated-project/errors/error-handling-pattern.md"
             "templates/generated-project/testing/testing-policy.md"
 
@@ -85,6 +86,7 @@ jobs:
             "templates/generated-project/scaffold/backend/service/pom.xml"
             "templates/generated-project/scaffold/backend/domain/pom.xml"
             "templates/generated-project/scaffold/backend/db/pom.xml"
+            "templates/generated-project/scaffold/backend/observability/pom.xml"
 
             # === Scaffold application module (Java) ===
             "templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/Application.java"
@@ -104,6 +106,11 @@ jobs:
             "templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/auth/controllers/AuthController.java"
             "templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/error/GlobalExceptionHandler.java"
             "templates/generated-project/scaffold/backend/application/src/main/java/PACKAGE_REPLACE_ME/observability/CorrelationIdFilter.java"
+            "templates/generated-project/scaffold/backend/application/src/test/java/PACKAGE_REPLACE_ME/observability/CorrelationIdFilterTest.java"
+            "templates/generated-project/scaffold/backend/observability/src/main/java/PACKAGE_REPLACE_ME/observability/external/ExternalCallTimer.java"
+            "templates/generated-project/scaffold/backend/observability/src/main/java/PACKAGE_REPLACE_ME/observability/external/ExternalClientMetricsInterceptor.java"
+            "templates/generated-project/scaffold/backend/observability/src/test/java/PACKAGE_REPLACE_ME/observability/external/ExternalCallTimerTest.java"
+            "templates/generated-project/scaffold/backend/observability/src/test/java/PACKAGE_REPLACE_ME/observability/external/ExternalClientMetricsInterceptorTest.java"
 
             # === Scaffold event-logging-to-db-feature module (whole usage-logging surface) ===
             "templates/generated-project/scaffold/backend/event-logging-to-db-feature/pom.xml"

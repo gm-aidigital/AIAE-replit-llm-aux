@@ -1,5 +1,10 @@
 # Multi-Node Cache Management Rules
 
+Redis is not part of the current baseline. This database-backed invalidation
+mechanism is the reusable multi-node path today. Keep its interfaces portable
+so Redis can be evaluated later, but do not add Redis without measured need,
+explicit consistency/availability requirements, and user approval.
+
 Cached data on one node goes stale on the others when a write happens, because the Hibernate
 second-level cache and Spring caches are node-local. The `cache-management` feature module propagates
 invalidation across nodes **without** Kafka/Redis: a write publishes an event row to a shared table;
@@ -118,6 +123,12 @@ app:
 - **Region names must match exactly** — a typo means the region is never cleared. Turn on
   `verify-registry` in CI/dev to assert at startup that every registered name resolves to a region.
 - **Bound the event table** — keep the scheduled retention cleanup; the poll only needs recent rows.
+- **Assume duplicate/missed timing windows** — consumers are idempotent, poll
+  with a durable cursor/overlap appropriate to the data model, and tolerate the
+  same invalidation more than once.
+- **Prevent stampedes** — cache expiry/invalidation must not let every node
+  recompute the same expensive value without bounded concurrency or a suitable
+  single-flight/refresh strategy.
 - **Idempotent clear** — never make eviction depend on processing an event exactly once.
 
 ## Acceptance checks

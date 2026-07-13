@@ -556,16 +556,51 @@ cat > "${STRUCTURE_WORK}/backend/pom.xml" <<'EOF'
     <module>service</module>
     <module>domain</module>
     <module>db</module>
+    <module>observability</module>
     <module>event-logging-to-db-feature</module>
   </modules>
 </project>
 EOF
-for m in application service domain db event-logging-to-db-feature; do
+for m in application service domain db observability event-logging-to-db-feature; do
   mkdir -p "${STRUCTURE_WORK}/backend/${m}/src/main/java"
   cat > "${STRUCTURE_WORK}/backend/${m}/pom.xml" <<EOF
-<project><artifactId>${m}</artifactId></project>
+<project>
+  <artifactId>${m}</artifactId>
+  <dependencies><dependency><artifactId>lombok</artifactId></dependency></dependencies>
+</project>
 EOF
 done
+cat > "${STRUCTURE_WORK}/backend/application/pom.xml" <<'EOF'
+<project>
+  <artifactId>application</artifactId>
+  <dependencies>
+    <dependency><artifactId>lombok</artifactId></dependency>
+    <dependency><artifactId>observability</artifactId></dependency>
+  </dependencies>
+</project>
+EOF
+mkdir -p \
+  "${STRUCTURE_WORK}/backend/application/src/main/java/com/aidigital/demo/config" \
+  "${STRUCTURE_WORK}/backend/application/src/main/java/com/aidigital/demo/observability" \
+  "${STRUCTURE_WORK}/backend/application/src/main/resources" \
+  "${STRUCTURE_WORK}/backend/observability/src/main/java/com/aidigital/demo/observability/external"
+cat > "${STRUCTURE_WORK}/backend/application/src/main/java/com/aidigital/demo/config/LogbookConfig.java" <<'EOF'
+package com.aidigital.demo.config;
+public class LogbookConfig {}
+EOF
+cat > "${STRUCTURE_WORK}/backend/application/src/main/java/com/aidigital/demo/observability/CorrelationIdFilter.java" <<'EOF'
+package com.aidigital.demo.observability;
+public class CorrelationIdFilter {}
+EOF
+cat > "${STRUCTURE_WORK}/backend/observability/src/main/java/com/aidigital/demo/observability/external/ExternalCallTimer.java" <<'EOF'
+package com.aidigital.demo.observability.external;
+public class ExternalCallTimer {}
+EOF
+cat > "${STRUCTURE_WORK}/backend/observability/src/main/java/com/aidigital/demo/observability/external/ExternalClientMetricsInterceptor.java" <<'EOF'
+package com.aidigital.demo.observability.external;
+public class ExternalClientMetricsInterceptor {}
+EOF
+touch "${STRUCTURE_WORK}/backend/application/src/main/resources/logback-spring.xml"
 cat > "${STRUCTURE_WORK}/backend/application/src/main/java/com/aidigital/demo/web/SpaFallbackController.java" <<'EOF'
 package com.aidigital.demo.web;
 public class SpaFallbackController {}

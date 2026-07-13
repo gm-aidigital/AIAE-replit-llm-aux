@@ -263,6 +263,8 @@ if [ -d backend/application/src/main/resources ]; then
   for module in $(sed -n 's:.*<module>\(.*\)</module>.*:\1:p' backend/pom.xml); do
     module_dir="backend/${module}"
     [ -d "${module_dir}" ] || fail "backend/pom.xml lists missing module: ${module}"
+    grep -q '<artifactId>lombok</artifactId>' "${module_dir}/pom.xml" \
+      || fail "Every Maven submodule must declare Lombok: ${module}"
     # -print -quit keeps this pipefail-safe (no SIGPIPE from a piped `grep -q`).
     [ -n "$(find "${module_dir}/src" -type f ! -path '*/target/*' -print -quit 2>/dev/null)" ] \
       || fail "Maven module must not be empty/POM-only: ${module}"
@@ -281,6 +283,17 @@ if [ -d backend/application/src/main/resources ]; then
   logbook_config="$(find backend/application/src/main/java -path '*/config/LogbookConfig.java' -print -quit)"
   [ -z "${logbook_config}" ] || grep -Fq 'new DefaultSink(new JsonHttpLogFormatter(), new DefaultHttpLogWriter())' "${logbook_config}" \
     || fail "Logbook DefaultSink must be built with formatter + writer"
+  [ -z "${logbook_config}" ] || grep -Fq '.strategy(new WithoutBodyStrategy())' "${logbook_config}" \
+    || fail "Production/Replit Logbook must use metadata-only WithoutBodyStrategy"
+  if [ -f backend/external-services/pom.xml ]; then
+    pooled_factory="$(find backend/external-services/src/main/java -name 'PooledRestClientFactory.java' -print -quit 2>/dev/null)"
+    if [ -n "${pooled_factory}" ]; then
+      grep -Fq 'new ExternalClientMetricsInterceptor(name, meterRegistry)' "${pooled_factory}" \
+        || fail "Third-party PooledRestClientFactory must register ExternalClientMetricsInterceptor"
+      grep -Fq 'new LogbookClientHttpRequestInterceptor(logbook)' "${pooled_factory}" \
+        || fail "Third-party PooledRestClientFactory must register LogbookClientHttpRequestInterceptor"
+    fi
+  fi
   usage_persistence="$(find backend/event-logging-to-db-feature/src/main/java -path '*/usagelogging/persistence/UsageEventPersistenceService.java' -print -quit 2>/dev/null || true)"
   if [ -n "${usage_persistence}" ]; then
     grep -Fq '@Async("usageLoggingExecutor")' "${usage_persistence}" \

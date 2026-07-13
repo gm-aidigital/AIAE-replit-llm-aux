@@ -26,6 +26,7 @@ Postgres env vars, backend 5000 → external 80, Replit Secrets) AND local-dev
 │   ├── service/                          # Business logic + MapStruct Entity↔Record + AppException family
 │   ├── domain/                           # JPA entities + repositories ONLY (leaf)
 │   ├── db/                               # Liquibase changelogs only
+│   ├── observability/                    # reusable external-client metrics interceptor/timer
 │   ├── event-logging-to-db-feature/                      # self-contained usage logging: @LogUsage + aspect + entity + repo + changelog (drop module + dep lines to remove)
 │   └── external-services/                # external clients — MANDATORY for any outbound HTTP/SDK/queue call; omit only if app has none
 └── frontend/                             # React + TypeScript + Vite
@@ -41,6 +42,9 @@ Postgres env vars, backend 5000 → external 80, Replit Secrets) AND local-dev
 
 - Parent `pom.xml` at `backend/pom.xml`, NOT at root.
 - `lombok.config` at `backend/lombok.config`.
+- Every child Maven module POM declares the parent-managed
+  `org.projectlombok:lombok` dependency, including `db`, `observability`,
+  removable feature modules, and optional `external-services`.
 - `config/checkstyle*.xml` at `backend/config/`.
 - `Dockerfile` split: `backend/Dockerfile` + `frontend/Dockerfile`. No root Dockerfile.
 - `docker-compose.yml` at root (orchestrates backend + frontend + Postgres).
@@ -156,18 +160,23 @@ the raw app name with hyphens, or any package outside `com.aidigital.*`.
 
 ## Backend modules
 
-Maven parent + 4 required modules + the self-contained `event-logging-to-db-feature`
+Maven parent + 5 required modules + the self-contained `event-logging-to-db-feature`
 feature module. NO `common` Maven module and NO empty Maven modules —
 cross-cutting service-layer types (AppException, ErrorReason) live under
 `service/common/`. Usage-logging types live in `event-logging-to-db-feature`.
 
 - `application` — Spring Boot entrypoint, REST controllers, generated API
-  impls, security, GlobalExceptionHandler, observability glue.
+  impls, security, GlobalExceptionHandler, Logbook/correlation/logging, Actuator,
+  and Prometheus. Attaches `observability` for reusable outbound timing.
 - `service` — business orchestration, validation, tx boundaries. HOSTS
   AppException family under `<base>/service/common/`. Depends on
   `event-logging-to-db-feature` so `*ServiceImpl` methods can carry `@LogUsage`.
 - `domain` — JPA entities + repositories ONLY. Leaf.
 - `db` — Liquibase changelogs + seed data.
+- `observability` — reusable outbound-client observability:
+  `ExternalClientMetricsInterceptor`, `ExternalCallTimer`, and the common
+  low-cardinality timer schema.
+  No product behavior and no internal-module dependencies.
 - `event-logging-to-db-feature` — self-contained usage logging feature: `@LogUsage`
   annotation, `UsageEvent` record, `UsageLogger` interface +
   Postgres/NoOp impls, the AOP aspect, configs, `UsageEventEntity` +
@@ -230,6 +239,7 @@ Dropping an edge is the #1 cause of "build passes but runtime breaks".
 ```
 application ──► service ──► domain
             └─► db                                (runtime-only — see below)
+            └─► observability                     (reusable external-client metrics)
 
 service     ──► domain
             ──► event-logging-to-db-feature       (brings @LogUsage onto *ServiceImpl)
@@ -237,8 +247,11 @@ service     ──► domain
 
 event-logging-to-db-feature
             ──► (JPA + AOP + spring-security)     (LEAF internally — no internal deps)
+observability
+            ──► (micrometer-core + spring-context + spring-web) (LEAF internally)
 domain                                            (LEAF)
-external-services                                 (LEAF; present iff app has outbound calls)
+external-services ──► observability               (outbound metric interception/timing;
+                                                    present iff app has outbound calls)
 db          ──► liquibase-core                    (LEAF internally)
 ```
 
@@ -327,14 +340,18 @@ silently fragments. Always plural.
 ```
 application/src/main/java/<base>/
   Application.java                                  # @SpringBootApplication
-  config/                                           # Spring config beans
+  config/LogbookConfig.java                         # metadata-only masked Logbook bean
   security/                                         # SecurityConfig, JwtDecoders, AuthProperties
   error/                                            # GlobalExceptionHandler (@RestControllerAdvice)
-  observability/                                    # CorrelationIdFilter, etc. (usage logging lives in event-logging-to-db-feature/)
+  observability/CorrelationIdFilter.java            # inbound correlation ID/MDC
   <aggregate>/                                      # ONE folder per domain aggregate
     controllers/<X>Controller.java
   mappers/                                          # ALL API mappers live here
     <aggregate>/<X>ApiMapper.java                   # ServiceRecord ↔ V1 DTO, ONE per entity
+
+observability/src/main/java/<base>/
+  observability/external/ExternalClientMetricsInterceptor.java
+  observability/external/ExternalCallTimer.java
 
 service/src/main/java/<base>/service/
   common/                                           # cross-cutting, NOT per-aggregate

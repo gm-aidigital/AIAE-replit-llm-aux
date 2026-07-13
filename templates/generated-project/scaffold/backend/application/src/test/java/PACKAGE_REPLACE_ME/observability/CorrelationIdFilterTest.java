@@ -15,7 +15,7 @@ import static org.mockito.Mockito.when;
 
 class CorrelationIdFilterTest {
 
-    // doFilterInternal is protected; this test lives in the same package so it
+    // doFilterInternal is protected; this application test lives in the same package so it
     // can call it directly without a subclass or reflection.
     private final CorrelationIdFilter filter = new CorrelationIdFilter();
 

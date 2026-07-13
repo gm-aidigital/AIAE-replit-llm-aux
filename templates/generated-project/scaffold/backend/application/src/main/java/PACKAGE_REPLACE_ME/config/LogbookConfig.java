@@ -1,4 +1,4 @@
-// LogbookConfig — JSON HTTP request/response logging with required masking.
+// LogbookConfig — application-owned metadata-only HTTP logging with required masking.
 // Canonical spec: templates/generated-project/observability/logbook-http-logging-rules.md.
 // Binds app.logbook.* properties (see application.yml baseline). Logbook's
 // permissive defaults are NOT enough — this config enforces the company
@@ -7,6 +7,8 @@
 
 package PACKAGE_REPLACE_ME.config;
 
+import lombok.Getter;
+import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -20,6 +22,7 @@ import org.zalando.logbook.core.Conditions;
 import org.zalando.logbook.core.DefaultHttpLogWriter;
 import org.zalando.logbook.core.DefaultSink;
 import org.zalando.logbook.core.HeaderFilters;
+import org.zalando.logbook.core.WithoutBodyStrategy;
 import org.zalando.logbook.json.JsonBodyFilters;
 import org.zalando.logbook.json.JsonHttpLogFormatter;
 
@@ -30,7 +33,7 @@ import java.util.Set;
 import java.util.function.Predicate;
 
 /**
- * Configures structured HTTP logging and masking for Logbook.
+ * Configures application HTTP logging and masking.
  */
 @Configuration
 @EnableConfigurationProperties(LogbookConfig.LogbookProperties.class)
@@ -74,6 +77,7 @@ public class LogbookConfig {
             .condition(Conditions.exclude(exclusions))
             .headerFilter(headerFilter)
             .bodyFilter(combinedBodyFilter)
+            .strategy(new WithoutBodyStrategy())
             .sink(new DefaultSink(new JsonHttpLogFormatter(), new DefaultHttpLogWriter()))
             .build();
     }
@@ -83,6 +87,8 @@ public class LogbookConfig {
      * canonical rules so a fresh project is compliant without overrides.
      */
     @ConfigurationProperties("app.logbook")
+    @Getter
+    @Setter
     public static class LogbookProperties {
         private String censoredReplacement = "XXX";
         private List<String> headersToCensor = List.of(
@@ -99,36 +105,5 @@ public class LogbookConfig {
             "/health", List.of("GET"),
             "/**", List.of("OPTIONS"));
 
-        public String getCensoredReplacement() {
-            return censoredReplacement;
-        }
-
-        public void setCensoredReplacement(String v) {
-            this.censoredReplacement = v;
-        }
-
-        public List<String> getHeadersToCensor() {
-            return headersToCensor;
-        }
-
-        public void setHeadersToCensor(List<String> v) {
-            this.headersToCensor = v;
-        }
-
-        public List<String> getJsonFieldsToCensor() {
-            return jsonFieldsToCensor;
-        }
-
-        public void setJsonFieldsToCensor(List<String> v) {
-            this.jsonFieldsToCensor = v;
-        }
-
-        public Map<String, List<String>> getExcluded() {
-            return excluded;
-        }
-
-        public void setExcluded(Map<String, List<String>> v) {
-            this.excluded = v;
-        }
     }
 }

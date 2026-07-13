@@ -158,6 +158,32 @@ assert_http_foundation_not_duplicated() {
     fi
 }
 
+assert_observability_wiring() {
+    local project_root="$1"
+    local pom="${project_root}/backend/external-services/pom.xml"
+    local factory
+    factory=$(find "${project_root}/backend/external-services/src/main/java" \
+        -name 'PooledRestClientFactory.java' -print -quit 2>/dev/null)
+    if grep -q '<artifactId>lombok</artifactId>' "$pom" \
+        && grep -q '<artifactId>observability</artifactId>' "$pom"; then
+        pass "external-services declares Lombok and reusable observability"
+    else
+        fail "external-services must declare Lombok and observability dependencies"
+    fi
+    if [ -n "$factory" ] \
+        && grep -Fq 'new ExternalClientMetricsInterceptor(name, meterRegistry)' "$factory"; then
+        pass "PooledRestClientFactory registers ExternalClientMetricsInterceptor"
+    else
+        fail "PooledRestClientFactory missing ExternalClientMetricsInterceptor"
+    fi
+    if [ -n "$factory" ] \
+        && grep -Fq 'new LogbookClientHttpRequestInterceptor(logbook)' "$factory"; then
+        pass "PooledRestClientFactory registers LogbookClientHttpRequestInterceptor"
+    else
+        fail "PooledRestClientFactory missing LogbookClientHttpRequestInterceptor"
+    fi
+}
+
 test_pack() {
     local pack_name="$1"
     local pack_dir="${INTEGRATIONS_DIR}/${pack_name}"
@@ -202,6 +228,7 @@ test_pack() {
     assert_external_services_has_java_files "$tmp_project"
     assert_module_present_exactly_once "$tmp_project"
     assert_no_package_placeholder "$tmp_project"
+    assert_observability_wiring "$tmp_project"
     assert_verify_gates "$tmp_project"
 
     echo ""
@@ -257,6 +284,7 @@ test_two_packs_no_duplication() {
     assert_module_present_exactly_once "$tmp_project"
     assert_no_duplicate_pom_entries "$tmp_project"
     assert_http_foundation_not_duplicated "$tmp_project"
+    assert_observability_wiring "$tmp_project"
     assert_verify_gates "$tmp_project"
 
     if [ -n "$(find "${tmp_project}/backend/external-services/src" -name "ClaudeClient.java" -print -quit)" ]; then

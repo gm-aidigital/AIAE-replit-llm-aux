@@ -30,9 +30,10 @@
     </properties>
 
     <dependencies>
-        <!-- REQUIRED edges (drop either → broken):
+        <!-- REQUIRED edges:
                application → service (transitively brings domain)
-               application → db      (Liquibase changelogs MUST be in fat jar) -->
+               application → db      (Liquibase changelogs MUST be in fat jar)
+               application → observability (reusable external-client metrics) -->
         <dependency>
             <groupId>${project.groupId}</groupId>
             <artifactId>service</artifactId>
@@ -41,8 +42,12 @@
             <groupId>${project.groupId}</groupId>
             <artifactId>db</artifactId>
         </dependency>
+        <dependency>
+            <groupId>${project.groupId}</groupId>
+            <artifactId>observability</artifactId>
+        </dependency>
 
-        <!-- Web + security + AOP + actuator -->
+        <!-- Web + security + AOP -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
@@ -63,6 +68,9 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-aop</artifactId>
         </dependency>
+
+        <!-- Application-owned operational logging and metric publication.
+             Reusable outbound metric helpers live in observability. -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
@@ -71,14 +79,6 @@
             <groupId>io.micrometer</groupId>
             <artifactId>micrometer-registry-prometheus</artifactId>
         </dependency>
-
-        <!-- OpenAPI: SpringDoc UI + generator runtime types -->
-        <dependency>
-            <groupId>org.springdoc</groupId>
-            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
-        </dependency>
-
-        <!-- Observability -->
         <dependency>
             <groupId>net.logstash.logback</groupId>
             <artifactId>logstash-logback-encoder</artifactId>
@@ -86,6 +86,12 @@
         <dependency>
             <groupId>org.zalando</groupId>
             <artifactId>logbook-spring-boot-starter</artifactId>
+        </dependency>
+
+        <!-- OpenAPI: SpringDoc UI + generator runtime types -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
         </dependency>
 
         <!-- CSV export endpoints -->

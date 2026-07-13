@@ -14,7 +14,7 @@ import java.io.IOException;
 import java.util.UUID;
 
 /**
- * Sets a request-scoped correlation id on every inbound HTTP request. The id
+ * Application filter that sets a correlation id on every inbound HTTP request. The id
  * is taken from the {@code X-Correlation-Id} header when present, generated
  * (UUID v4) otherwise; written to SLF4J {@code MDC} so every log line emitted
  * during the request — including Logbook's JSON request/response — carries

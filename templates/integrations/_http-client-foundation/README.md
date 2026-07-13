@@ -8,6 +8,10 @@ module to projects without real external API calls.
 - `PooledHttpClientProperties`
 - `PooledRestClientFactory`
 - Apache HttpClient 5 wiring for Spring `RestClient`
+- mandatory `LogbookClientHttpRequestInterceptor` registration using the
+  application-owned `Logbook` bean
+- reusable `ExternalClientMetricsInterceptor` from `backend/observability` for
+  the shared `external.client.requests` timer schema
 - focused configuration tests
 
 ## Install

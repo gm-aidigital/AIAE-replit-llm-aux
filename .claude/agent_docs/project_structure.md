@@ -31,6 +31,15 @@ root.
 - Owns Liquibase changelogs and SQL resources only.
 - No services, controllers, or repositories.
 
+### `backend/observability`
+
+- Reusable, attachable outbound-client metrics only:
+  `ExternalClientMetricsInterceptor`, `ExternalCallTimer`, and their shared
+  low-cardinality metric schema.
+- No product/domain behavior and no dependency on application, service,
+  domain, db, or external-services.
+- Product usage analytics is a separate persistence-backed feature module.
+
 ### `backend/external-services`
 
 - Owns outbound integrations and integration-specific configuration.
@@ -45,13 +54,17 @@ root.
 
 ### `backend/application`
 
-- Owns Spring Boot runtime configuration, security, controllers, OpenAPI contract implementations, application-level mappers, and exception translation.
+- Owns Spring Boot runtime composition, security, controllers, OpenAPI contract implementations, application-level mappers, and exception translation.
+- Attaches `backend/observability` for reusable external-client timing and owns
+  Logbook configuration, inbound correlation, structured logging, Actuator,
+  Prometheus, and application metric publication.
 - Controllers implement generated `*Api` interfaces.
 - Generated OpenAPI sources under `backend/application/target/generated-sources/openapi` are build output and must not be edited manually.
 
 ## Backend layering rules
 
 - `application` may call `service` contracts and application-level mappers.
+- `application` attaches the reusable `observability` module.
 - `service` may call `domain` through the paired entity services and may call `external-services` clients.
 - `domain` does not depend on `service`, `application`, or `external-services`.
 - Controllers never inject repositories.

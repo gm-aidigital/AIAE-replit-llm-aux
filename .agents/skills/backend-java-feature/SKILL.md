@@ -34,6 +34,8 @@ auth, analytics, or multi-user review is required. Migrate UI code into
 | OpenAPI | `templates/generated-project/openapi/canonical-openapi-rules.md` |
 | Auth (Clerk SSO only) | `templates/generated-project/auth/google-sso-clerk-blueprint.md` |
 | Usage logging | `templates/generated-project/observability/usage-logging-rules.md` |
+| Operational observability / HTTP logging | `templates/generated-project/observability/logbook-http-logging-rules.md` |
+| Performance engineering | `templates/generated-project/performance/performance-engineering-rules.md` |
 | BigQuery query construction | `templates/generated-project/integrations/bigquery-query-rules.md` |
 | Code patterns | `references/code-patterns.md` |
 | Spring gotchas | `references/spring-boot-gotchas.md` |
@@ -45,7 +47,9 @@ auth, analytics, or multi-user review is required. Migrate UI code into
 
 1. **Copy, don't regenerate** — scaffold POMs, YAML, `SecurityConfig`, `SpaFallbackController`.
 2. **OpenAPI first** — update `openapi.yaml`, run review checklist, regenerate interfaces.
-3. **Thin controllers** — implement generated `*Api`; ≤6 lines; no repositories; `@Transactional` on controller.
+3. **Thin controllers** — implement generated `*Api`; ≤6 lines; no repositories
+   and no transaction ownership. Transactions belong on the narrow service
+   database phase and never span external HTTP/SDK/storage/AI calls.
 4. **Service interface + impl** — business logic in `*ServiceImpl`; inject interface, not impl.
 5. **MapStruct only** — entity↔record in `service/`, record↔DTO in `application/`; no `new *Entity()` / `new *V1()` setter chains.
 6. **CurrentTime only** — inject `CurrentTime` for timestamps; no direct `LocalDateTime.now(...)` / `Instant.now()` in business code.
@@ -53,6 +57,11 @@ auth, analytics, or multi-user review is required. Migrate UI code into
 8. **Errors** — single `ErrorReason` enum + `AppException` only.
 9. **Auth** — Clerk JWT via `SecurityConfig`; resolve caller with `AppUserFactory`; no mock/Replit OIDC.
 10. **Tests** — Phase 2 minimums per `testing-policy.md` before publish.
+11. **Module/client invariants** — every Maven submodule declares Lombok;
+    reusable outbound metrics (`ExternalClientMetricsInterceptor` and
+    `ExternalCallTimer`) live in `backend/observability`; every third-party
+    Spring HTTP client comes from `PooledRestClientFactory` with both metrics
+    and `LogbookClientHttpRequestInterceptor` interception.
 
 Full architecture, module matrix, port lock, build flags, gotcha table:
 `references/backend-workflow-details.md`.

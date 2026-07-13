@@ -15,7 +15,6 @@ the generated interface will not include that parameter.
 ```java
 // application/.../<domain>/<Domain>Controller.java
 @PostMapping("/{id}")
-@Transactional
 public ResponseEntity<<Domain>V1> update<Domain>(
         @PathVariable Long id,
         @RequestBody @Valid Update<Domain>RequestV1 req) {
@@ -45,21 +44,22 @@ repositories themselves — they return data; service writes via the repository.
 @Service
 @RequiredArgsConstructor
 public class <Domain>ServiceImpl implements <Domain>Service {
-    private final <Domain>Repository repo;          // domain module
+    private final <Domain>EntityService entityService; // transactional DB phases
     private final <External>Client externalClient;  // external-services module
-    private final <Domain>Mapper mapper;
 
     @Override
     @LogUsage(action = "<domain>.sync")
     public <Domain>Record syncFromExternal(Long id) {
-        <Domain>Entity entity = repo.findById(id)
-            .orElseThrow(() -> new AppException(ErrorReason.C001, id));
-        <External>Data fresh = externalClient.fetch(entity.getExternalId());
-        entity.applyFresh(fresh);
-        return mapper.toRecord(repo.save(entity));
+        <Domain>ExternalReference reference = entityService.getExternalReference(id);
+        <External>Data fresh = externalClient.fetch(reference.externalId());
+        return entityService.applyExternalData(id, fresh);
     }
 }
 ```
+
+`getExternalReference` is a short read-only transaction and
+`applyExternalData` is a short write transaction on a separate Spring bean.
+The network call executes between them without retaining a database connection.
 
 ## Thin controller — canonical and anti-pattern
 

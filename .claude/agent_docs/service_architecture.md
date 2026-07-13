@@ -46,6 +46,14 @@ data through `RoleAssignmentService`. It must not inject `UserRepository` or
 
 - Transactions belong in the service layer.
 - Outbound HTTP/SDK calls belong in `backend/external-services`, never in entity services or controllers.
+- A transaction must not span an outbound HTTP/SDK call, object-storage
+  operation, AI call, file transfer, poll/sleep, or other slow I/O. Split the
+  orchestration into short database phases around the external call and make
+  intermediate state/idempotency explicit.
+- Third-party Spring HTTP clients use the shared pooled factory with both
+  `ExternalClientMetricsInterceptor` and `LogbookClientHttpRequestInterceptor`,
+  plus explicit timeouts. SDK-managed calls use the reusable
+  `ExternalCallTimer`.
 - Production beans expose no `private` methods. Extract validators, policies, assemblers, or helpers (each unit-testable) instead of hiding logic in private methods, and keep collaborator methods package-private so they are spyable. Only `private static final` constants and `private final` fields stay private.
 - Data carried between collaborators (resolved rows, command results, view models) is a top-level type in the `model` package, never a nested record/class.
 - MapStruct mappers stay narrow: entity-to-model in `service`, model-to-contract in `application`.

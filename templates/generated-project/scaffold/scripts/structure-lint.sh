@@ -68,13 +68,44 @@ echo "==> structure-lint root=${ROOT} scaffold_mode=${SCAFFOLD_MODE}"
 grep -q '<packaging>pom</packaging>' backend/pom.xml \
   || fail "backend/pom.xml must be a Maven parent POM with <packaging>pom</packaging>"
 
-for module in application service domain db event-logging-to-db-feature; do
+for module in application service domain db observability event-logging-to-db-feature; do
   [ -d "backend/${module}" ] \
     || fail "backend/${module}/ missing — copy canonical backend scaffold"
   [ -f "backend/${module}/pom.xml" ] \
     || fail "backend/${module}/pom.xml missing — copy canonical backend scaffold"
   grep -q "<module>${module}</module>" backend/pom.xml \
     || fail "backend/pom.xml must list required module: ${module}"
+done
+
+# --- Reusable external-client metrics boundary ---
+grep -q '<artifactId>observability</artifactId>' backend/application/pom.xml \
+  || fail "application/pom.xml must attach the reusable external metrics module"
+for app_owned in LogbookConfig CorrelationIdFilter; do
+  find backend/application/src/main/java -name "${app_owned}.java" -print -quit | grep -q . \
+    || fail "${app_owned} must remain application-owned"
+done
+[ -f backend/application/src/main/resources/logback-spring.xml ] \
+  || fail "application must own src/main/resources/logback-spring.xml"
+for reusable_metric in ExternalClientMetricsInterceptor ExternalCallTimer; do
+  find backend/observability/src/main/java -name "${reusable_metric}.java" -print -quit | grep -q . \
+    || fail "observability must own ${reusable_metric}"
+done
+if grep -RIlE 'class[[:space:]]+(ExternalClientMetricsInterceptor|ExternalCallTimer)\b' \
+    backend/application/src/main/java backend/service/src/main/java \
+    backend/domain/src/main/java backend/external-services/src/main/java \
+    2>/dev/null | grep -q .; then
+  fail "ExternalClientMetricsInterceptor and ExternalCallTimer belong only in backend/observability"
+fi
+if grep -Eq '<artifactId>(application|service|domain|db|external-services)</artifactId>' \
+    backend/observability/pom.xml; then
+  fail "observability must remain reusable and must not depend on application/service/domain/db/external-services"
+fi
+
+# Every backend Maven submodule declares the parent-managed Lombok dependency,
+# including resource-only and optional modules.
+for module in $(sed -n 's:.*<module>\(.*\)</module>.*:\1:p' backend/pom.xml); do
+  grep -q '<artifactId>lombok</artifactId>' "backend/${module}/pom.xml" \
+    || fail "backend/${module}/pom.xml must declare Lombok"
 done
 
 # --- Package namespace (generated apps only) ---
@@ -214,6 +245,18 @@ if [ -f backend/external-services/pom.xml ]; then
   [ -f backend/service/pom.xml ] \
     && grep -q '<artifactId>external-services</artifactId>' backend/service/pom.xml \
     || fail "service/pom.xml must depend on external-services when that module exists"
+  pooled_factory="$(find backend/external-services/src/main/java -name 'PooledRestClientFactory.java' -print -quit 2>/dev/null)"
+  if [ -n "${pooled_factory}" ]; then
+    grep -Fq 'new ExternalClientMetricsInterceptor(name, meterRegistry)' "${pooled_factory}" \
+      || fail "PooledRestClientFactory must register ExternalClientMetricsInterceptor"
+    grep -Fq 'new LogbookClientHttpRequestInterceptor(logbook)' "${pooled_factory}" \
+      || fail "PooledRestClientFactory must register LogbookClientHttpRequestInterceptor"
+  fi
+  while IFS= read -r direct_client; do
+    [ "$(basename "${direct_client}")" = "PooledRestClientFactory.java" ] \
+      || fail "Third-party Spring HTTP clients must use PooledRestClientFactory: ${direct_client}"
+  done < <(grep -RIlE 'RestClient\.(builder|create)|new[[:space:]]+RestTemplate|WebClient\.builder' \
+    backend/external-services/src/main/java 2>/dev/null || true)
 fi
 
 # --- Every *Controller (except web/) should implement a generated *Api ---

@@ -23,6 +23,9 @@ from the current checkout before applying examples.
 - Read `database_schema.md` before touching backend JPA entities, repositories, JPQL/HQL, cache settings, or Liquibase.
 - Read `html_only_project_migration.md` before converting a standalone HTML/CSS/JS project that needs logging, auth, persistence, analytics, or multi-user review.
 - Read `service_architecture.md` before changing backend entity services, RBAC services, orchestrators, validators, or external-service boundaries.
+- Read `performance_engineering.md` before changing request flows, transaction
+  boundaries, queries, pagination, integrations, caching, pools, file transfer,
+  frontend fetching, or bundle/loading behavior.
 - Read `frontend_architecture.md` before changing React components, frontend API access, auth flow, routing, feature layout, or Vite configuration.
 - Read `frontend_style.md` before changing CSS, visual layout, component classes, or UI structure.
 - Read `frontend_testing.md` before adding or changing frontend unit/component/API tests.
@@ -46,6 +49,10 @@ Key enterprise rule groups:
 - Frontend styling: BEM class names, semantic CSS custom properties, flat class selectors, no CSS Modules, Tailwind, styled-components, Emotion, or CSS-in-JS.
 - Testing style: backend and frontend tests use `should ...` naming, `// Given:` / `// When:` / `// Then:` sections, local test setup, explicit assertions, and meaningful behavior coverage.
 - Logging and observability: structured JSON logging expectations and centralized web/error handling.
+- Performance: measured request/query/payload baselines, bounded APIs,
+  transaction-safe external I/O, set-based persistence, cancellable frontend
+  requests, metadata-only production HTTP logging, and evidence-driven
+  cache/pool/index decisions.
 
 ## Maintenance Rules
 

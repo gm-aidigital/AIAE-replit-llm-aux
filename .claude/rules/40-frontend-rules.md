@@ -19,6 +19,18 @@ paths:
 - Fetch only when the data is required. Disable queries until their inputs and owning UI surface are active; do not preload hidden tabs, closed dialogs, or unavailable permission branches without a measured reason.
 - Mutations update the canonical cache directly when the response is authoritative; otherwise invalidate only affected queries. Broad cache invalidation and refetching unrelated resources are forbidden.
 - Polling, eager prefetching, and duplicate detail/list requests require a documented freshness or latency reason. Request count is part of frontend correctness.
+- Pass TanStack Query's `AbortSignal` through the generated `openapi-fetch`
+  boundary for cancellable searches/navigation; an obsolete response must not
+  replace newer state.
+- User-driven search is debounced. Polling stops on terminal state,
+  hidden/unmounted ownership, authorization loss, or bounded error exhaustion.
+- Multi-item actions use one bulk mutation and one narrow cache update or
+  invalidation, not sequential per-item requests/refetches.
+- Paginate or incrementally load growing collections; do not fetch complete
+  datasets only to filter/sort them in the browser.
+- Lazy-load heavy editor, chart, admin, and non-entry routes/features. Compare
+  supported Vite production-build output before/after; do not add blanket React
+  memoization without profiler evidence.
 - Clerk owns frontend auth; protected calls send Bearer JWT through the shared API client.
 - Frontend env vars must not contain secrets.
 - Preserve the ports, allowed hosts, runtime alias, and proxy behavior defined by

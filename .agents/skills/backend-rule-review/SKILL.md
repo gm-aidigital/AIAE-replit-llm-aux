@@ -10,7 +10,9 @@ metadata:
 Gate the backend diff against `templates/generated-project/testing/testing-policy.md`,
 `templates/generated-project/structure/service-helper-extraction-policy.md`,
 `templates/generated-project/structure/entity-service-boundary-policy.md`, and
-`templates/generated-project/openapi/canonical-openapi-rules.md`. Read-only.
+`templates/generated-project/openapi/canonical-openapi-rules.md`, plus
+`templates/generated-project/performance/performance-engineering-rules.md`.
+Read-only.
 Report `file:line — rule — fix`, then `STATUS: PASS | CHANGES_REQUESTED`.
 
 Scope: working diff by default; whole backend on request. Package root is
@@ -47,7 +49,15 @@ grep -rn "@Value" backend --include=*.java | grep -v /target/
   ≤10 public, ≤8 package-private helpers, ≤8 fields).
 - **Boundaries**: `1 entity = 1 repository = 1 service`; controllers implement
   generated `*Api`, stay thin, and inject no repositories; outbound calls only in
-  the external-services module; no edits to generated sources.
+  the external-services module; reusable external-client metric helpers only in
+  the attachable observability module; no edits to generated sources.
+- **Performance**: no external I/O inside database transactions; no
+  repository/lazy access in loops; bounded collection/summary contracts;
+  set-based bulk work; no speculative pool/cache/index tuning.
+- **Mandatory module/client wiring**: every Maven child declares Lombok and
+  every third-party Spring HTTP client registers both
+  `ExternalClientMetricsInterceptor` and `LogbookClientHttpRequestInterceptor`
+  through `PooledRestClientFactory`.
 
 ## Output
 

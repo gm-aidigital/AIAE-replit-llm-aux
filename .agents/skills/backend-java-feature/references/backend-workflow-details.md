@@ -105,27 +105,29 @@ Safety-review grep:
 grep -rn 'private final.*Repository' application/src/main/java/**/controllers/  # expected: empty
 ```
 
-**`@Transactional` lives on the controller, not the service** (kills
-`LazyInitializationException` structurally — controller tx spans service +
-mapper + MVC serialisation). Class-level `@Transactional(readOnly = true)`;
-write methods override with `@Transactional`.
+**Controllers do not own transactions.** A controller transaction can retain a
+database connection across API mapping, serialization, storage, AI, or
+third-party calls. Put `@Transactional(readOnly = true)` on service read methods
+and `@Transactional` on the narrow service write phase. The service maps the
+entity to a fully initialized record before the transaction closes; entities
+never escape the service boundary.
 
 ```java
 @RestController
 @RequiredArgsConstructor
-@Transactional(readOnly = true)
 class <Domain>Controller implements <Domain>Api {
     private final <Domain>Service service;
     private final <Domain>ApiMapper mapper;
 
     @Override
-    @Transactional
     public ResponseEntity<<Domain>V1> update<Domain>(Long id, Update<Domain>RequestV1 req) { ... }
 }
 ```
 
-Services may still add `@Transactional` for different propagation
-(`REQUIRES_NEW` for outbox) — not required by default.
+An orchestration method that calls an external dependency is not transactional.
+It calls a transactional entity/persistence service before and/or after the
+external call, with explicit state and idempotency. Self-invoking a transactional
+helper does not create a new proxy boundary; extract a collaborator.
 
 Canonical + anti-pattern: `references/code-patterns.md` → "Thin controller".
 
@@ -455,7 +457,7 @@ symptom. Do NOT improvise alternative fixes.
 | `requestMatchers("/<context-path>/...")` matches nothing | Spring Security `requestMatchers` |
 | `/` or `/login` returns 401 after React build | Spring Security `requestMatchers` |
 | Frontend hits `/api/v1/...` and gets 404 from Spring | OpenAPI `servers` not applied to controllers |
-| `LazyInitializationException` in `mapper.toDto(...)` | Lazy init — single rule (`@Transactional` on controller) |
+| `LazyInitializationException` in `mapper.toDto(...)` | Lazy init — map entity to record inside a transactional service and use a purpose-built fetch/projection |
 | Postgres `bytea` error on JPQL `LOWER(CONCAT('%', :search, '%'))` | JPQL bytea crash |
 | Tempted to use `JdbcTemplate` "for speed" | Don't mix JdbcTemplate with JPA |
 | Datasource works in shell but Spring cannot connect | Replit datasource env wiring |

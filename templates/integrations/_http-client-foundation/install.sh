@@ -35,6 +35,9 @@ POM_FILE="$EXT_POM" bash "${LIB_DIR}/add-service-dependency.sh" "$PROJECT_ROOT" 
     "org.springframework" "spring-web"
 
 POM_FILE="$EXT_POM" bash "${LIB_DIR}/add-service-dependency.sh" "$PROJECT_ROOT" \
+    "org.zalando" "logbook-spring-boot-starter"
+
+POM_FILE="$EXT_POM" bash "${LIB_DIR}/add-service-dependency.sh" "$PROJECT_ROOT" \
     "com.squareup.okhttp3" "mockwebserver" "4.12.0" "test"
 
 # ── 3. Add external-services dependency to service/pom.xml ─────────────────

@@ -6,6 +6,7 @@ import PACKAGE_REPLACE_ME.external.claude.model.ClaudeContentBlock;
 import PACKAGE_REPLACE_ME.external.claude.model.ClaudeResponse;
 import PACKAGE_REPLACE_ME.external.common.http.PooledRestClientFactory;
 import PACKAGE_REPLACE_ME.external.common.http.config.PooledHttpClientProperties;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
 import okhttp3.mockwebserver.RecordedRequest;
@@ -13,6 +14,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
+import org.zalando.logbook.Logbook;
 
 import java.io.IOException;
 import java.time.Duration;
@@ -63,7 +65,8 @@ class ClaudeClientImplTest {
         httpProps.setConnectionRequestTimeout(Duration.ofSeconds(5));
         httpProps.setKeepAliveDuration(Duration.ofSeconds(60));
         httpProps.setIdleEvictionDuration(Duration.ofSeconds(30));
-        factory = new PooledRestClientFactory(httpProps);
+        factory = new PooledRestClientFactory(
+            Logbook.builder().build(), new SimpleMeterRegistry(), httpProps);
     }
 
     @AfterEach

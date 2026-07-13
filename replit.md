@@ -40,6 +40,10 @@ Tell the Agent: Clerk SSO only, typed `shared/api/client.ts`, strip samples with
 - Auth: Clerk SSO only (required — no mock/replit fallback); mocked/approved-only
   data; real keys in Replit Secrets.
 - Code: simple over clever; canonical artifacts over hand-written boilerplate.
+- Performance: follow
+  `templates/generated-project/performance/performance-engineering-rules.md`;
+  baseline request/query/payload behavior before tuning and prevent
+  cross-layer load amplification.
 - UI: Elevate design system, compact product surfaces, no left side menu.
 - Generation budget: reference canonical files, never paste — see
   `templates/generated-project/generation/token-efficient-generation-rules.md`.
@@ -64,8 +68,12 @@ templates/generated-project/*              # canonical artifacts + scaffold/
 
 - **Backend**: Java 21 LTS + Spring Boot 3.x + Maven multi-module + PostgreSQL +
   Liquibase + HikariCP + Lombok + Checkstyle + JaCoCo. OpenAPI contract-first.
+  Lombok is declared in every Maven submodule, including `db` and optional
+  modules.
   Required modules are `application`, `service`, `domain`, `db`, plus the
-  self-contained `event-logging-to-db-feature` usage-logging module (drop it to
+  reusable `observability` module (`ExternalClientMetricsInterceptor` and
+  `ExternalCallTimer`), plus the self-contained
+  `event-logging-to-db-feature` usage-logging module (drop it to
   remove the feature); optional `external-services` only for real outbound
   integrations, never as an empty/POM-only module.
 - **Frontend**: React + TypeScript + Vite + TanStack Query, typed via
@@ -74,10 +82,18 @@ templates/generated-project/*              # canonical artifacts + scaffold/
   Clerk JWKS via `spring-boot-starter-oauth2-resource-server`; fails fast when
   Clerk keys or `AUTH_AUTHORIZED_PARTIES` are unset. No mock/replit fallback.
 - **Observability**: structured JSON logs to stdout, Actuator
-  (`health`, `prometheus`), Postgres `usage_events` for usage estimation.
+  (`health`, `prometheus`), metadata-only/body-free production Logbook output,
+  mandatory `LogbookClientHttpRequestInterceptor` on third-party Spring HTTP
+  clients, and reusable outbound timing through `backend/observability`.
+  Logbook/correlation/logging/Actuator configuration stays application-owned;
+  Postgres `usage_events` remains separate product analytics.
 - **Runtime split**: Replit → profile `replit`, port `5000`, Replit Postgres
   env vars (`PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`, `PGPASSWORD`);
   Local-dev → profile `local`, port `8080`, `docker-compose --profile local`.
+- **Scale assumption**: code is multi-node safe even if the current Replit
+  deployment starts as one Reserved VM. No node-local correctness state/locks;
+  scheduled work is idempotent/coordinated and caches invalidate across nodes.
+  Redis is not installed and is only a future measured option.
 
 Authoritative-references table: `custom_instruction/instructions.md` →
 "Authoritative references".

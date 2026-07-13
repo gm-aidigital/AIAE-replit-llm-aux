@@ -24,9 +24,10 @@ replace only `PACKAGE_REPLACE_ME` and app placeholders.
 | File | Notes |
 |---|---|
 | `backend/pom.xml` | Java 21, Spring Boot 3.4, pluginManagement |
-| `backend/application/pom.xml` | `db` dep, openapi-generator, PostgreSQL driver, Ehcache / Hibernate JCache |
+| `backend/application/pom.xml` | `db` + reusable `observability` deps, openapi-generator, PostgreSQL driver, Ehcache / Hibernate JCache |
 | `backend/service/pom.xml` | No web/security deps |
-| `backend/domain/pom.xml`, `backend/db/pom.xml` | Leaf modules |
+| `backend/domain/pom.xml`, `backend/db/pom.xml` | Leaf modules; every module POM declares managed Lombok |
+| `backend/observability/` | Reusable attachable outbound metrics: `ExternalClientMetricsInterceptor`, `ExternalCallTimer`, and the low-cardinality `external.client.requests` schema; no product/internal module dependencies |
 | `backend/.../web/SpaFallbackController.java` | Deployment deep links |
 | `backend/.../error/GlobalExceptionHandler.java` | Extends `ResponseEntityExceptionHandler`, delegates to `GlobalExceptionResponseHelper`, no private methods |
 | `backend/.../error/mapper/GlobalExceptionResponseHelper.java` | Error response builder interface (generated API DTOs) |

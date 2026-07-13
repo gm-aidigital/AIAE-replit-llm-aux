@@ -161,25 +161,26 @@ backend endpoint works.
 Fix: `baseUrl` is empty by default. Use it only for a host or servlet context
 prefix, e.g. `/employee-directory`, never `/api/v1`.
 
-## `LazyInitializationException` — single rule that ends it forever
+## `LazyInitializationException` — keep entities inside the transaction
 
 JPA closes session at end of `@Transactional`; lazy fields touched after
 throw. Past Agent runs crashed on `mapper.toDto(entity)` after service
 returned an entity.
 
-**Canonical rule**: put `@Transactional` on the **controller**, not the service.
+**Canonical rule**: controllers stay non-transactional. Service methods own the
+narrow database boundary and return fully initialized records, never entities.
 
-- Class-level `@Transactional(readOnly = true)` as read default.
-- Write methods (POST/PUT/PATCH/DELETE) override with method-level `@Transactional`.
-- Services have NO `@Transactional` by default (`REQUIRED` joins the
-  controller's tx). Add service-level only for different propagation
-  (`REQUIRES_NEW` for outbox, `NEVER` for guards).
+- Read services use `@Transactional(readOnly = true)` where a transaction is
+  required for explicit fetch/mapping.
+- Write services use `@Transactional` around database work only.
+- External HTTP/SDK/storage/AI calls run outside the transaction; an
+  orchestrator calls separate transactional collaborators before/after.
+- Fix lazy access with a purpose-built projection, entity graph, fetch query, or
+  mapping inside the service transaction. Do not switch associations to eager.
 
 ```java
 @RestController
-@RequestMapping("/api/v1/<resources>")
 @RequiredArgsConstructor
-@Transactional(readOnly = true)
 class <Domain>Controller implements <Domain>Api {
     private final <Domain>Service service;
     private final <Domain>ApiMapper mapper;
@@ -190,17 +191,16 @@ class <Domain>Controller implements <Domain>Api {
     }
 
     @Override
-    @Transactional
     public ResponseEntity<<Domain>V1> update<Domain>(Long id, Update<Domain>RequestV1 req) {
         return ResponseEntity.ok(mapper.toDto(service.update(id, req)));
     }
 }
 ```
 
-Tx spans service call + MapStruct mapping + MVC serialisation → lazy crash
-structurally impossible. We tried tx-on-service; Agent failed to keep
-annotate-service + map-inside-service + return-Record consistent — entity
-escaped, lazy crash. One annotation on controller class is harder to forget.
+The service loads/fetches and maps `Entity -> ServiceRecord` before returning.
+The controller maps only `ServiceRecord -> ApiDto`, so MVC serialization never
+touches a lazy entity and a slow client/external dependency cannot extend the
+database transaction.
 
 `@EntityGraph` / `JOIN FETCH` / `EAGER` are PERFORMANCE tools (kill N+1).
 Not lazy fixes — the rule above already prevents that.
@@ -248,8 +248,8 @@ in `LIKE`, `LOWER`, and `CONCAT` expressions.
 
 `@Transactional` on an aspect advice method is a trap. Spring applies
 transactions through proxies, while the advice runs inside the intercepted
-call. If a controller is `@Transactional(readOnly = true)`, the aspect can
-share that read-only tx and inserts fail or disappear.
+call. If an intercepted service is `@Transactional(readOnly = true)`, the
+aspect can share that read-only tx and inserts fail or disappear.
 
 Usage logging therefore uses a separate bean:
 

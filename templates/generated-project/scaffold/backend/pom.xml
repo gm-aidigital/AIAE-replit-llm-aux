@@ -41,6 +41,7 @@
         <module>domain</module>
         <module>db</module>
         <module>event-logging-to-db-feature</module>
+        <module>observability</module>
         <module>cache-management</module>
         <module>service</module>
         <module>application</module>
@@ -108,6 +109,11 @@
             <dependency>
                 <groupId>${project.groupId}</groupId>
                 <artifactId>event-logging-to-db-feature</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>${project.groupId}</groupId>
+                <artifactId>observability</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

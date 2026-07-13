@@ -28,6 +28,13 @@ behavior, documentation, and rule distribution.
    - silent failures and broad fallbacks;
    - missing configuration or secrets committed to source;
    - duplicate frontend requests and stale user-scoped cache;
+   - unbounded/detail-heavy APIs, N+1/repository-in-loop work, and in-memory
+     filtering/pagination;
+   - external I/O inside transactions and unsafe timeout/retry ordering;
+   - missing Lombok dependencies in any backend Maven submodule;
+   - reusable external metrics duplicated outside `backend/observability`, or a
+     third-party Spring HTTP client missing either
+     `ExternalClientMetricsInterceptor` or `LogbookClientHttpRequestInterceptor`;
    - missing loading/error/empty/success UI states;
    - build/test/CI commands that no longer match repository structure.
 6. Run the strongest practical verification commands. Never infer full

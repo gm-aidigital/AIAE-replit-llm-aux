@@ -1,6 +1,8 @@
 package PACKAGE_REPLACE_ME.external.common.http;
 
 import PACKAGE_REPLACE_ME.external.common.http.config.PooledHttpClientProperties;
+import PACKAGE_REPLACE_ME.observability.external.ExternalClientMetricsInterceptor;
+import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.annotation.PreDestroy;
 import org.apache.hc.client5.http.config.ConnectionConfig;
 import org.apache.hc.client5.http.config.RequestConfig;
@@ -12,6 +14,8 @@ import org.apache.hc.core5.util.Timeout;
 import org.springframework.http.client.HttpComponentsClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
+import org.zalando.logbook.Logbook;
+import org.zalando.logbook.spring.LogbookClientHttpRequestInterceptor;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -23,10 +27,15 @@ import java.util.List;
 @Component
 public class PooledRestClientFactory {
 
+    private final Logbook logbook;
+    private final MeterRegistry meterRegistry;
     private final PooledHttpClientProperties properties;
     private final List<ManagedPooledRestClient> managedClients = new ArrayList<>();
 
-    public PooledRestClientFactory(PooledHttpClientProperties properties) {
+    public PooledRestClientFactory(Logbook logbook, MeterRegistry meterRegistry,
+                                   PooledHttpClientProperties properties) {
+        this.logbook = logbook;
+        this.meterRegistry = meterRegistry;
         this.properties = properties;
     }
 
@@ -60,6 +69,8 @@ public class PooledRestClientFactory {
         RestClient restClient = RestClient.builder()
             .baseUrl(baseUrl)
             .requestFactory(requestFactory)
+            .requestInterceptor(new ExternalClientMetricsInterceptor(name, meterRegistry))
+            .requestInterceptor(new LogbookClientHttpRequestInterceptor(logbook))
             .build();
 
         ManagedPooledRestClient managed =

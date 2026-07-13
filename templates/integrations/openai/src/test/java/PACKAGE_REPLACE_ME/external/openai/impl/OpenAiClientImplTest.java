@@ -2,6 +2,7 @@ package PACKAGE_REPLACE_ME.external.openai.impl;
 
 import PACKAGE_REPLACE_ME.external.common.http.PooledRestClientFactory;
 import PACKAGE_REPLACE_ME.external.common.http.config.PooledHttpClientProperties;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import PACKAGE_REPLACE_ME.external.openai.OpenAiExternalException;
 import PACKAGE_REPLACE_ME.external.openai.config.OpenAiProperties;
 import PACKAGE_REPLACE_ME.external.openai.model.OpenAiChatResponse;
@@ -14,6 +15,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
+import org.zalando.logbook.Logbook;
 
 import java.io.IOException;
 import java.time.Duration;
@@ -73,7 +75,8 @@ class OpenAiClientImplTest {
         httpProps.setConnectionRequestTimeout(Duration.ofSeconds(5));
         httpProps.setKeepAliveDuration(Duration.ofSeconds(60));
         httpProps.setIdleEvictionDuration(Duration.ofSeconds(30));
-        factory = new PooledRestClientFactory(httpProps);
+        factory = new PooledRestClientFactory(
+            Logbook.builder().build(), new SimpleMeterRegistry(), httpProps);
     }
 
     @AfterEach

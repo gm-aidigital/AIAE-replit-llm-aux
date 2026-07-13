@@ -20,3 +20,14 @@ paths:
 - Repository access is centralized through the paired entity service; higher-level services do not bypass that boundary.
 - Hibernate L2/query cache uses Ehcache/JCache configured at application level, not ad-hoc service-local caching.
 - Hikari, JPA, Liquibase, and cache defaults are configured through application configuration, not scattered across services.
+- Repository calls and lazy-association traversal inside loops are forbidden;
+  use set-based/batched queries and verify query counts for affected workflows.
+- Collection reads are bounded and use summary projections/DTOs when the caller
+  does not need detail graphs. Filter, sort, group, and page growing data in
+  PostgreSQL rather than in memory.
+- Fetch joins with pagination require an explicit correctness review for row
+  multiplication, multiple bags, in-memory pagination, and count-query cost.
+- Add an index only after capturing the exact query shape and verifying a
+  representative plan; review overlapping indexes and write cost.
+- Do not increase Hikari limits or enable global JDBC batching, eager fetching,
+  or additional Hibernate caching without runtime evidence.

@@ -68,10 +68,28 @@ Treat network requests as observable application behavior, not as an incidental 
 - Avoid invalidating broad key prefixes when the affected keys are known. Never refetch unrelated profile, access, reference, list, or detail data after a local mutation.
 - Reuse list data for previews when it satisfies the view. Fetch detail data only when the detail contract is actually required.
 - Poll only for a real server-side lifecycle that cannot push updates. Stop polling on terminal state, hidden/unmounted ownership, missing authorization, or error policy exhaustion.
+- Pass TanStack Query's `signal` through the typed `openapi-fetch` request
+  options. Searches and navigation-owned requests must be cancellable so
+  obsolete work and stale responses do not outlive their owner.
+- Debounce user-driven search, and prefer one bulk mutation plus one narrow
+  cache update/invalidation over sequential per-item requests.
+- Paginate or incrementally load growing collections; do not fetch complete
+  datasets only to filter or sort in the browser.
 - Prefetch only an evidenced next interaction. It must not turn every visible row, tab, or navigation item into an automatic request.
 - Do not add a second client-side cache around TanStack Query. Browser HTTP caching may complement it, but must not create a competing source of truth.
 
 For affected flows, validate request counts in browser tooling or automated tests. Check initial load, rerender, navigation away/back, opening and closing overlays, repeated actions, successful mutation, sign-out, and account switch. Equivalent data must not be requested again while its canonical cache entry is valid.
+
+## Bundle and route loading
+
+- Route/feature split heavy editors, charts, admin surfaces, and other code not
+  required for the first usable screen with React lazy loading and a deliberate
+  loading boundary.
+- Use the existing Vite production build as the baseline and compare emitted
+  asset/chunk sizes after the change. Do not add a bundle-analysis dependency
+  unless the repository already supports it or the user approves it.
+- Do not add blanket `memo`, `useMemo`, or `useCallback`; use profiler evidence
+  and identify the expensive work or unstable dependency first.
 
 ## Auth
 

@@ -26,6 +26,8 @@ Common top-level areas:
    - `code_conventions.md`
    - `database_schema.md`
    - `service_architecture.md`
+   - `performance_engineering.md` for request flows, transactions, queries,
+     external calls, logging, caching, pools, or payload work
 3. For frontend work, read the relevant docs before changing code:
    - `project_structure.md`
    - `building_the_project.md`
@@ -33,6 +35,8 @@ Common top-level areas:
    - `frontend_architecture.md`
    - `frontend_style.md`
    - `frontend_testing.md`
+   - `performance_engineering.md` for data fetching, request counts, payloads,
+     rendering, or bundle work
 4. Respect `.claude/rules/*.md`.
 5. Read `.claude/agent_docs/skill-selection.md` before choosing between GSD,
    `task-workflow`, and a focused skill.
@@ -59,6 +63,10 @@ Common top-level areas:
   introduce a second root or placeholder packages.
 - Backend controllers implement generated OpenAPI interfaces and stay thin.
 - Backend JPA repositories are accessed only through their paired entity service.
+- Reusable outbound metrics live in `backend/observability`; it owns
+  `ExternalClientMetricsInterceptor` and `ExternalCallTimer`. Application-owned
+  Logbook configuration, correlation filtering, logging, Actuator, and
+  Prometheus remain in `backend/application`.
 - Backend tests follow the project style from `.claude/rules/20-tests.md`.
 
 ## HTML-Only Source Projects

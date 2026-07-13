@@ -1,16 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  logback-spring.xml — JSON logs to stdout for centralised monitoring.
+  logback-spring.xml — application JSON logs to stdout for centralised monitoring.
 
-  Uses logstash-logback-encoder for structured JSON. If the dependency
-  isn't on the classpath, this config falls back to a sane plain pattern
-  so the app still starts.
-
-  Add to backend/application/pom.xml:
+  Uses logstash-logback-encoder for structured JSON. The application module
+  owns this profile-specific logging configuration and its dependency:
     <dependency>
       <groupId>net.logstash.logback</groupId>
       <artifactId>logstash-logback-encoder</artifactId>
-      <version>8.0</version>
     </dependency>
 -->
 <configuration>

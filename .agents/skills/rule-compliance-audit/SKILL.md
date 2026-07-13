@@ -17,6 +17,8 @@ Read-only — produces a report. Load these canonical sources first:
 - `templates/generated-project/openapi/canonical-openapi-rules.md`
 - `templates/generated-project/frontend/canonical-react-frontend-rules.md`
 - `templates/generated-project/frontend/elevate-design-guidelines.md`
+- `templates/generated-project/performance/performance-engineering-rules.md`
+- `templates/generated-project/observability/logbook-http-logging-rules.md`
 
 If `scripts/local-verify.sh` / `verify-gates.sh` exist in the generated project,
 run them and fold their output into the report.
@@ -34,7 +36,10 @@ grep -rn "@Value" backend --include=*.java | grep -v /target/              # use
 Read-audit: JavaDoc on every handwritten method; controllers implement generated
 `*Api` and stay thin; `1 entity = 1 repository = 1 service`; service size limits;
 outbound calls only in the external-services module; no edits to generated
-sources.
+sources; reusable external metrics only in `backend/observability`; Lombok in
+every Maven child; both `ExternalClientMetricsInterceptor` and
+`LogbookClientHttpRequestInterceptor` on every third-party Spring HTTP client;
+no external I/O in transactions or repository/lazy access inside loops.
 
 ## Frontend scanners
 

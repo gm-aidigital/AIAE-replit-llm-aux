@@ -139,7 +139,11 @@ Replit datasource env wiring: see
 - REST APIs, OpenAPI contract-first
 - Liquibase, PostgreSQL, HikariCP
 - JUnit 5 + Mockito + AssertJ + Spring Boot Test
-- Lombok (`backend/lombok.config`)
+- Lombok is mandatory in every backend Maven submodule. Every child
+  `pom.xml`, including `db`, removable feature modules, and optional
+  `external-services`, declares the parent-managed
+  `org.projectlombok:lombok` dependency. Use Lombok for constructor injection
+  and appropriate boilerplate. Keep `backend/lombok.config`.
 - Checkstyle (`backend/config/checkstyle.xml`, `checkstyle-suppressions.xml`)
 - MVP safety tests are mandatory before publish/completion: backend
   app/health smoke, auth boundary, main API happy/error path, service unit
@@ -167,6 +171,12 @@ Replit datasource env wiring: see
   - Phase 2+ (MVP complete): parent POM defaults `0.80` line / `0.70` branch;
     template CI may override to `0` while validating the scaffold only.
 - Structured JSON logs to stdout
+- Reusable outbound-client metrics live in the attachable
+  `backend/observability` Maven module. It owns
+  `ExternalClientMetricsInterceptor` and `ExternalCallTimer`; integrations do
+  not duplicate that timer schema. Application-owned Logbook configuration,
+  correlation filtering, structured logging, Actuator, and Prometheus remain
+  in `backend/application`. Product usage analytics remains separate.
 - Never use `@Value` in backend code — bind configuration with
   `@ConfigurationProperties` beans only.
 - Service interfaces are contracts: every service interface and every public
@@ -200,37 +210,17 @@ explicit user approval.
 
 ## Mandatory generated-project artifacts
 
-```
-# project root — orchestration + Replit config only
-README.md   .env.example   .gitignore   .replit   replit.nix
-docker-compose.yml          # local-dev only
-.github/workflows/ci.yml
+Backend artifacts live under `backend/`, frontend artifacts under `frontend/`,
+and root is only orchestration/Replit config. Copy the exact file set from
+`templates/generated-project/scaffold/`; the complete list and per-file settings
+live in `templates/generated-project/scaffold/SCAFFOLD-MANIFEST.md`.
 
-# backend/ — ALL Java/Maven artifacts
-backend/pom.xml             # parent, <packaging>pom</packaging>
-backend/lombok.config
-backend/config/checkstyle.xml
-backend/config/checkstyle-suppressions.xml
-backend/Dockerfile          # local-dev only
-backend/application/src/main/resources/api/v1/specs/openapi.yaml  # NOT under static/ (Vite build wipes it)
-backend/application/src/main/resources/application{,-replit,-local}.yml
-backend/db/src/main/resources/db/changelog/db.changelog-master.xml
-backend/db/src/main/resources/db/changelog/changes/0001-usage-events.xml
-
-# frontend/ — ALL JS/TS artifacts
-frontend/package.json   frontend/vite.config.ts   frontend/tsconfig.json
-frontend/Dockerfile     frontend/nginx.conf.template   # local-dev only
-```
-
-Backend artifacts in `backend/`, frontend in `frontend/`, root only for
-orchestration (docker-compose) or Replit-required files (`.replit`,
-`replit.nix`).
-
-`lombok.config` must contain `lombok.addLombokGeneratedAnnotation = true`.
-
-Starter shape lives in `templates/generated-project/scaffold/`. Maven
-plugins (git-commit-id, openapi-generator, jacoco, checkstyle) are
-configured inline in `scaffold/backend/pom.xml` `<pluginManagement>`.
+Required anchors: `backend/pom.xml`, `backend/lombok.config`,
+`backend/config/checkstyle*.xml`, application `openapi.yaml` under
+`backend/application/src/main/resources/api/v1/specs/`, Liquibase changelogs
+under `backend/db/src/main/resources/db/changelog/`, frontend package/Vite/TS
+files, Docker/local-dev files, README, `.env.example`, `.replit`, `replit.nix`,
+and `.github/workflows/ci.yml`.
 
 ## Scaffold files — copy verbatim, NEVER regenerate
 
@@ -259,6 +249,7 @@ Each topic has one canonical file. Read before generating; never duplicate.
 | Auth (Clerk SSO only) | `templates/generated-project/auth/google-sso-clerk-blueprint.md` |
 | Usage logging | `templates/generated-project/observability/usage-logging-rules.md` |
 | HTTP request/response logging | `templates/generated-project/observability/logbook-http-logging-rules.md` |
+| Performance engineering | `templates/generated-project/performance/performance-engineering-rules.md` |
 | Error handling | `templates/generated-project/errors/error-handling-pattern.md` |
 | BigQuery query construction | `templates/generated-project/integrations/bigquery-query-rules.md` |
 | Token-efficient generation | `templates/generated-project/generation/token-efficient-generation-rules.md` |
@@ -268,16 +259,10 @@ Each topic has one canonical file. Read before generating; never duplicate.
 | Scaffold manifest | `templates/generated-project/scaffold/SCAFFOLD-MANIFEST.md` |
 | Testing policy (phased) | `templates/generated-project/testing/testing-policy.md` |
 | Backend test style | `templates/generated-project/testing/backend-test-style-rules.md` |
-| HikariCP / JPA baseline | `.agents/skills/backend-java-feature/references/hikari-jpa-baseline.yml` |
-| Java backend workflow | `.agents/skills/backend-java-feature/SKILL.md` |
-| Spring Boot gotchas (lookup) | `.agents/skills/backend-java-feature/references/spring-boot-gotchas.md` |
-| Canonical code patterns | `.agents/skills/backend-java-feature/references/code-patterns.md` |
-| OpenAPI workflow | `.agents/skills/openapi-contract-first/SKILL.md` |
-| Frontend workflow | `.agents/skills/frontend-react-feature/SKILL.md` |
-| Safety review (pre-publish) | `.agents/skills/mvp-safety-review/SKILL.md` |
-| Engineering handoff | `.agents/skills/engineering-handoff/SKILL.md` |
-| Replit profile YAML | `.agents/skills/backend-java-feature/references/application-replit.yml` |
 | Starter scaffold | `templates/generated-project/scaffold/` |
+
+Workflow skills live in `.agents/skills/*/SKILL.md`; load them on demand rather
+than duplicating their guidance here.
 
 ## Auth (mandatory: Clerk SSO only)
 
@@ -285,34 +270,19 @@ See `templates/generated-project/auth/google-sso-clerk-blueprint.md`.
 
 ## Database policy
 
-PostgreSQL only, via Liquibase. IDs: Java `Long`, PostgreSQL `BIGINT`. Strings:
-PostgreSQL `TEXT`. No `VARCHAR`, no `LONGTEXT`. Times: `TIMESTAMPTZ` storing
-UTC; Java side uses `LocalDateTime` interpreted as UTC (see
-`.agents/skills/backend-java-feature/references/spring-boot-gotchas.md`).
+PostgreSQL only, via Liquibase. IDs are Java `Long` / PostgreSQL `BIGINT`;
+strings are PostgreSQL `TEXT`; no `VARCHAR`, `LONGTEXT`, SQLite, MongoDB, or
+native PostgreSQL enum types. Times use `TIMESTAMPTZ` storing UTC; Java uses
+`LocalDateTime` interpreted as UTC.
 
-PostgreSQL is required whenever there is any JPA entity, repository,
-Liquibase changelog, audit state, or persisted user/upload data. Liquibase
-changelog skeleton must exist before any JPA entity is added.
+PostgreSQL is required for any JPA entity/repository, Liquibase changelog, audit
+state, or persisted user/upload data. Liquibase skeleton comes before entities.
+Every Liquibase `changeSet` has direct `preConditions`; verify-gates enforces it.
 
-Every Liquibase `changeSet` must include direct `preConditions`. Use
-`onFail="MARK_RAN"` with existence checks for idempotent create-table/create-index
-style changes. Generated projects run `scripts/lib/check-liquibase-preconditions.sh`
-from `scripts/verify-gates.sh`; a changelog without `preConditions` is a failed
-publish gate.
-
-### No `CREATE TYPE … AS ENUM`
-
-Dictionary / lookup data (statuses, roles, kinds, categories) → dedicated
-`<entity>_<dimension>` table (e.g. `resource_kind`) with `id BIGINT PK`,
-`code TEXT UNIQUE`, `name TEXT`, optional `display_order INT`, `is_active BOOLEAN`.
-Other tables FK via `<dimension>_id BIGINT`. Java side: small
-`<Entity><Dimension>` JPA entity + repository; code references canonical values
-through Java enums with fields (`code`, `displayName`, optional flags). Do not
-create static-only `*Codes` classes for business values.
-
-Why: `ALTER TYPE … ADD VALUE` is irreversible, can't run in a tx on older PG;
-remove/reorder requires recreating the type; Java mirroring drifts. Dictionary
-tables also carry localised labels + lifecycle flags.
+Dictionary/lookup values use tables with `code TEXT UNIQUE` plus labels/order/
+active flags, referenced by FK. Java mirrors canonical values with enums carrying
+`code`/display metadata, not static-only `*Codes` classes. Details:
+`.agents/skills/backend-java-feature/references/spring-boot-gotchas.md`.
 
 ## Usage logging policy
 
@@ -339,6 +309,22 @@ Replit app.
 Structured JSON logs to stdout (never plain text). Include request/correlation
 IDs. HTTP via Zalando Logbook with masking — see
 `templates/generated-project/observability/logbook-http-logging-rules.md`.
+Third-party HTTP uses shared instrumented clients, not ad-hoc builders:
+`PooledRestClientFactory` registers Logbook and external-call metrics; SDK calls
+use `ExternalCallTimer`. Production/Replit HTTP logs are metadata-only and
+body-free by default.
+
+## Performance engineering policy
+
+Read `templates/generated-project/performance/performance-engineering-rules.md`
+before changing request flows, queries, pagination, transaction boundaries,
+external integrations, caching, pools, uploads/downloads, frontend fetching, or
+bundle/loading behavior. Baseline affected workflows, prevent duplicate
+requests/N+1/set-per-item work, keep external I/O outside DB transactions, bound
+payloads, and verify with request/query/payload/latency evidence. No blanket
+caching, retries, eager fetching, indexes, larger pools, or Redis without
+measured need and explicit approval. Assume multi-node deployment; node-local
+state/locks/caches/schedulers cannot be required for correctness.
 
 ## L2 cache policy
 

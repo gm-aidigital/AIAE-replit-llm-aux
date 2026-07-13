@@ -12,6 +12,9 @@ Generate projects by reusing canonical artifacts and codegen. Do not retype.
 
 Do **not** load `near-production-project-structure.md`, `usage-logging-rules.md`, and
 `publish-gate-checks.md` in the same turn unless implementing that specific concern.
+Load `performance/performance-engineering-rules.md` only when the task changes
+request/query/transaction/cache/pool/payload/loading behavior or performs a
+performance review.
 
 ## Hard rules
 
@@ -26,6 +29,9 @@ Do **not** load `near-production-project-structure.md`, `usage-logging-rules.md`
 - Copy scaffold files — never run `npm create vite` or Spring Initializr.
 - Use `shared/api/client.ts` only — no raw `fetch` / `axios` in `frontend/src`.
 - Run `apply-package-name.sh` once; never hand-rename only some `PACKAGE_REPLACE_ME` dirs.
+- Keep reusable outbound metrics in `backend/observability`, declare Lombok in
+  every Maven submodule, and route third-party Spring HTTP through the
+  Logbook-and-metrics-interceptor-enabled pooled factory.
 
 ## Recommended order
 

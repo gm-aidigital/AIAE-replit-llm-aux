@@ -27,18 +27,28 @@ violations, not raw scanner matches.
    - controllers and orchestrators do not inject repositories;
    - controllers implement generated `*Api` interfaces and stay thin;
    - outbound integrations stay in `backend/external-services`;
+   - reusable external metrics stay in `backend/observability` while Logbook
+     and inbound application observability stay application-owned;
+   - third-party Spring HTTP uses `PooledRestClientFactory` with
+     `LogbookClientHttpRequestInterceptor`;
+   - database transactions do not span external HTTP/SDK/storage/AI I/O;
    - service/application mappers remain narrow and aggregate-specific.
 4. Check compliance:
    - `@ConfigurationProperties`, not `@Value`;
    - no private methods or static utility behavior on production beans;
    - top-level DTOs, records, and enums;
    - JavaDoc on handwritten methods under the installed rule;
-   - Lombok for boilerplate;
+   - every Maven submodule declares Lombok and uses it for appropriate boilerplate;
    - business codes use typed enums/constants rather than inline magic values;
    - generated OpenAPI sources are untouched.
-5. Map changed behavior to existing tests. Report only meaningful regression
+5. Check performance amplification using
+   `.claude/agent_docs/performance_engineering.md`: bounded collections and
+   summary payloads, no repository/lazy access in loops, set-based bulk work,
+   no unchanged identity writes, explicit timeouts, and measurement-backed
+   cache/pool/index changes.
+6. Map changed behavior to existing tests. Report only meaningful regression
    gaps; do not demand tests for trivial generated/Lombok behavior.
-6. Run relevant scanners/build/tests when permitted. A scanner hit becomes a
+7. Run relevant scanners/build/tests when permitted. A scanner hit becomes a
    finding only after source inspection confirms it.
 
 Useful discovery scans:

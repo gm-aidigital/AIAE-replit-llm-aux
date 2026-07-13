@@ -188,6 +188,14 @@ Generated artifacts:
 - Derive projections from cached source data when its contract is sufficient. Do not fetch detail data merely to reproduce fields already available in a cached list or parent resource.
 - When a mutation returns authoritative data, update the canonical cache directly. Otherwise invalidate only affected keys; broad invalidation and unrelated refetching are forbidden.
 - Polling and eager prefetching require a documented freshness or latency reason. Polling stops on terminal state or when its owning UI is no longer active.
+- Pass TanStack Query's `signal` through the generated `openapi-fetch` request
+  options. Search and navigation-owned requests must be cancellable; obsolete
+  responses must not replace newer state.
+- User-driven search is debounced. Multi-item actions use one bulk mutation and
+  one narrow cache update/invalidation, not sequential per-item requests and
+  repeated list refetches.
+- Paginate or incrementally load growing collections. Do not retrieve complete
+  datasets only to filter or sort them in the browser.
 - Request count is part of frontend correctness. For affected flows, verify initial load, rerender, navigation away/back, repeated overlay use, successful mutation, sign-out, and account switch.
 - Every async surface renders loading / empty / error / success.
 - Debounce/throttle hooks must be real effects. `useDebounce` uses
@@ -214,6 +222,17 @@ Generated artifacts:
   enum has three values, the UI cannot render a two-way toggle. Keep labels,
   badge colors, filters, and mutation controls exhaustive over the generated
   enum type so values like `ON_VACATION` cannot compile as "unknown".
+
+## Route and bundle loading
+
+- Lazy-load heavy editor, chart, administration, and other non-entry
+  routes/features with an intentional loading boundary when they are not
+  required for the first usable screen.
+- Use the supported Vite production build output as the baseline and compare
+  emitted chunks/assets before and after. Do not introduce a bundle-analyzer
+  dependency unless the repository already supports it or the user approves it.
+- Do not add blanket `memo`, `useMemo`, or `useCallback`; identify measured
+  render work or an unstable dependency first.
 
 ## Auth
 
